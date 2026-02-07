@@ -49,90 +49,115 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link href="/" className="inline-block">
-            <img
-              src="/logo-horizontal.png"
-              alt="Ray Renders"
-              className="mx-auto h-12"
-            />
-          </Link>
-          <h1 className="mt-6 text-2xl font-bold text-slate-900">
-            Sign in to your account
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-brand-600 hover:text-brand-500 font-medium">
-              Sign up
+    <div className="flex min-h-screen">
+      {/* Left brand panel — hidden on mobile */}
+      <div className="hidden lg:flex lg:w-1/2 bg-brand-900 flex-col items-center justify-center p-12">
+        <img
+          src="/logo-horizontal.png"
+          alt="Ray Renders"
+          className="h-16 mb-8"
+        />
+        <h1 className="text-3xl font-bold text-white text-center">
+          Client Portal
+        </h1>
+        <p className="mt-3 text-brand-300 text-center max-w-sm">
+          Access your projects, files, and collaborate with the Ray Renders team.
+        </p>
+        <p className="absolute bottom-8 text-sm text-brand-400">
+          &copy; {new Date().getFullYear()} Ray Renders LLC
+        </p>
+      </div>
+
+      {/* Right form panel */}
+      <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md">
+          {/* Mobile logo — shown only on small screens */}
+          <div className="mb-8 text-center lg:hidden">
+            <Link href="/" className="inline-block">
+              <img
+                src="/logo-horizontal.png"
+                alt="Ray Renders"
+                className="mx-auto h-12"
+              />
             </Link>
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
-        >
-          <Suspense>
-            <RegisteredBanner />
-          </Suspense>
-          {error && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-slate-700"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-slate-700"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Enter your password"
-              />
-            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+          <div className="mb-8 text-center">
+            <h1 className="text-2xl font-bold text-slate-900">
+              Sign in to your account
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Don&apos;t have an account?{" "}
+              <Link href="/register" className="text-brand-600 hover:text-brand-500 font-medium">
+                Sign up
+              </Link>
+            </p>
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
           >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              "Sign in"
+            <Suspense>
+              <RegisteredBanner />
+            </Suspense>
+            {error && (
+              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                {error}
+              </div>
             )}
-          </button>
-        </form>
+
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-slate-700"
+                >
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-slate-700"
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  placeholder="Enter your password"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                "Sign in"
+              )}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -26,6 +26,8 @@ export async function GET(
           originalName: true,
           size: true,
           mimeType: true,
+          version: true,
+          fileGroupId: true,
           createdAt: true,
         },
         orderBy: { createdAt: "desc" },

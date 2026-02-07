@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   title: "Ray Renders | Client Portal",
   description: "Access your projects, files, and account.",
   icons: {
-    icon: "/logo-icon.png",
+    icon: "/favicon.png",
   },
 };
 

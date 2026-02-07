@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { Download, Eye, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, X } from "lucide-react";
 
 interface ProjectFile {
   id: string;
   originalName: string;
   size: number;
   mimeType: string;
+  version: number;
+  fileGroupId: string | null;
   createdAt: string;
 }
 
@@ -36,6 +38,32 @@ function canPreview(mimeType: string) {
   );
 }
 
+/** Group files so only the latest version of each name shows in the main table */
+function getLatestFiles(files: ProjectFile[]) {
+  const groups = new Map<string, ProjectFile[]>();
+
+  for (const file of files) {
+    const key = file.fileGroupId || file.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(file);
+  }
+
+  const result: { latest: ProjectFile; versionCount: number }[] = [];
+  for (const group of Array.from(groups.values())) {
+    group.sort((a, b) => b.version - a.version);
+    result.push({ latest: group[0], versionCount: group.length });
+  }
+
+  // Sort by most recent upload first
+  result.sort(
+    (a, b) =>
+      new Date(b.latest.createdAt).getTime() -
+      new Date(a.latest.createdAt).getTime()
+  );
+
+  return result;
+}
+
 export default function ClientProjectDetailPage() {
   const params = useParams();
   const projectId = params.id as string;
@@ -44,6 +72,8 @@ export default function ClientProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}`)
@@ -66,6 +96,27 @@ export default function ClientProjectDetailPage() {
         setLoading(false);
       });
   }, [projectId]);
+
+  async function toggleVersionHistory(fileId: string, fileGroupId: string | null) {
+    if (expandedGroup === fileId) {
+      setExpandedGroup(null);
+      return;
+    }
+
+    setExpandedGroup(fileId);
+
+    if (!fileGroupId || versionHistory[fileId]) return;
+
+    try {
+      const res = await fetch(`/api/files/${fileId}/versions`);
+      if (res.ok) {
+        const versions = await res.json();
+        setVersionHistory((prev) => ({ ...prev, [fileId]: versions }));
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   if (loading) {
     return (
@@ -90,6 +141,8 @@ export default function ClientProjectDetailPage() {
       </div>
     );
   }
+
+  const grouped = getLatestFiles(project.files);
 
   return (
     <div>
@@ -124,36 +177,113 @@ export default function ClientProjectDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {project.files.map((file) => (
-                <tr key={file.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900">
-                    {file.originalName}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">{formatSize(file.size)}</td>
-                  <td className="px-6 py-4 text-slate-600">
-                    {new Date(file.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      {canPreview(file.mimeType) && (
-                        <button
-                          onClick={() => setPreviewFile(file)}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-500"
+              {grouped.map(({ latest, versionCount }) => (
+                <>
+                  <tr key={latest.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900">
+                          {latest.originalName}
+                        </span>
+                        {latest.version > 1 && (
+                          <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+                            v{latest.version}
+                          </span>
+                        )}
+                        {versionCount > 1 && (
+                          <button
+                            onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
+                            className="inline-flex items-center gap-0.5 text-xs text-slate-500 hover:text-brand-600"
+                          >
+                            {expandedGroup === latest.id ? (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            )}
+                            {versionCount} versions
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-600">{formatSize(latest.size)}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {new Date(latest.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        {canPreview(latest.mimeType) && (
+                          <button
+                            onClick={() => setPreviewFile(latest)}
+                            className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-500"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </button>
+                        )}
+                        <a
+                          href={`/api/files/${latest.id}/download`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900"
                         >
-                          <Eye className="h-4 w-4" />
-                          View
-                        </button>
-                      )}
-                      <a
-                        href={`/api/files/${file.id}/download`}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900"
-                      >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </a>
-                    </div>
-                  </td>
-                </tr>
+                          <Download className="h-4 w-4" />
+                          Download
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Version history expansion */}
+                  {expandedGroup === latest.id && versionCount > 1 && (
+                    <tr key={`${latest.id}-versions`}>
+                      <td colSpan={4} className="bg-slate-50 px-6 py-3">
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                            Version History
+                          </p>
+                          {(versionHistory[latest.id] || []).map((v) => (
+                            <div
+                              key={v.id}
+                              className="flex items-center justify-between rounded-lg bg-white px-4 py-2 border border-slate-100"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                  v{v.version}
+                                </span>
+                                <span className="text-sm text-slate-700">
+                                  {formatSize(v.size)}
+                                </span>
+                                <span className="text-sm text-slate-400">
+                                  {new Date(v.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {canPreview(v.mimeType) && (
+                                  <button
+                                    onClick={() => setPreviewFile(v as ProjectFile)}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    View
+                                  </button>
+                                )}
+                                <a
+                                  href={`/api/files/${v.id}/download`}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  Download
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                          {!versionHistory[latest.id] && (
+                            <div className="flex justify-center py-2">
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
               {project.files.length === 0 && (
                 <tr>
@@ -174,6 +304,9 @@ export default function ClientProjectDetailPage() {
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <h3 className="font-medium text-slate-900 truncate">
                 {previewFile.originalName}
+                {previewFile.version > 1 && (
+                  <span className="ml-2 text-sm text-slate-400">v{previewFile.version}</span>
+                )}
               </h3>
               <div className="flex items-center gap-3">
                 <a

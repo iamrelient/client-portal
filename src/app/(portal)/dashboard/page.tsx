@@ -2,46 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import {
-  Activity,
-  Calendar,
-  Clock,
-  Building2,
-} from "lucide-react";
-import { StatCard } from "@/components/stat-card";
-import { ActivityFeed } from "@/components/activity-feed";
+import Link from "next/link";
+import { FolderOpen } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 
-interface DashboardData {
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    company: string | null;
-    phone: string | null;
-    role: string;
-    createdAt: string;
-    lastLoginAt: string | null;
-    _count: { activities: number };
-  };
-  activities: {
-    id: string;
-    type: string;
-    description: string;
-    createdAt: string;
-  }[];
+interface ProjectCard {
+  id: string;
+  name: string;
+  company: string | null;
+  thumbnailPath: string | null;
+  createdAt: string;
+  _count: { files: number };
 }
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [projects, setProjects] = useState<ProjectCard[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    fetch("/api/projects")
       .then((res) => res.json())
       .then((data) => {
-        setData(data);
+        setProjects(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -59,79 +42,45 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title={`Welcome back, ${session?.user?.name?.split(" ")[0] || "User"}`}
-        description="Here's an overview of your account activity."
+        description="Here are your projects."
       />
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Activities"
-          value={data?.user?._count?.activities ?? 0}
-          icon={Activity}
-        />
-        <StatCard
-          title="Account Status"
-          value="Active"
-          subtitle="In good standing"
-          icon={Clock}
-        />
-        <StatCard
-          title="Member Since"
-          value={
-            data?.user?.createdAt
-              ? new Date(data.user.createdAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  year: "numeric",
-                })
-              : "--"
-          }
-          icon={Calendar}
-        />
-        <StatCard
-          title="Company"
-          value={data?.user?.company || "Not set"}
-          icon={Building2}
-        />
-      </div>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
-              Recent Activity
-            </h2>
-            <ActivityFeed activities={data?.activities ?? []} />
-          </div>
+      {projects.length === 0 ? (
+        <div className="flex h-64 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
+          <p className="text-slate-500">No projects available</p>
         </div>
-
-        <div>
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
-              Account Details
-            </h2>
-            <dl className="space-y-4">
-              {[
-                { label: "Name", value: data?.user?.name },
-                { label: "Email", value: data?.user?.email },
-                { label: "Company", value: data?.user?.company || "Not set" },
-                { label: "Role", value: data?.user?.role },
-                {
-                  label: "Last Login",
-                  value: data?.user?.lastLoginAt
-                    ? new Date(data.user.lastLoginAt).toLocaleString()
-                    : "N/A",
-                },
-              ].map((item) => (
-                <div key={item.label}>
-                  <dt className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                    {item.label}
-                  </dt>
-                  <dd className="mt-1 text-sm text-slate-900">{item.value}</dd>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+            <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                <div className="aspect-video bg-slate-100">
+                  {project.thumbnailPath ? (
+                    <img
+                      src={`/api/projects/${project.id}/thumbnail`}
+                      alt={project.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <FolderOpen className="h-12 w-12 text-slate-300" />
+                    </div>
+                  )}
                 </div>
-              ))}
-            </dl>
-          </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-slate-900">{project.name}</h3>
+                  {project.company && (
+                    <p className="mt-0.5 text-sm text-slate-500">{project.company}</p>
+                  )}
+                  <p className="mt-1 text-sm text-slate-400">
+                    {project._count.files} file{project._count.files !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

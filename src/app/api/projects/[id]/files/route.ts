@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET } from "@/lib/r2";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 
 export async function POST(
   req: Request,
@@ -55,6 +55,31 @@ export async function POST(
       })
     );
 
+    // Version detection: check for existing files with same name in this project
+    const existingFiles = await prisma.file.findMany({
+      where: { projectId: params.id, originalName: file.name },
+      orderBy: { version: "desc" },
+    });
+
+    let version = 1;
+    let fileGroupId: string | null = null;
+
+    if (existingFiles.length > 0) {
+      version = existingFiles[0].version + 1;
+
+      if (existingFiles[0].fileGroupId) {
+        // Reuse existing group
+        fileGroupId = existingFiles[0].fileGroupId;
+      } else {
+        // First duplicate — create a group and backfill the original file
+        fileGroupId = randomBytes(12).toString("hex");
+        await prisma.file.update({
+          where: { id: existingFiles[0].id },
+          data: { fileGroupId },
+        });
+      }
+    }
+
     const dbFile = await prisma.file.create({
       data: {
         name: key,
@@ -64,6 +89,8 @@ export async function POST(
         path: key,
         uploadedById: session.user.id,
         projectId: params.id,
+        version,
+        fileGroupId,
       },
     });
 

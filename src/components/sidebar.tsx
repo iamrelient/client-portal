@@ -19,7 +19,6 @@ import { useState } from "react";
 
 const clientLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/projects", label: "Projects", icon: FolderOpen },
   { href: "/dashboard/files", label: "Files", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
