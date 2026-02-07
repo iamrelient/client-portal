@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthorized } from "@/lib/auth-utils";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { randomUUID } from "crypto";
@@ -39,7 +40,7 @@ export async function GET(
 
   if (
     session.user.role !== "ADMIN" &&
-    !project.authorizedEmails.includes((session.user.email ?? "").toLowerCase())
+    !isEmailAuthorized(session.user.email ?? "", project.authorizedEmails)
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -48,6 +49,8 @@ export async function GET(
     id: project.id,
     name: project.name,
     thumbnailPath: project.thumbnailPath,
+    company: project.company,
+    companyLogoPath: project.companyLogoPath,
     files: project.files,
     createdBy: project.createdBy,
     createdAt: project.createdAt,
@@ -85,12 +88,18 @@ export async function PATCH(
     const formData = await req.formData();
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
+    const company = formData.get("company") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
+    const companyLogo = formData.get("companyLogo") as globalThis.File | null;
 
     const data: Record<string, unknown> = {};
 
     if (name?.trim()) {
       data.name = name.trim();
+    }
+
+    if (formData.has("company")) {
+      data.company = company?.trim() || null;
     }
 
     if (emails !== null) {
@@ -101,7 +110,6 @@ export async function PATCH(
     }
 
     if (thumbnail && thumbnail.size > 0) {
-      // Delete old thumbnail from R2
       if (project.thumbnailPath) {
         try {
           await r2.send(
@@ -132,6 +140,39 @@ export async function PATCH(
       );
 
       data.thumbnailPath = key;
+    }
+
+    if (companyLogo && companyLogo.size > 0) {
+      if (project.companyLogoPath) {
+        try {
+          await r2.send(
+            new DeleteObjectCommand({
+              Bucket: R2_BUCKET,
+              Key: project.companyLogoPath,
+            })
+          );
+        } catch {
+          // Old logo may already be gone
+        }
+      }
+
+      const bytes = await companyLogo.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const ext = companyLogo.name.includes(".")
+        ? `.${companyLogo.name.split(".").pop()}`
+        : "";
+      const key = `company-logos/${randomUUID()}${ext}`;
+
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: companyLogo.type || "image/jpeg",
+        })
+      );
+
+      data.companyLogoPath = key;
     }
 
     await prisma.project.update({
@@ -172,18 +213,16 @@ export async function DELETE(
       );
     }
 
-    // Delete all file objects from R2
     for (const file of project.files) {
       try {
         await r2.send(
           new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: file.path })
         );
       } catch {
-        // Continue even if individual file delete fails
+        // Continue
       }
     }
 
-    // Delete thumbnail from R2
     if (project.thumbnailPath) {
       try {
         await r2.send(
@@ -193,11 +232,23 @@ export async function DELETE(
           })
         );
       } catch {
-        // Thumbnail may already be gone
+        // Already gone
       }
     }
 
-    // Cascade deletes files from DB
+    if (project.companyLogoPath) {
+      try {
+        await r2.send(
+          new DeleteObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: project.companyLogoPath,
+          })
+        );
+      } catch {
+        // Already gone
+      }
+    }
+
     await prisma.project.delete({ where: { id: params.id } });
 
     await prisma.activity.create({

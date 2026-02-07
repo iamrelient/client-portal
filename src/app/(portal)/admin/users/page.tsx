@@ -78,7 +78,7 @@ export default function AdminUsersPage() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
       </div>
     );
   }
@@ -131,7 +131,7 @@ export default function AdminUsersPage() {
                   name="name"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Jane Smith"
                 />
               </div>
@@ -144,7 +144,7 @@ export default function AdminUsersPage() {
                   name="email"
                   type="email"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="jane@example.com"
                 />
               </div>
@@ -158,7 +158,7 @@ export default function AdminUsersPage() {
                   type="password"
                   required
                   minLength={8}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Min. 8 characters"
                 />
               </div>
@@ -170,7 +170,7 @@ export default function AdminUsersPage() {
                   id="company"
                   name="company"
                   type="text"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acme Inc."
                 />
               </div>
@@ -180,7 +180,7 @@ export default function AdminUsersPage() {
               <button
                 type="submit"
                 disabled={creating}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
               >
                 {creating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -232,7 +232,7 @@ export default function AdminUsersPage() {
                       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         user.role === "ADMIN"
                           ? "bg-purple-100 text-purple-700"
-                          : "bg-blue-100 text-blue-700"
+                          : "bg-brand-100 text-brand-700"
                       }`}
                     >
                       {user.role}

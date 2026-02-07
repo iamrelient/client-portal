@@ -37,7 +37,7 @@ export default function DashboardFilesPage() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
       </div>
     );
   }
@@ -77,7 +77,7 @@ export default function DashboardFilesPage() {
                   <td className="px-6 py-4">
                     <a
                       href={`/api/files/${file.id}/download`}
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-brand-600 hover:bg-brand-50 transition-colors"
                     >
                       <Download className="h-4 w-4" />
                       Download

@@ -1,25 +1,11 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
-function RegisteredBanner() {
-  const searchParams = useSearchParams();
-  const registered = searchParams.get("registered");
-
-  if (!registered) return null;
-
-  return (
-    <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">
-      Account created successfully. Sign in below.
-    </div>
-  );
-}
-
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,21 +16,29 @@ export default function LoginPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
 
-    if (result?.error) {
-      setError("Invalid email or password");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/login?registered=true");
+    } catch {
+      setError("Something went wrong");
       setLoading(false);
-    } else {
-      router.push("/dashboard");
-      router.refresh();
     }
   }
 
@@ -60,12 +54,12 @@ export default function LoginPage() {
             />
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-slate-900">
-            Sign in to your account
+            Create your account
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-brand-600 hover:text-brand-500 font-medium">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="text-brand-600 hover:text-brand-500 font-medium">
+              Sign in
             </Link>
           </p>
         </div>
@@ -74,9 +68,6 @@ export default function LoginPage() {
           onSubmit={handleSubmit}
           className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
         >
-          <Suspense>
-            <RegisteredBanner />
-          </Suspense>
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
               {error}
@@ -84,6 +75,23 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-slate-700"
+              >
+                Full name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="Jane Smith"
+              />
+            </div>
+
             <div>
               <label
                 htmlFor="email"
@@ -113,10 +121,11 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
+                minLength={8}
                 className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Enter your password"
+                placeholder="Min. 8 characters"
               />
             </div>
           </div>
@@ -129,7 +138,7 @@ export default function LoginPage() {
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              "Sign in"
+              "Create account"
             )}
           </button>
         </form>

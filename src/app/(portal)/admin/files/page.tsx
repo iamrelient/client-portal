@@ -89,7 +89,7 @@ export default function AdminFilesPage() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
       </div>
     );
   }
@@ -113,13 +113,13 @@ export default function AdminFilesPage() {
               name="file"
               type="file"
               required
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
             />
           </div>
           <button
             type="submit"
             disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
           >
             {uploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -156,7 +156,7 @@ export default function AdminFilesPage() {
                   <td className="px-6 py-4">
                     <a
                       href={`/api/files/${file.id}/download`}
-                      className="font-medium text-blue-600 hover:text-blue-500"
+                      className="font-medium text-brand-600 hover:text-brand-500"
                     >
                       {file.originalName}
                     </a>

@@ -17,6 +17,8 @@ interface ProjectDetail {
   id: string;
   name: string;
   thumbnailPath: string | null;
+  company: string | null;
+  companyLogoPath: string | null;
   authorizedEmails: string[];
   files: ProjectFile[];
   createdBy: { name: string };
@@ -43,9 +45,9 @@ export default function AdminProjectDetailPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Edit form state
   const [editName, setEditName] = useState("");
   const [editEmails, setEditEmails] = useState("");
+  const [editCompany, setEditCompany] = useState("");
 
   function loadProject() {
     fetch(`/api/projects/${projectId}`)
@@ -54,6 +56,7 @@ export default function AdminProjectDetailPage() {
         setProject(data);
         setEditName(data.name);
         setEditEmails(data.authorizedEmails?.join(", ") || "");
+        setEditCompany(data.company || "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -72,6 +75,7 @@ export default function AdminProjectDetailPage() {
     const formData = new FormData(e.currentTarget);
     formData.set("name", editName);
     formData.set("emails", editEmails);
+    formData.set("company", editCompany);
 
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -159,7 +163,7 @@ export default function AdminProjectDetailPage() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
       </div>
     );
   }
@@ -205,7 +209,20 @@ export default function AdminProjectDetailPage() {
                 required
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-company" className="block text-sm font-medium text-slate-700">
+                Company name <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="edit-company"
+                type="text"
+                value={editCompany}
+                onChange={(e) => setEditCompany(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="Acme Corp"
               />
             </div>
             <div>
@@ -217,40 +234,64 @@ export default function AdminProjectDetailPage() {
                 name="thumbnail"
                 type="file"
                 accept="image/*"
-                className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-companyLogo" className="block text-sm font-medium text-slate-700">
+                Company logo <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="edit-companyLogo"
+                name="companyLogo"
+                type="file"
+                accept="image/*"
+                className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
               />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-700">
-                Authorized client emails <span className="font-normal text-slate-400">(comma-separated)</span>
+                Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
               </label>
               <textarea
                 id="edit-emails"
                 rows={2}
                 value={editEmails}
                 onChange={(e) => setEditEmails(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="client@example.com, other@example.com"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="client@example.com, @acmecorp.com"
               />
             </div>
           </div>
 
-          {project.thumbnailPath && (
-            <div className="mt-4">
-              <p className="mb-2 text-sm font-medium text-slate-700">Current thumbnail</p>
-              <img
-                src={`/api/projects/${projectId}/thumbnail`}
-                alt="Project thumbnail"
-                className="h-32 w-auto rounded-lg border border-slate-200 object-cover"
-              />
-            </div>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            {project.thumbnailPath && (
+              <div>
+                <p className="mb-1 text-xs text-slate-500">Current thumbnail</p>
+                <img
+                  src={`/api/projects/${projectId}/thumbnail`}
+                  alt="Thumbnail"
+                  className="h-20 w-auto rounded-lg border border-slate-200 object-cover"
+                />
+              </div>
+            )}
+            {project.companyLogoPath && (
+              <div>
+                <p className="mb-1 text-xs text-slate-500">Current company logo</p>
+                <img
+                  src={`/api/projects/${projectId}/company-logo`}
+                  alt="Company logo"
+                  className="h-20 w-auto rounded-lg border border-slate-200 object-contain bg-white p-1"
+                />
+              </div>
+            )}
+          </div>
 
           <div className="mt-4">
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
             </button>
@@ -267,13 +308,13 @@ export default function AdminProjectDetailPage() {
               name="file"
               type="file"
               required
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
             />
           </div>
           <button
             type="submit"
             disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
           >
             {uploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -304,7 +345,7 @@ export default function AdminProjectDetailPage() {
                   <td className="px-6 py-4">
                     <a
                       href={`/api/files/${file.id}/download`}
-                      className="font-medium text-blue-600 hover:text-blue-500"
+                      className="font-medium text-brand-600 hover:text-brand-500"
                     >
                       {file.originalName}
                     </a>

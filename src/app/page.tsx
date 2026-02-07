@@ -1,20 +1,24 @@
 import Link from "next/link";
-import { Shield, ArrowRight, Users, BarChart3, Lock } from "lucide-react";
+import { ArrowRight, Users, BarChart3, Lock } from "lucide-react";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
-            <Shield className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-lg font-semibold text-white">ClientPortal</span>
+          <img src="/logo-icon.png" alt="Ray Renders" className="h-9 w-9 rounded-lg" />
+          <span className="text-lg font-semibold text-white">Ray Renders</span>
         </div>
         <div className="flex items-center gap-4">
           <Link
+            href="/register"
+            className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
+          >
+            Sign up
+          </Link>
+          <Link
             href="/login"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
           >
             Sign in
           </Link>
@@ -25,7 +29,7 @@ export default function Home() {
         <section className="pb-20 pt-20 text-center lg:pt-32">
           <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl">
             Your business,{" "}
-            <span className="text-blue-400">organized and secure</span>
+            <span className="text-brand-400">organized and secure</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
             A centralized portal to manage your account, track activity, and
@@ -34,7 +38,7 @@ export default function Home() {
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               href="/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
             >
               Sign in to portal
               <ArrowRight className="h-4 w-4" />
@@ -67,8 +71,8 @@ export default function Home() {
               key={feature.title}
               className="rounded-xl border border-slate-700 bg-slate-800/50 p-8"
             >
-              <div className="mb-4 inline-flex rounded-lg bg-blue-600/10 p-3">
-                <feature.icon className="h-6 w-6 text-blue-400" />
+              <div className="mb-4 inline-flex rounded-lg bg-brand-600/10 p-3">
+                <feature.icon className="h-6 w-6 text-brand-400" />
               </div>
               <h3 className="mb-2 text-lg font-semibold text-white">
                 {feature.title}

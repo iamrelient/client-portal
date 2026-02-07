@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthorized } from "@/lib/auth-utils";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET } from "@/lib/r2";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
   const session = await getServerSession(authOptions);
@@ -25,12 +26,12 @@ export async function GET(
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Check project-level authorization for non-admin users
     if (
       file.project &&
       session.user.role !== "ADMIN" &&
-      !file.project.authorizedEmails.includes(
-        (session.user.email ?? "").toLowerCase()
+      !isEmailAuthorized(
+        session.user.email ?? "",
+        file.project.authorizedEmails
       )
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -45,10 +46,17 @@ export async function GET(
 
     const stream = obj.Body as ReadableStream;
 
+    // Support inline viewing via ?inline=true query param
+    const url = new URL(req.url);
+    const inline = url.searchParams.get("inline") === "true";
+    const disposition = inline
+      ? `inline; filename="${file.originalName}"`
+      : `attachment; filename="${file.originalName}"`;
+
     return new NextResponse(stream, {
       headers: {
         "Content-Type": file.mimeType,
-        "Content-Disposition": `attachment; filename="${file.originalName}"`,
+        "Content-Disposition": disposition,
         "Content-Length": String(file.size),
       },
     });

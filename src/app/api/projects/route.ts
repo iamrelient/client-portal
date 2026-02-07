@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthorized } from "@/lib/auth-utils";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { randomUUID } from "crypto";
@@ -13,25 +14,32 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const where =
-    session.user.role === "ADMIN"
-      ? {}
-      : { authorizedEmails: { has: (session.user.email ?? "").toLowerCase() } };
-
-  const projects = await prisma.project.findMany({
-    where,
+  const allProjects = await prisma.project.findMany({
     select: {
       id: true,
       name: true,
       thumbnailPath: true,
-      authorizedEmails: session.user.role === "ADMIN",
+      company: true,
+      companyLogoPath: true,
+      authorizedEmails: true,
       createdAt: true,
       _count: { select: { files: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(projects);
+  if (session.user.role === "ADMIN") {
+    return NextResponse.json(allProjects);
+  }
+
+  // Filter by email/domain match for non-admin users
+  const userEmail = (session.user.email ?? "").toLowerCase();
+  const authorized = allProjects
+    .filter((p) => isEmailAuthorized(userEmail, p.authorizedEmails))
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .map(({ authorizedEmails, ...rest }) => rest);
+
+  return NextResponse.json(authorized);
 }
 
 export async function POST(req: Request) {
@@ -45,7 +53,9 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
+    const company = formData.get("company") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
+    const companyLogo = formData.get("companyLogo") as globalThis.File | null;
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -55,6 +65,7 @@ export async function POST(req: Request) {
     }
 
     let thumbnailPath: string | null = null;
+    let companyLogoPath: string | null = null;
 
     if (thumbnail && thumbnail.size > 0) {
       const bytes = await thumbnail.arrayBuffer();
@@ -76,6 +87,26 @@ export async function POST(req: Request) {
       thumbnailPath = key;
     }
 
+    if (companyLogo && companyLogo.size > 0) {
+      const bytes = await companyLogo.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const ext = companyLogo.name.includes(".")
+        ? `.${companyLogo.name.split(".").pop()}`
+        : "";
+      const key = `company-logos/${randomUUID()}${ext}`;
+
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: companyLogo.type || "image/jpeg",
+        })
+      );
+
+      companyLogoPath = key;
+    }
+
     const authorizedEmails = emails
       ? emails
           .split(",")
@@ -87,6 +118,8 @@ export async function POST(req: Request) {
       data: {
         name: name.trim(),
         thumbnailPath,
+        company: company?.trim() || null,
+        companyLogoPath,
         authorizedEmails,
         createdById: session.user.id,
       },

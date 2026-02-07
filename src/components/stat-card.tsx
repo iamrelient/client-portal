@@ -44,8 +44,8 @@ export function StatCard({
             </p>
           )}
         </div>
-        <div className="rounded-lg bg-blue-50 p-3">
-          <Icon className="h-6 w-6 text-blue-600" />
+        <div className="rounded-lg bg-brand-50 p-3">
+          <Icon className="h-6 w-6 text-brand-600" />
         </div>
       </div>
     </div>

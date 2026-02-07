@@ -79,6 +79,8 @@ model Project {
   id               String   @id @default(cuid())
   name             String
   thumbnailPath    String?
+  company          String?
+  companyLogoPath  String?
   authorizedEmails String[]
   createdById      String
   createdBy        User     @relation(fields: [createdById], references: [id], onDelete: Cascade)

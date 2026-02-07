@@ -10,8 +10,11 @@ const geistSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Client Portal",
-  description: "Manage your account, view activity, and access services.",
+  title: "Ray Renders | Client Portal",
+  description: "Access your projects, files, and account.",
+  icons: {
+    icon: "/logo-icon.png",
+  },
 };
 
 export default function RootLayout({

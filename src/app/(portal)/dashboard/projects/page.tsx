@@ -8,6 +8,7 @@ import { FolderOpen } from "lucide-react";
 interface ProjectCard {
   id: string;
   name: string;
+  company: string | null;
   thumbnailPath: string | null;
   createdAt: string;
   _count: { files: number };
@@ -30,7 +31,7 @@ export default function ClientProjectsPage() {
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
       </div>
     );
   }
@@ -66,7 +67,10 @@ export default function ClientProjectsPage() {
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-slate-900">{project.name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  {project.company && (
+                    <p className="mt-0.5 text-sm text-slate-500">{project.company}</p>
+                  )}
+                  <p className="mt-1 text-sm text-slate-400">
                     {project._count.files} file{project._count.files !== 1 ? "s" : ""}
                   </p>
                 </div>

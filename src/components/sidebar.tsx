@@ -10,7 +10,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Shield,
   Menu,
   X,
   FileText,
@@ -40,15 +39,17 @@ export function Sidebar() {
 
   const navContent = (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-slate-700 px-6 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
-          <Shield className="h-5 w-5 text-white" />
-        </div>
-        <span className="text-lg font-semibold text-white">ClientPortal</span>
+      <div className="flex items-center gap-3 border-b border-brand-700 px-5 py-4">
+        <img
+          src="/logo-icon.png"
+          alt="Ray Renders"
+          className="h-9 w-9 rounded-lg"
+        />
+        <span className="text-lg font-semibold text-white">Ray Renders</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-brand-300">
           Client
         </p>
         {clientLinks.map((link) => {
@@ -61,8 +62,8 @@ export function Sidebar() {
               className={clsx(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 pathname === link.href
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
+                  ? "bg-brand-500/20 text-white"
+                  : "text-brand-200 hover:bg-brand-600/30 hover:text-white"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -73,7 +74,7 @@ export function Sidebar() {
 
         {isAdmin && (
           <>
-            <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-brand-300">
               Admin
             </p>
             {adminLinks.map((link) => {
@@ -86,8 +87,8 @@ export function Sidebar() {
                   className={clsx(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     pathname === link.href
-                      ? "bg-slate-700 text-white"
-                      : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
+                      ? "bg-brand-500/20 text-white"
+                      : "text-brand-200 hover:bg-brand-600/30 hover:text-white"
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -99,18 +100,18 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="border-t border-slate-700 p-4">
+      <div className="border-t border-brand-700 p-4">
         <div className="mb-3 px-2">
           <p className="text-sm font-medium text-white truncate">
             {session?.user?.name}
           </p>
-          <p className="text-xs text-slate-400 truncate">
+          <p className="text-xs text-brand-300 truncate">
             {session?.user?.email}
           </p>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700/50 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-brand-200 transition-colors hover:bg-brand-600/30 hover:text-white"
         >
           <LogOut className="h-5 w-5" />
           Sign out
@@ -121,15 +122,13 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed left-4 top-4 z-50 rounded-lg bg-slate-800 p-2 text-white lg:hidden"
+        className="fixed left-4 top-4 z-50 rounded-lg bg-brand-800 p-2 text-white lg:hidden"
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 lg:hidden"
@@ -137,10 +136,9 @@ export function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={clsx(
-          "fixed left-0 top-0 z-40 h-screen w-64 bg-slate-800 transition-transform lg:translate-x-0",
+          "fixed left-0 top-0 z-40 h-screen w-64 bg-brand-900 transition-transform lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
