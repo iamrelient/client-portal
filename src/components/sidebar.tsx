@@ -14,11 +14,13 @@ import {
   Menu,
   X,
   FileText,
+  FolderOpen,
 } from "lucide-react";
 import { useState } from "react";
 
 const clientLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/projects", label: "Projects", icon: FolderOpen },
   { href: "/dashboard/files", label: "Files", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -26,6 +28,7 @@ const clientLinks = [
 const adminLinks = [
   { href: "/admin", label: "Overview", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/projects", label: "Projects", icon: FolderOpen },
   { href: "/admin/files", label: "Files", icon: FileText },
 ];
 

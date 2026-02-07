@@ -6,33 +6,10 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { r2, R2_BUCKET } from "@/lib/r2";
 import { randomUUID } from "crypto";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const files = await prisma.file.findMany({
-    where: session.user.role === "ADMIN" ? {} : { projectId: null },
-    select: {
-      id: true,
-      name: true,
-      originalName: true,
-      size: true,
-      mimeType: true,
-      createdAt: true,
-      uploadedBy: {
-        select: { name: true, email: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json(files);
-}
-
-export async function POST(req: Request) {
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   const session = await getServerSession(authOptions);
 
   if (!session || session.user.role !== "ADMIN") {
@@ -40,17 +17,33 @@ export async function POST(req: Request) {
   }
 
   try {
+    const project = await prisma.project.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as globalThis.File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No file provided" },
+        { status: 400 }
+      );
     }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = file.name.includes(".") ? `.${file.name.split(".").pop()}` : "";
+    const ext = file.name.includes(".")
+      ? `.${file.name.split(".").pop()}`
+      : "";
     const key = `${randomUUID()}${ext}`;
 
     await r2.send(
@@ -70,23 +63,24 @@ export async function POST(req: Request) {
         mimeType: file.type || "application/octet-stream",
         path: key,
         uploadedById: session.user.id,
+        projectId: params.id,
       },
     });
 
     await prisma.activity.create({
       data: {
         type: "FILE_UPLOADED",
-        description: `Uploaded file "${file.name}"`,
+        description: `Uploaded file "${file.name}" to project "${project.name}"`,
         userId: session.user.id,
       },
     });
 
     return NextResponse.json(
-      { message: "File uploaded successfully", fileId: dbFile.id },
+      { message: "File uploaded", fileId: dbFile.id },
       { status: 201 }
     );
   } catch (error) {
-    console.error("File upload error:", error);
+    console.error("Project file upload error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }

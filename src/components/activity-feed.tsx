@@ -1,4 +1,4 @@
-import { Activity, FileText, LogIn, UserPlus, Settings } from "lucide-react";
+import { Activity, FileText, FolderMinus, FolderOpen, FolderPlus, LogIn, UserPlus, Settings } from "lucide-react";
 
 const iconMap: Record<string, typeof Activity> = {
   ACCOUNT_CREATED: UserPlus,
@@ -7,6 +7,9 @@ const iconMap: Record<string, typeof Activity> = {
   DOCUMENT_UPLOADED: FileText,
   FILE_UPLOADED: FileText,
   FILE_DELETED: FileText,
+  PROJECT_CREATED: FolderPlus,
+  PROJECT_DELETED: FolderMinus,
+  PROJECT_UPDATED: FolderOpen,
 };
 
 interface ActivityItem {

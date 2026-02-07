@@ -16,30 +16,22 @@ export async function GET(
   }
 
   try {
-    const file = await prisma.file.findUnique({
+    const project = await prisma.project.findUnique({
       where: { id: params.id },
-      include: { project: { select: { authorizedEmails: true } } },
+      select: { thumbnailPath: true },
     });
 
-    if (!file) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
-    }
-
-    // Check project-level authorization for non-admin users
-    if (
-      file.project &&
-      session.user.role !== "ADMIN" &&
-      !file.project.authorizedEmails.includes(
-        (session.user.email ?? "").toLowerCase()
-      )
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!project?.thumbnailPath) {
+      return NextResponse.json(
+        { error: "No thumbnail" },
+        { status: 404 }
+      );
     }
 
     const obj = await r2.send(
       new GetObjectCommand({
         Bucket: R2_BUCKET,
-        Key: file.path,
+        Key: project.thumbnailPath,
       })
     );
 
@@ -47,13 +39,12 @@ export async function GET(
 
     return new NextResponse(stream, {
       headers: {
-        "Content-Type": file.mimeType,
-        "Content-Disposition": `attachment; filename="${file.originalName}"`,
-        "Content-Length": String(file.size),
+        "Content-Type": obj.ContentType || "image/jpeg",
+        "Cache-Control": "public, max-age=3600",
       },
     });
   } catch (error) {
-    console.error("File download error:", error);
+    console.error("Thumbnail fetch error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }
