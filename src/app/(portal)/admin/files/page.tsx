@@ -73,7 +73,7 @@ export default function AdminFilesPage() {
       const { uploadUri } = await sessionRes.json();
 
       // Step 2: Upload directly to Google Drive with progress
-      const driveResult = await new Promise<{ id: string; name: string; size: string }>((resolve, reject) => {
+      const driveResult = await new Promise<{ id?: string; name?: string; size?: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
         xhr.upload.addEventListener("progress", (e) => {
@@ -84,7 +84,11 @@ export default function AdminFilesPage() {
 
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(JSON.parse(xhr.responseText));
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch {
+              reject(new Error("Invalid response from Google Drive"));
+            }
           } else {
             reject(new Error(`Upload failed: ${xhr.status}`));
           }
@@ -96,6 +100,12 @@ export default function AdminFilesPage() {
         xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
         xhr.send(file);
       });
+
+      if (!driveResult.id) {
+        setError("Upload succeeded but no file ID returned. Please refresh.");
+        setUploading(false);
+        return;
+      }
 
       // Step 3: Register the file in our DB
       const completeRes = await fetch("/api/files/upload-complete", {
