@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { ChevronDown, ChevronRight, Download, Eye, Loader2, Trash2, Upload, X } from "lucide-react";
@@ -21,6 +21,7 @@ interface ProjectDetail {
   thumbnailPath: string | null;
   company: string | null;
   companyLogoPath: string | null;
+  driveFolderId: string | null;
   authorizedEmails: string[];
   files: ProjectFile[];
   createdBy: { name: string };
@@ -69,11 +70,13 @@ export default function AdminProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
   const [error, setError] = useState("");
@@ -102,6 +105,17 @@ export default function AdminProjectDetailPage() {
   useEffect(() => {
     loadProject();
   }, [projectId]);
+
+  // Trigger auto-sync on mount
+  useEffect(() => {
+    if (project?.driveFolderId) {
+      fetch(`/api/projects/${projectId}/sync`, { method: "POST" })
+        .then((res) => {
+          if (res.ok) loadProject();
+        })
+        .catch(() => {});
+    }
+  }, [project?.driveFolderId]);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -136,34 +150,89 @@ export default function AdminProjectDetailPage() {
     }
   }
 
-  async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleUpload() {
+    const fileInput = fileInputRef.current;
+    if (!fileInput?.files?.length) return;
+
+    const file = fileInput.files[0];
     setError("");
     setUploading(true);
-
-    const formData = new FormData(e.currentTarget);
+    setUploadProgress(0);
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/files`, {
+      // Step 1: Get resumable upload URI from our server
+      const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+        }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Upload failed");
+      if (!sessionRes.ok) {
+        const data = await sessionRes.json();
+        setError(data.error || "Failed to start upload");
+        setUploading(false);
+        return;
+      }
+
+      const { uploadUri } = await sessionRes.json();
+
+      // Step 2: Upload file directly to Google Drive with progress tracking
+      const driveResult = await new Promise<{ id: string; name: string; size: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+
+        xhr.open("PUT", uploadUri);
+        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+        xhr.send(file);
+      });
+
+      // Step 3: Register the uploaded file in our DB
+      const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          driveFileId: driveResult.id,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: Number(driveResult.size) || file.size,
+        }),
+      });
+
+      if (!completeRes.ok) {
+        const data = await completeRes.json();
+        setError(data.error || "Failed to register file");
         setUploading(false);
         return;
       }
 
       setUploading(false);
-      (e.target as HTMLFormElement).reset();
+      setUploadProgress(0);
+      fileInput.value = "";
       setExpandedGroup(null);
       setVersionHistory({});
       loadProject();
     } catch {
       setError("Upload failed");
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
@@ -368,17 +437,17 @@ export default function AdminProjectDetailPage() {
       {/* Upload File */}
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-medium text-slate-900">Upload File</h2>
-        <form onSubmit={handleUpload} className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-4">
           <div className="flex-1 min-w-[200px]">
             <input
-              name="file"
+              ref={fileInputRef}
               type="file"
-              required
               className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
             />
           </div>
           <button
-            type="submit"
+            type="button"
+            onClick={handleUpload}
             disabled={uploading}
             className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
           >
@@ -389,7 +458,22 @@ export default function AdminProjectDetailPage() {
             )}
             Upload
           </button>
-        </form>
+        </div>
+        {/* Progress bar */}
+        {uploading && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Uploading...</span>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-brand-600 transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Files Table */}

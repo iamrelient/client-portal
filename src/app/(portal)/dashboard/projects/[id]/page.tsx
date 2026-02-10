@@ -75,7 +75,7 @@ export default function ClientProjectDetailPage() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
 
-  useEffect(() => {
+  function loadProject() {
     fetch(`/api/projects/${projectId}`)
       .then((res) => {
         if (res.status === 403) {
@@ -95,7 +95,25 @@ export default function ClientProjectDetailPage() {
         setError("Something went wrong");
         setLoading(false);
       });
+  }
+
+  useEffect(() => {
+    loadProject();
   }, [projectId]);
+
+  // Trigger auto-sync on mount
+  useEffect(() => {
+    if (project?.id) {
+      fetch(`/api/projects/${projectId}/sync`, { method: "POST" })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json();
+            if (data.changed) loadProject();
+          }
+        })
+        .catch(() => {});
+    }
+  }, [project?.id]);
 
   async function toggleVersionHistory(fileId: string, fileGroupId: string | null) {
     if (expandedGroup === fileId) {

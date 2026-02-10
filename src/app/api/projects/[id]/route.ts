@@ -3,9 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
-import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
-import { randomUUID } from "crypto";
+import {
+  uploadFileToFolder,
+  deleteFile,
+  deleteFolder,
+  createFolder,
+  isGoogleDriveConnected,
+} from "@/lib/google-drive";
 
 export async function GET(
   _req: Request,
@@ -53,6 +57,7 @@ export async function GET(
     thumbnailPath: project.thumbnailPath,
     company: project.company,
     companyLogoPath: project.companyLogoPath,
+    driveFolderId: project.driveFolderId,
     files: project.files,
     createdBy: project.createdBy,
     createdAt: project.createdAt,
@@ -111,70 +116,67 @@ export async function PATCH(
         .filter(Boolean);
     }
 
+    const driveConnected = await isGoogleDriveConnected();
+
     if (thumbnail && thumbnail.size > 0) {
-      if (project.thumbnailPath) {
+      if (driveConnected && project.thumbnailPath) {
         try {
-          await r2.send(
-            new DeleteObjectCommand({
-              Bucket: R2_BUCKET,
-              Key: project.thumbnailPath,
-            })
-          );
+          await deleteFile(project.thumbnailPath);
         } catch {
           // Old thumbnail may already be gone
         }
       }
 
-      const bytes = await thumbnail.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const ext = thumbnail.name.includes(".")
-        ? `.${thumbnail.name.split(".").pop()}`
-        : "";
-      const key = `thumbnails/${randomUUID()}${ext}`;
+      if (driveConnected && project.driveFolderId) {
+        const bytes = await thumbnail.arrayBuffer();
+        const buffer = Buffer.from(bytes);
 
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: thumbnail.type || "image/jpeg",
-        })
-      );
+        // Find or create _assets folder
+        let assetsId: string;
+        try {
+          assetsId = await createFolder("_assets", project.driveFolderId);
+        } catch {
+          assetsId = project.driveFolderId;
+        }
 
-      data.thumbnailPath = key;
+        const result = await uploadFileToFolder(
+          assetsId,
+          `thumbnail_${thumbnail.name}`,
+          thumbnail.type || "image/jpeg",
+          buffer
+        );
+        data.thumbnailPath = result.id;
+      }
     }
 
     if (companyLogo && companyLogo.size > 0) {
-      if (project.companyLogoPath) {
+      if (driveConnected && project.companyLogoPath) {
         try {
-          await r2.send(
-            new DeleteObjectCommand({
-              Bucket: R2_BUCKET,
-              Key: project.companyLogoPath,
-            })
-          );
+          await deleteFile(project.companyLogoPath);
         } catch {
           // Old logo may already be gone
         }
       }
 
-      const bytes = await companyLogo.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const ext = companyLogo.name.includes(".")
-        ? `.${companyLogo.name.split(".").pop()}`
-        : "";
-      const key = `company-logos/${randomUUID()}${ext}`;
+      if (driveConnected && project.driveFolderId) {
+        const bytes = await companyLogo.arrayBuffer();
+        const buffer = Buffer.from(bytes);
 
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: companyLogo.type || "image/jpeg",
-        })
-      );
+        let assetsId: string;
+        try {
+          assetsId = await createFolder("_assets", project.driveFolderId);
+        } catch {
+          assetsId = project.driveFolderId;
+        }
 
-      data.companyLogoPath = key;
+        const result = await uploadFileToFolder(
+          assetsId,
+          `logo_${companyLogo.name}`,
+          companyLogo.type || "image/jpeg",
+          buffer
+        );
+        data.companyLogoPath = result.id;
+      }
     }
 
     await prisma.project.update({
@@ -215,39 +217,12 @@ export async function DELETE(
       );
     }
 
-    for (const file of project.files) {
+    // Delete Drive folder (includes all files inside it)
+    if (project.driveFolderId) {
       try {
-        await r2.send(
-          new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: file.path })
-        );
+        await deleteFolder(project.driveFolderId);
       } catch {
-        // Continue
-      }
-    }
-
-    if (project.thumbnailPath) {
-      try {
-        await r2.send(
-          new DeleteObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: project.thumbnailPath,
-          })
-        );
-      } catch {
-        // Already gone
-      }
-    }
-
-    if (project.companyLogoPath) {
-      try {
-        await r2.send(
-          new DeleteObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: project.companyLogoPath,
-          })
-        );
-      } catch {
-        // Already gone
+        // Drive folder may already be gone
       }
     }
 

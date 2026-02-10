@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
-import { randomUUID } from "crypto";
+import {
+  findOrCreateRootFolder,
+  createFolder,
+  uploadFileToFolder,
+  getValidAccessToken,
+} from "@/lib/google-drive";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -14,7 +17,7 @@ export async function GET() {
   }
 
   const files = await prisma.file.findMany({
-    where: session.user.role === "ADMIN" ? {} : { projectId: null },
+    where: session.user.role === "ADMIN" ? { projectId: null } : { projectId: null },
     select: {
       id: true,
       name: true,
@@ -30,6 +33,30 @@ export async function GET() {
   });
 
   return NextResponse.json(files);
+}
+
+const GENERAL_FILES_FOLDER = "_General Files";
+
+async function getGeneralFilesFolder(): Promise<string> {
+  const rootId = await findOrCreateRootFolder();
+  const token = await getValidAccessToken();
+
+  const query = `name='${GENERAL_FILES_FOLDER}' and '${rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  if (res.ok) {
+    const data = await res.json();
+    if (data.files && data.files.length > 0) {
+      return data.files[0].id;
+    }
+  }
+
+  return createFolder(GENERAL_FILES_FOLDER, rootId);
 }
 
 export async function POST(req: Request) {
@@ -50,25 +77,23 @@ export async function POST(req: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = file.name.includes(".") ? `.${file.name.split(".").pop()}` : "";
-    const key = `${randomUUID()}${ext}`;
+    const folderId = await getGeneralFilesFolder();
 
-    await r2.send(
-      new PutObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: key,
-        Body: buffer,
-        ContentType: file.type || "application/octet-stream",
-      })
+    const result = await uploadFileToFolder(
+      folderId,
+      file.name,
+      file.type || "application/octet-stream",
+      buffer
     );
 
     const dbFile = await prisma.file.create({
       data: {
-        name: key,
+        name: file.name,
         originalName: file.name,
         size: file.size,
         mimeType: file.type || "application/octet-stream",
-        path: key,
+        path: result.id,
+        driveFileId: result.id,
         uploadedById: session.user.id,
       },
     });

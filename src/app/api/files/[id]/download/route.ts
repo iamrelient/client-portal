@@ -3,8 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
+import { downloadFile } from "@/lib/google-drive";
 
 export async function GET(
   req: Request,
@@ -37,14 +36,8 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const obj = await r2.send(
-      new GetObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: file.path,
-      })
-    );
-
-    const stream = obj.Body as ReadableStream;
+    // path stores the Drive file ID
+    const { stream } = await downloadFile(file.path);
 
     // Support inline viewing via ?inline=true query param
     const url = new URL(req.url);

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
+import { downloadFile } from "@/lib/google-drive";
 
 export async function GET(
   _req: Request,
@@ -28,18 +27,12 @@ export async function GET(
       );
     }
 
-    const obj = await r2.send(
-      new GetObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: project.thumbnailPath,
-      })
-    );
-
-    const stream = obj.Body as ReadableStream;
+    // thumbnailPath stores the Drive file ID
+    const { stream, mimeType } = await downloadFile(project.thumbnailPath);
 
     return new NextResponse(stream, {
       headers: {
-        "Content-Type": obj.ContentType || "image/jpeg",
+        "Content-Type": mimeType || "image/jpeg",
         "Cache-Control": "public, max-age=3600",
       },
     });

@@ -34,24 +34,27 @@ model User {
 }
 
 model File {
-  id           String   @id @default(cuid())
-  name         String
-  originalName String
-  size         Int
-  mimeType     String
-  path         String
-  uploadedById String
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
-  projectId    String?
-  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version      Int      @default(1)
-  fileGroupId  String?
-  createdAt    DateTime @default(now())
+  id              String   @id @default(cuid())
+  name            String
+  originalName    String
+  size            Int
+  mimeType        String
+  path            String
+  driveFileId     String?
+  syncedFromDrive Boolean  @default(false)
+  uploadedById    String
+  uploadedBy      User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version         Int      @default(1)
+  fileGroupId     String?
+  createdAt       DateTime @default(now())
 
   @@index([uploadedById])
   @@index([projectId])
   @@index([fileGroupId])
   @@index([projectId, originalName])
+  @@index([driveFileId])
   @@map("files")
 }
 
@@ -80,17 +83,19 @@ model Activity {
 }
 
 model Project {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   name             String
   thumbnailPath    String?
   company          String?
   companyLogoPath  String?
   authorizedEmails String[]
+  driveFolderId    String?
+  lastSyncedAt     DateTime?
   createdById      String
-  createdBy        User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   files            File[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@map("projects")
 }
@@ -102,4 +107,16 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model GoogleToken {
+  id           String   @id @default("singleton")
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  email        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("google_tokens")
 }

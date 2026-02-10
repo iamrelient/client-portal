@@ -3,9 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
-import { randomUUID } from "crypto";
+import {
+  findOrCreateRootFolder,
+  createFolder,
+  uploadFileToFolder,
+  isGoogleDriveConnected,
+} from "@/lib/google-drive";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -64,47 +67,43 @@ export async function POST(req: Request) {
       );
     }
 
+    const driveConnected = await isGoogleDriveConnected();
+
+    let driveFolderId: string | null = null;
     let thumbnailPath: string | null = null;
     let companyLogoPath: string | null = null;
 
-    if (thumbnail && thumbnail.size > 0) {
-      const bytes = await thumbnail.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const ext = thumbnail.name.includes(".")
-        ? `.${thumbnail.name.split(".").pop()}`
-        : "";
-      const key = `thumbnails/${randomUUID()}${ext}`;
+    if (driveConnected) {
+      // Create project folder in Drive
+      const rootId = await findOrCreateRootFolder();
+      driveFolderId = await createFolder(name.trim(), rootId);
 
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: thumbnail.type || "image/jpeg",
-        })
-      );
+      // Create _assets subfolder for thumbnails/logos
+      const assetsId = await createFolder("_assets", driveFolderId);
 
-      thumbnailPath = key;
-    }
+      if (thumbnail && thumbnail.size > 0) {
+        const bytes = await thumbnail.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const result = await uploadFileToFolder(
+          assetsId,
+          `thumbnail_${thumbnail.name}`,
+          thumbnail.type || "image/jpeg",
+          buffer
+        );
+        thumbnailPath = result.id;
+      }
 
-    if (companyLogo && companyLogo.size > 0) {
-      const bytes = await companyLogo.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const ext = companyLogo.name.includes(".")
-        ? `.${companyLogo.name.split(".").pop()}`
-        : "";
-      const key = `company-logos/${randomUUID()}${ext}`;
-
-      await r2.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: key,
-          Body: buffer,
-          ContentType: companyLogo.type || "image/jpeg",
-        })
-      );
-
-      companyLogoPath = key;
+      if (companyLogo && companyLogo.size > 0) {
+        const bytes = await companyLogo.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const result = await uploadFileToFolder(
+          assetsId,
+          `logo_${companyLogo.name}`,
+          companyLogo.type || "image/jpeg",
+          buffer
+        );
+        companyLogoPath = result.id;
+      }
     }
 
     const authorizedEmails = emails
@@ -120,6 +119,7 @@ export async function POST(req: Request) {
         thumbnailPath,
         company: company?.trim() || null,
         companyLogoPath,
+        driveFolderId,
         authorizedEmails,
         createdById: session.user.id,
       },

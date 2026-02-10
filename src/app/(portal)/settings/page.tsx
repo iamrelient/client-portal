@@ -1,10 +1,66 @@
 "use client";
 
+import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { Loader2 } from "lucide-react";
 
 export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const isAdmin = session?.user?.role === "ADMIN";
+
+  const [driveStatus, setDriveStatus] = useState<{
+    connected: boolean;
+    email?: string;
+  } | null>(null);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveMessage, setDriveMessage] = useState("");
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/google/status")
+        .then((res) => res.json())
+        .then(setDriveStatus)
+        .catch(() => setDriveStatus({ connected: false }));
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const googleParam = searchParams.get("google");
+    if (googleParam === "connected") {
+      setDriveMessage("Google Drive connected successfully!");
+      setDriveStatus(null); // Trigger re-fetch
+      fetch("/api/google/status")
+        .then((res) => res.json())
+        .then(setDriveStatus)
+        .catch(() => {});
+    } else if (googleParam === "error") {
+      setDriveMessage("Failed to connect Google Drive. Please try again.");
+    }
+  }, [searchParams]);
+
+  async function handleDisconnect() {
+    if (!confirm("Disconnect Google Drive? Existing files will remain in Drive but new uploads won't work until reconnected.")) return;
+    setDriveLoading(true);
+    try {
+      await fetch("/api/google/disconnect", { method: "POST" });
+      setDriveStatus({ connected: false });
+      setDriveMessage("Google Drive disconnected.");
+    } catch {
+      setDriveMessage("Failed to disconnect.");
+    }
+    setDriveLoading(false);
+  }
 
   return (
     <div>
@@ -14,6 +70,62 @@ export default function SettingsPage() {
       />
 
       <div className="max-w-2xl space-y-8">
+        {/* Google Drive — admin only */}
+        {isAdmin && (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+              Google Drive
+            </h2>
+            <p className="mb-4 text-sm text-slate-500">
+              Connect Google Drive to store all project files. Files uploaded through the portal go to Drive,
+              and files added to Drive appear automatically in the portal.
+            </p>
+
+            {driveMessage && (
+              <div
+                className={`mb-4 rounded-lg p-3 text-sm ${
+                  driveMessage.includes("successfully") || driveMessage.includes("connected")
+                    ? "bg-green-50 text-green-600"
+                    : "bg-red-50 text-red-600"
+                }`}
+              >
+                {driveMessage}
+              </div>
+            )}
+
+            {driveStatus === null ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking connection...
+              </div>
+            ) : driveStatus.connected ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+                  <span className="text-sm text-slate-700">
+                    Connected as <strong>{driveStatus.email}</strong>
+                  </span>
+                </div>
+                <button
+                  onClick={handleDisconnect}
+                  disabled={driveLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                  {driveLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <a
+                href="/api/google/authorize"
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+              >
+                Connect Google Drive
+              </a>
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-slate-900">
             Profile Information

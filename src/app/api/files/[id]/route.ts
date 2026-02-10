@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { r2, R2_BUCKET } from "@/lib/r2";
+import { deleteFile } from "@/lib/google-drive";
 
 export async function DELETE(
   _req: Request,
@@ -24,16 +23,11 @@ export async function DELETE(
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Delete from R2
+    // Delete from Google Drive
     try {
-      await r2.send(
-        new DeleteObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: file.path,
-        })
-      );
+      await deleteFile(file.path);
     } catch {
-      // File may already be removed from storage
+      // File may already be removed from Drive
     }
 
     // Delete from database
