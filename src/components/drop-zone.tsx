@@ -70,6 +70,7 @@ export function DropZone({ onFiles, uploading, progress, accept }: DropZoneProps
           ref={inputRef}
           type="file"
           accept={accept}
+          multiple
           onChange={handleInputChange}
           className="hidden"
         />

@@ -50,7 +50,7 @@ interface ProjectDetail {
   createdAt: string;
 }
 
-interface UploadModalState {
+interface UploadFileEntry {
   file: File;
   category: FileCategory;
   displayName: string;
@@ -137,8 +137,8 @@ export default function AdminProjectDetailPage() {
   const [togglingCurrent, setTogglingCurrent] = useState<string | null>(null);
   const [updatingCategory, setUpdatingCategory] = useState<string | null>(null);
 
-  // Upload modal state
-  const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null);
+  // Upload modal state (supports multiple files)
+  const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
 
   // Drag-drop state
   const [dragOverFileId, setDragOverFileId] = useState<string | null>(null);
@@ -222,15 +222,16 @@ export default function AdminProjectDetailPage() {
 
   // Called when files are dropped on the DropZone — opens the upload modal
   function handleFilesSelected(fileList: FileList) {
-    const file = fileList[0];
-    if (!file) return;
+    if (!fileList.length) return;
 
-    setUploadModal({
+    const entries: UploadFileEntry[] = Array.from(fileList).map((file) => ({
       file,
-      category: "OTHER",
+      category: "OTHER" as FileCategory,
       displayName: file.name,
       targetFileGroupId: null,
-    });
+    }));
+
+    setUploadQueue(entries);
   }
 
   // Called when a file is dropped onto an existing file row (drag-to-iterate)
@@ -242,111 +243,127 @@ export default function AdminProjectDetailPage() {
     if (!files.length) return;
 
     const file = files[0];
-    // Ensure the target has a fileGroupId (or we'll use its id as a fallback to create one)
     const groupId = targetFile.fileGroupId || targetFile.id;
 
-    setUploadModal({
+    setUploadQueue([{
       file,
       category: targetFile.category || "OTHER",
       displayName: targetFile.displayName || targetFile.originalName,
       targetFileGroupId: groupId,
-    });
+    }]);
   }
 
-  // Actually perform the upload (called from the modal confirm)
+  // Upload a single file entry to Drive and register it
+  async function uploadSingleFile(entry: UploadFileEntry): Promise<boolean> {
+    const { file, category, displayName, targetFileGroupId } = entry;
+
+    const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+      }),
+    });
+
+    if (!sessionRes.ok) {
+      const data = await sessionRes.json();
+      toast.error(`${file.name}: ${data.error || "Failed to start upload"}`);
+      return false;
+    }
+
+    const { uploadUri } = await sessionRes.json();
+
+    const driveResult = await new Promise<{ id?: string; name?: string; size?: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch {
+            reject(new Error("Invalid response from Google Drive"));
+          }
+        } else {
+          reject(new Error(`Upload failed: ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+
+      xhr.open("PUT", uploadUri);
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+      xhr.send(file);
+    });
+
+    if (!driveResult.id) {
+      toast.error(`${file.name}: Upload succeeded but no file ID returned`);
+      return false;
+    }
+
+    const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        driveFileId: driveResult.id,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: Number(driveResult.size) || file.size,
+        category,
+        displayName: displayName !== file.name ? displayName : null,
+        targetFileGroupId,
+      }),
+    });
+
+    if (!completeRes.ok) {
+      const data = await completeRes.json();
+      toast.error(`${file.name}: ${data.error || "Failed to register file"}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  // Process all files in the upload queue
   async function executeUpload() {
-    if (!uploadModal) return;
+    if (!uploadQueue || uploadQueue.length === 0) return;
 
-    const { file, category, displayName, targetFileGroupId } = uploadModal;
-
-    setUploadModal(null);
+    // Snapshot the queue and close the modal
+    const entries = [...uploadQueue];
+    setUploadQueue(null);
     setUploading(true);
     setUploadProgress(0);
 
+    let successCount = 0;
+
     try {
-      const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-        }),
-      });
-
-      if (!sessionRes.ok) {
-        const data = await sessionRes.json();
-        toast.error(data.error || "Failed to start upload");
-        setUploading(false);
-        return;
+      for (let i = 0; i < entries.length; i++) {
+        setUploadProgress(0);
+        const ok = await uploadSingleFile(entries[i]);
+        if (ok) successCount++;
       }
-
-      const { uploadUri } = await sessionRes.json();
-
-      const driveResult = await new Promise<{ id?: string; name?: string; size?: string }>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              resolve(JSON.parse(xhr.responseText));
-            } catch {
-              reject(new Error("Invalid response from Google Drive"));
-            }
-          } else {
-            reject(new Error(`Upload failed: ${xhr.status}`));
-          }
-        });
-
-        xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-
-        xhr.open("PUT", uploadUri);
-        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-        xhr.send(file);
-      });
-
-      if (!driveResult.id) {
-        toast.error("Upload succeeded but no file ID returned. Please refresh.");
-        setUploading(false);
-        return;
-      }
-
-      const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          driveFileId: driveResult.id,
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          size: Number(driveResult.size) || file.size,
-          category,
-          displayName: displayName !== file.name ? displayName : null,
-          targetFileGroupId,
-        }),
-      });
-
-      if (!completeRes.ok) {
-        const data = await completeRes.json();
-        toast.error(data.error || "Failed to register file");
-        setUploading(false);
-        return;
-      }
-
-      setUploading(false);
-      setUploadProgress(0);
-      setExpandedGroup(null);
-      setVersionHistory({});
-      toast.success("File uploaded successfully");
-      loadProject();
     } catch {
       toast.error("Upload failed");
-      setUploading(false);
-      setUploadProgress(0);
+    }
+
+    setUploading(false);
+    setUploadProgress(0);
+    setExpandedGroup(null);
+    setVersionHistory({});
+
+    if (successCount > 0) {
+      toast.success(
+        successCount === 1
+          ? "File uploaded successfully"
+          : `${successCount} files uploaded successfully`
+      );
+      loadProject();
     }
   }
 
@@ -831,70 +848,93 @@ export default function AdminProjectDetailPage() {
       )}
 
       {/* Upload Modal */}
-      {uploadModal && (
+      {uploadQueue && uploadQueue.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[80vh] flex flex-col">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">Upload File</h3>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Upload {uploadQueue.length === 1 ? "File" : `${uploadQueue.length} Files`}
+              </h3>
               <button
-                onClick={() => setUploadModal(null)}
+                onClick={() => setUploadQueue(null)}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="mb-4 rounded-lg bg-slate-50 px-4 py-3">
-              <p className="text-sm text-slate-600 truncate">
-                {uploadModal.file.name}
-              </p>
-              <p className="text-xs text-slate-400">
-                {formatSize(uploadModal.file.size)}
-              </p>
+            <div className="overflow-y-auto flex-1 -mx-6 px-6 space-y-4">
+              {uploadQueue.map((entry, idx) => (
+                <div key={idx} className="rounded-lg border border-slate-200 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-900 truncate">{entry.file.name}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 whitespace-nowrap">{formatSize(entry.file.size)}</span>
+                      {uploadQueue.length > 1 && (
+                        <button
+                          onClick={() => setUploadQueue((prev) => prev ? prev.filter((_, i) => i !== idx) : null)}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {entry.targetFileGroupId && (
+                    <div className="mb-3 rounded-md bg-brand-50 px-3 py-2">
+                      <p className="text-xs font-medium text-brand-700">
+                        New version — will be added to the existing file group
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                      <select
+                        value={entry.category}
+                        onChange={(e) =>
+                          setUploadQueue((prev) =>
+                            prev
+                              ? prev.map((item, i) =>
+                                  i === idx ? { ...item, category: e.target.value as FileCategory } : item
+                                )
+                              : null
+                          )
+                        }
+                        className="block w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      >
+                        <option value="RENDER">Renders</option>
+                        <option value="DRAWING">Drawings</option>
+                        <option value="OTHER">Others</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Display Name</label>
+                      <input
+                        type="text"
+                        value={entry.displayName}
+                        onChange={(e) =>
+                          setUploadQueue((prev) =>
+                            prev
+                              ? prev.map((item, i) =>
+                                  i === idx ? { ...item, displayName: e.target.value } : item
+                                )
+                              : null
+                          )
+                        }
+                        className="block w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {uploadModal.targetFileGroupId && (
-              <div className="mb-4 rounded-lg bg-brand-50 px-4 py-3">
-                <p className="text-xs font-medium text-brand-700">
-                  New version — will be added to the existing file group
-                </p>
-              </div>
-            )}
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Category
-              </label>
-              <select
-                value={uploadModal.category}
-                onChange={(e) =>
-                  setUploadModal({ ...uploadModal, category: e.target.value as FileCategory })
-                }
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="RENDER">Renders</option>
-                <option value="DRAWING">Drawings</option>
-                <option value="OTHER">Others</option>
-              </select>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Display Name
-              </label>
-              <input
-                type="text"
-                value={uploadModal.displayName}
-                onChange={(e) =>
-                  setUploadModal({ ...uploadModal, displayName: e.target.value })
-                }
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
+            <div className="mt-4 flex justify-end gap-3 pt-4 border-t border-slate-200">
               <button
-                onClick={() => setUploadModal(null)}
+                onClick={() => setUploadQueue(null)}
                 className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Cancel
@@ -904,7 +944,7 @@ export default function AdminProjectDetailPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
               >
                 <Upload className="h-4 w-4" />
-                Upload
+                Upload {uploadQueue.length > 1 ? `${uploadQueue.length} Files` : ""}
               </button>
             </div>
           </div>
