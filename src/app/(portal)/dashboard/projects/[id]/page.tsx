@@ -365,7 +365,7 @@ export default function ClientProjectDetailPage() {
         <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           {project.companyLogoPath ? (
             <img
-              src={`/api/projects/${projectId}/company-logo`}
+              src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath!)}`}
               alt={project.company}
               className="h-14 w-auto object-contain"
             />

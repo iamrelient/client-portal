@@ -759,7 +759,7 @@ export default function AdminProjectDetailPage() {
               <div>
                 <p className="mb-1 text-xs text-slate-500">Current thumbnail</p>
                 <img
-                  src={`/api/projects/${projectId}/thumbnail`}
+                  src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
                   alt="Thumbnail"
                   className="h-20 w-auto rounded-lg border border-slate-200 object-cover"
                 />
@@ -769,7 +769,7 @@ export default function AdminProjectDetailPage() {
               <div>
                 <p className="mb-1 text-xs text-slate-500">Current company logo</p>
                 <img
-                  src={`/api/projects/${projectId}/company-logo`}
+                  src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath!)}`}
                   alt="Company logo"
                   className="h-20 w-auto rounded-lg border border-slate-200 object-contain bg-white p-1"
                 />
