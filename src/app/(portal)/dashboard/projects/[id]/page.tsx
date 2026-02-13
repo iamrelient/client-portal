@@ -358,16 +358,15 @@ export default function ClientProjectDetailPage() {
       {/* Company branding header */}
       {project.company && (
         <div className="mb-6 flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          {project.companyLogoPath && (
+          {project.companyLogoPath ? (
             <img
               src={`/api/projects/${projectId}/company-logo`}
               alt={project.company}
               className="h-14 w-auto object-contain"
             />
-          )}
-          <div>
+          ) : (
             <p className="text-lg font-semibold text-slate-900">{project.company}</p>
-          </div>
+          )}
         </div>
       )}
 
