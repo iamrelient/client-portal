@@ -8,6 +8,7 @@ import { TableSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { formatRelativeDate } from "@/lib/format-date";
+import { compressImage } from "@/lib/compress-image";
 
 interface ProjectRow {
   id: string;
@@ -46,6 +47,16 @@ export default function AdminProjectsPage() {
     setCreating(true);
 
     const formData = new FormData(e.currentTarget);
+
+    // Compress images before uploading
+    const thumbnail = formData.get("thumbnail") as File | null;
+    if (thumbnail && thumbnail.size > 0) {
+      formData.set("thumbnail", await compressImage(thumbnail));
+    }
+    const companyLogo = formData.get("companyLogo") as File | null;
+    if (companyLogo && companyLogo.size > 0) {
+      formData.set("companyLogo", await compressImage(companyLogo));
+    }
 
     try {
       const res = await fetch("/api/projects", {

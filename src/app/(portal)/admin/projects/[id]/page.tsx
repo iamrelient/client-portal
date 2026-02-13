@@ -13,6 +13,7 @@ import { useToast } from "@/components/toast";
 import { formatRelativeDate } from "@/lib/format-date";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { canPreview3D } from "@/lib/model-utils";
+import { compressImage } from "@/lib/compress-image";
 
 type FileCategory = "RENDER" | "DRAWING" | "OTHER";
 
@@ -186,6 +187,16 @@ export default function AdminProjectDetailPage() {
     formData.set("name", editName);
     formData.set("emails", editEmails);
     formData.set("company", editCompany);
+
+    // Compress images before uploading
+    const thumbnail = formData.get("thumbnail") as File | null;
+    if (thumbnail && thumbnail.size > 0) {
+      formData.set("thumbnail", await compressImage(thumbnail));
+    }
+    const companyLogo = formData.get("companyLogo") as File | null;
+    if (companyLogo && companyLogo.size > 0) {
+      formData.set("companyLogo", await compressImage(companyLogo));
+    }
 
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
