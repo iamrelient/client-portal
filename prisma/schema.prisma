@@ -12,6 +12,12 @@ enum Role {
   ADMIN
 }
 
+enum FileCategory {
+  RENDER
+  DRAWING
+  OTHER
+}
+
 model User {
   id             String     @id @default(cuid())
   name           String
@@ -46,6 +52,9 @@ model File {
   uploadedBy      User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
   projectId       String?
   project         Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category        FileCategory @default(OTHER)
+  displayName     String?
+  isCurrent       Boolean  @default(false)
   version         Int      @default(1)
   fileGroupId     String?
   createdAt       DateTime @default(now())

@@ -5,6 +5,7 @@ import { Users, UserCheck, UserX, Activity } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { ActivityFeed } from "@/components/activity-feed";
 import { PageHeader } from "@/components/page-header";
+import { StatCardSkeleton, ActivityFeedSkeleton } from "@/components/skeleton";
 
 interface AnalyticsData {
   totalUsers: number;
@@ -35,8 +36,22 @@ export default function AdminOverviewPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div>
+        <PageHeader
+          title="Admin Overview"
+          description="Platform analytics and recent activity across all users."
+        />
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+        <div className="mt-8">
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 h-6 w-48 animate-pulse rounded bg-slate-200" />
+            <ActivityFeedSkeleton />
+          </div>
+        </div>
       </div>
     );
   }

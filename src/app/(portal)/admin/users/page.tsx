@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Users } from "lucide-react";
+import { TableSkeleton } from "@/components/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { useToast } from "@/components/toast";
+import { formatRelativeDate } from "@/lib/format-date";
 
 interface UserRow {
   id: string;
@@ -17,12 +21,11 @@ interface UserRow {
 }
 
 export default function AdminUsersPage() {
+  const toast = useToast();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
 
   function loadUsers() {
     fetch("/api/admin/users")
@@ -40,8 +43,6 @@ export default function AdminUsersPage() {
 
   async function handleCreateUser(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setFormError("");
-    setFormSuccess("");
     setCreating(true);
 
     const formData = new FormData(e.currentTarget);
@@ -60,25 +61,26 @@ export default function AdminUsersPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setFormError(data.error || "Something went wrong");
+        toast.error(data.error || "Something went wrong");
         setCreating(false);
         return;
       }
 
-      setFormSuccess(`User ${email} created successfully`);
+      toast.success(`User ${email} created successfully`);
       setCreating(false);
       (e.target as HTMLFormElement).reset();
       loadUsers();
     } catch {
-      setFormError("Something went wrong");
+      toast.error("Something went wrong");
       setCreating(false);
     }
   }
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div>
+        <PageHeader title="User Management" description="Loading..." />
+        <TableSkeleton rows={4} cols={7} />
       </div>
     );
   }
@@ -93,11 +95,7 @@ export default function AdminUsersPage() {
       {/* Create User Section */}
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <button
-          onClick={() => {
-            setFormOpen(!formOpen);
-            setFormError("");
-            setFormSuccess("");
-          }}
+          onClick={() => setFormOpen(!formOpen)}
           className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 transition-colors"
         >
           Create New User
@@ -110,17 +108,6 @@ export default function AdminUsersPage() {
 
         {formOpen && (
           <form onSubmit={handleCreateUser} className="border-t border-slate-200 px-6 py-4">
-            {formError && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                {formError}
-              </div>
-            )}
-            {formSuccess && (
-              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">
-                {formSuccess}
-              </div>
-            )}
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -201,21 +188,11 @@ export default function AdminUsersPage() {
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-6 py-3 font-medium text-slate-500">User</th>
                 <th className="px-6 py-3 font-medium text-slate-500">Role</th>
-                <th className="px-6 py-3 font-medium text-slate-500">
-                  Company
-                </th>
-                <th className="px-6 py-3 font-medium text-slate-500">
-                  Status
-                </th>
-                <th className="px-6 py-3 font-medium text-slate-500">
-                  Activities
-                </th>
-                <th className="px-6 py-3 font-medium text-slate-500">
-                  Last Login
-                </th>
-                <th className="px-6 py-3 font-medium text-slate-500">
-                  Joined
-                </th>
+                <th className="px-6 py-3 font-medium text-slate-500">Company</th>
+                <th className="px-6 py-3 font-medium text-slate-500">Status</th>
+                <th className="px-6 py-3 font-medium text-slate-500">Activities</th>
+                <th className="px-6 py-3 font-medium text-slate-500">Last Login</th>
+                <th className="px-6 py-3 font-medium text-slate-500">Joined</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -262,21 +239,22 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-6 py-4 text-slate-600">
                     {user.lastLoginAt
-                      ? new Date(user.lastLoginAt).toLocaleDateString()
+                      ? formatRelativeDate(user.lastLoginAt)
                       : "Never"}
                   </td>
                   <td className="px-6 py-4 text-slate-600">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {formatRelativeDate(user.createdAt)}
                   </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-6 py-12 text-center text-slate-500"
-                  >
-                    No users found
+                  <td colSpan={7}>
+                    <EmptyState
+                      icon={Users}
+                      title="No users found"
+                      description="Create your first user using the form above"
+                    />
                   </td>
                 </tr>
               )}

@@ -68,11 +68,11 @@ export default function RegisterPage() {
         <div className="w-full max-w-md">
           {/* Mobile logo — shown only on small screens */}
           <div className="mb-8 text-center lg:hidden">
-            <Link href="/" className="inline-block">
+            <Link href="/" className="inline-flex items-center justify-center rounded-xl bg-brand-900 px-6 py-3">
               <img
                 src="/logo-horizontal.png"
                 alt="Ray Renders"
-                className="mx-auto h-12"
+                className="h-10"
               />
             </Link>
           </div>

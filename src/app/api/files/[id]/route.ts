@@ -4,6 +4,52 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deleteFile } from "@/lib/google-drive";
 
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  try {
+    const file = await prisma.file.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!file) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    const body = await req.json();
+
+    const data: Record<string, unknown> = {};
+
+    if ("isCurrent" in body) {
+      data.isCurrent = Boolean(body.isCurrent);
+    }
+
+    if ("category" in body && ["RENDER", "DRAWING", "OTHER"].includes(body.category)) {
+      data.category = body.category;
+    }
+
+    await prisma.file.update({
+      where: { id: params.id },
+      data,
+    });
+
+    return NextResponse.json({ message: "File updated" });
+  } catch (error) {
+    console.error("File update error:", error);
+    return NextResponse.json(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } }

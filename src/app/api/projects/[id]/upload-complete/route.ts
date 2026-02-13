@@ -24,7 +24,7 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { driveFileId, fileName, mimeType, size } = await req.json();
+    const { driveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId } = await req.json();
 
     if (!driveFileId || !fileName) {
       return NextResponse.json(
@@ -33,11 +33,19 @@ export async function POST(
       );
     }
 
-    // Version detection: check for existing files with same name in this project
-    const existingFiles = await prisma.file.findMany({
-      where: { projectId: params.id, originalName: fileName },
-      orderBy: { version: "desc" },
-    });
+    // Version detection: use targetFileGroupId (drag-to-iterate) or fall back to name matching
+    let existingFiles;
+    if (targetFileGroupId) {
+      existingFiles = await prisma.file.findMany({
+        where: { fileGroupId: targetFileGroupId },
+        orderBy: { version: "desc" },
+      });
+    } else {
+      existingFiles = await prisma.file.findMany({
+        where: { projectId: params.id, originalName: fileName },
+        orderBy: { version: "desc" },
+      });
+    }
 
     let version = 1;
     let fileGroupId: string | null = null;
@@ -66,6 +74,8 @@ export async function POST(
         driveFileId,
         uploadedById: session.user.id,
         projectId: params.id,
+        category: category || "OTHER",
+        displayName: displayName || null,
         version,
         fileGroupId,
       },

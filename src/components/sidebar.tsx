@@ -38,13 +38,12 @@ export function Sidebar() {
 
   const navContent = (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-brand-700 px-5 py-4">
+      <div className="flex items-center justify-center border-b border-brand-700 px-5 py-4">
         <img
-          src="/logo-icon.png"
+          src="/logo-horizontal.png"
           alt="Ray Renders"
-          className="h-9 w-9 rounded-lg"
+          className="h-8 w-auto"
         />
-        <span className="text-lg font-semibold text-white">Ray Renders</span>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">

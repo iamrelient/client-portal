@@ -1,4 +1,5 @@
 import { Activity, FileText, FolderMinus, FolderOpen, FolderPlus, LogIn, UserPlus, Settings } from "lucide-react";
+import { formatRelativeDate } from "@/lib/format-date";
 
 const iconMap: Record<string, typeof Activity> = {
   ACCOUNT_CREATED: UserPlus,
@@ -58,17 +59,7 @@ export function ActivityFeed({ activities, showUser }: ActivityFeedProps) {
                     {activity.description}
                   </p>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                    <time>
-                      {new Date(activity.createdAt).toLocaleDateString(
-                        "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )}
-                    </time>
+                    <time>{formatRelativeDate(activity.createdAt)}</time>
                     {showUser && activity.user && (
                       <>
                         <span>&middot;</span>

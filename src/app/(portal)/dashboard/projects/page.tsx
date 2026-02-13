@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { FolderOpen } from "lucide-react";
+import { CardSkeleton } from "@/components/skeleton";
+import { EmptyState } from "@/components/empty-state";
 
 interface ProjectCard {
   id: string;
@@ -30,8 +32,13 @@ export default function ClientProjectsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div>
+        <PageHeader title="Projects" description="Your authorized projects" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -44,8 +51,12 @@ export default function ClientProjectsPage() {
       />
 
       {projects.length === 0 ? (
-        <div className="flex h-64 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
-          <p className="text-slate-500">No projects available</p>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description="Your authorized projects will appear here"
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

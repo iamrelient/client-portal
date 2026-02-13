@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { FolderOpen } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { CardSkeleton } from "@/components/skeleton";
+import { EmptyState } from "@/components/empty-state";
 
 interface ProjectCard {
   id: string;
@@ -32,8 +34,16 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div>
+        <PageHeader
+          title={`Welcome back, ${session?.user?.name?.split(" ")[0] || "User"}`}
+          description="Here are your projects."
+        />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -46,8 +56,12 @@ export default function DashboardPage() {
       />
 
       {projects.length === 0 ? (
-        <div className="flex h-64 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
-          <p className="text-slate-500">No projects available</p>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description="Your projects will appear here"
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

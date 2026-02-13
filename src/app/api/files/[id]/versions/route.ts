@@ -43,6 +43,9 @@ export async function GET(
     select: {
       id: true,
       originalName: true,
+      displayName: true,
+      category: true,
+      isCurrent: true,
       size: true,
       mimeType: true,
       version: true,

@@ -1,15 +1,36 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, Loader2, Trash2, Upload, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload } from "lucide-react";
+import { ProjectDetailSkeleton } from "@/components/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { DropZone } from "@/components/drop-zone";
+import { FilePreviewModal } from "@/components/file-preview-modal";
+import { useToast } from "@/components/toast";
+import { formatRelativeDate } from "@/lib/format-date";
+import { getFileIcon, getFileLabel } from "@/lib/file-icons";
+import { canPreview3D } from "@/lib/model-utils";
+
+type FileCategory = "RENDER" | "DRAWING" | "OTHER";
+
+const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "OTHER"];
+const CATEGORY_LABELS: Record<FileCategory, string> = {
+  RENDER: "Renders",
+  DRAWING: "Drawings",
+  OTHER: "Others",
+};
 
 interface ProjectFile {
   id: string;
   originalName: string;
   size: number;
   mimeType: string;
+  category: FileCategory;
+  displayName: string | null;
+  isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
   createdAt: string;
@@ -28,16 +49,24 @@ interface ProjectDetail {
   createdAt: string;
 }
 
+interface UploadModalState {
+  file: File;
+  category: FileCategory;
+  displayName: string;
+  targetFileGroupId: string | null;
+}
+
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function canPreview(mimeType: string) {
+function canPreview(mimeType: string, fileName: string) {
   return (
     mimeType === "application/pdf" ||
-    mimeType.startsWith("image/")
+    mimeType.startsWith("image/") ||
+    canPreview3D(mimeType, fileName)
   );
 }
 
@@ -66,11 +95,28 @@ function getLatestFiles(files: ProjectFile[]) {
   return result;
 }
 
+/** Group latest files by category */
+function groupByCategory(files: ProjectFile[]) {
+  const latest = getLatestFiles(files);
+  const grouped: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
+    RENDER: [],
+    DRAWING: [],
+    OTHER: [],
+  };
+
+  for (const item of latest) {
+    const cat = item.latest.category || "OTHER";
+    grouped[cat].push(item);
+  }
+
+  return grouped;
+}
+
 export default function AdminProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const toast = useToast();
   const projectId = params.id as string;
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,11 +125,21 @@ export default function AdminProjectDetailPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
+  const [togglingCurrent, setTogglingCurrent] = useState<string | null>(null);
+  const [updatingCategory, setUpdatingCategory] = useState<string | null>(null);
+
+  // Upload modal state
+  const [uploadModal, setUploadModal] = useState<UploadModalState | null>(null);
+
+  // Drag-drop state
+  const [dragOverFileId, setDragOverFileId] = useState<string | null>(null);
+
+  // Confirm modal state
+  const [deleteFileTarget, setDeleteFileTarget] = useState<string | null>(null);
+  const [showDeleteProject, setShowDeleteProject] = useState(false);
 
   const [editName, setEditName] = useState("");
   const [editEmails, setEditEmails] = useState("");
@@ -119,8 +175,6 @@ export default function AdminProjectDetailPage() {
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     setSaving(true);
 
     const formData = new FormData(e.currentTarget);
@@ -136,31 +190,64 @@ export default function AdminProjectDetailPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to save");
+        toast.error(data.error || "Failed to save");
         setSaving(false);
         return;
       }
 
-      setSuccess("Project updated");
+      toast.success("Project updated");
       setSaving(false);
       loadProject();
     } catch {
-      setError("Something went wrong");
+      toast.error("Something went wrong");
       setSaving(false);
     }
   }
 
-  async function handleUpload() {
-    const fileInput = fileInputRef.current;
-    if (!fileInput?.files?.length) return;
+  // Called when files are dropped on the DropZone — opens the upload modal
+  function handleFilesSelected(fileList: FileList) {
+    const file = fileList[0];
+    if (!file) return;
 
-    const file = fileInput.files[0];
-    setError("");
+    setUploadModal({
+      file,
+      category: "OTHER",
+      displayName: file.name,
+      targetFileGroupId: null,
+    });
+  }
+
+  // Called when a file is dropped onto an existing file row (drag-to-iterate)
+  function handleDropOnFile(e: React.DragEvent, targetFile: ProjectFile) {
+    e.preventDefault();
+    setDragOverFileId(null);
+
+    const files = e.dataTransfer.files;
+    if (!files.length) return;
+
+    const file = files[0];
+    // Ensure the target has a fileGroupId (or we'll use its id as a fallback to create one)
+    const groupId = targetFile.fileGroupId || targetFile.id;
+
+    setUploadModal({
+      file,
+      category: targetFile.category || "OTHER",
+      displayName: targetFile.displayName || targetFile.originalName,
+      targetFileGroupId: groupId,
+    });
+  }
+
+  // Actually perform the upload (called from the modal confirm)
+  async function executeUpload() {
+    if (!uploadModal) return;
+
+    const { file, category, displayName, targetFileGroupId } = uploadModal;
+
+    setUploadModal(null);
     setUploading(true);
     setUploadProgress(0);
 
     try {
-      // Step 1: Get resumable upload URI from our server
       const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,14 +259,13 @@ export default function AdminProjectDetailPage() {
 
       if (!sessionRes.ok) {
         const data = await sessionRes.json();
-        setError(data.error || "Failed to start upload");
+        toast.error(data.error || "Failed to start upload");
         setUploading(false);
         return;
       }
 
       const { uploadUri } = await sessionRes.json();
 
-      // Step 2: Upload file directly to Google Drive with progress tracking
       const driveResult = await new Promise<{ id?: string; name?: string; size?: string }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
@@ -209,12 +295,11 @@ export default function AdminProjectDetailPage() {
       });
 
       if (!driveResult.id) {
-        setError("Upload succeeded but no file ID returned. Please refresh.");
+        toast.error("Upload succeeded but no file ID returned. Please refresh.");
         setUploading(false);
         return;
       }
 
-      // Step 3: Register the uploaded file in our DB
       const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -223,31 +308,71 @@ export default function AdminProjectDetailPage() {
           fileName: file.name,
           mimeType: file.type || "application/octet-stream",
           size: Number(driveResult.size) || file.size,
+          category,
+          displayName: displayName !== file.name ? displayName : null,
+          targetFileGroupId,
         }),
       });
 
       if (!completeRes.ok) {
         const data = await completeRes.json();
-        setError(data.error || "Failed to register file");
+        toast.error(data.error || "Failed to register file");
         setUploading(false);
         return;
       }
 
       setUploading(false);
       setUploadProgress(0);
-      fileInput.value = "";
       setExpandedGroup(null);
       setVersionHistory({});
+      toast.success("File uploaded successfully");
       loadProject();
     } catch {
-      setError("Upload failed");
+      toast.error("Upload failed");
       setUploading(false);
       setUploadProgress(0);
     }
   }
 
+  async function handleToggleCurrent(fileId: string, currentValue: boolean) {
+    setTogglingCurrent(fileId);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCurrent: !currentValue }),
+      });
+      if (res.ok) {
+        loadProject();
+      } else {
+        toast.error("Failed to update file");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setTogglingCurrent(null);
+  }
+
+  async function handleCategoryChange(fileId: string, category: FileCategory) {
+    setUpdatingCategory(fileId);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category }),
+      });
+      if (res.ok) {
+        loadProject();
+      } else {
+        toast.error("Failed to update category");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setUpdatingCategory(null);
+  }
+
   async function handleDeleteFile(fileId: string) {
-    if (!confirm("Delete this file?")) return;
     setDeleting(fileId);
 
     try {
@@ -255,18 +380,17 @@ export default function AdminProjectDetailPage() {
       if (res.ok) {
         setExpandedGroup(null);
         setVersionHistory({});
+        toast.success("File deleted");
         loadProject();
       }
     } catch {
-      // ignore
+      toast.error("Failed to delete file");
     }
     setDeleting(null);
+    setDeleteFileTarget(null);
   }
 
   async function handleDeleteProject() {
-    if (!confirm("Delete this entire project and all its files? This cannot be undone."))
-      return;
-
     setDeletingProject(true);
 
     try {
@@ -277,8 +401,9 @@ export default function AdminProjectDetailPage() {
         router.push("/admin/projects");
       }
     } catch {
-      setError("Failed to delete project");
+      toast.error("Failed to delete project");
       setDeletingProject(false);
+      setShowDeleteProject(false);
     }
   }
 
@@ -303,12 +428,19 @@ export default function AdminProjectDetailPage() {
     }
   }
 
+  const handleDragOver = useCallback((e: React.DragEvent, fileId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDragOverFileId(fileId);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverFileId(null);
+  }, []);
+
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
-      </div>
-    );
+    return <ProjectDetailSkeleton />;
   }
 
   if (!project) {
@@ -319,25 +451,233 @@ export default function AdminProjectDetailPage() {
     );
   }
 
-  const grouped = getLatestFiles(project.files);
+  const categorized = groupByCategory(project.files);
+
+  /** Render a file table for a given category section */
+  function renderCategorySection(category: FileCategory) {
+    const items = categorized[category];
+
+    return (
+      <div key={category} className="mb-6">
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">
+          {CATEGORY_LABELS[category]}
+        </h2>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="w-10 px-3 py-3 font-medium text-slate-500">
+                    <span className="sr-only">Current</span>
+                  </th>
+                  <th className="px-6 py-3 font-medium text-slate-500">File</th>
+                  <th className="px-6 py-3 font-medium text-slate-500">Size</th>
+                  <th className="px-6 py-3 font-medium text-slate-500">Type</th>
+                  <th className="px-6 py-3 font-medium text-slate-500">Category</th>
+                  <th className="px-6 py-3 font-medium text-slate-500">Date</th>
+                  <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-400">
+                      No files in this category
+                    </td>
+                  </tr>
+                )}
+                {items.map(({ latest, versionCount }) => {
+                  const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
+                  const fileName = latest.displayName || latest.originalName;
+                  const isDragOver = dragOverFileId === latest.id;
+
+                  return (
+                    <>
+                      <tr
+                        key={latest.id}
+                        className={`transition-colors ${
+                          latest.isCurrent
+                            ? "bg-green-50/60 hover:bg-green-50"
+                            : isDragOver
+                              ? "bg-brand-50 ring-2 ring-inset ring-brand-400"
+                              : "hover:bg-slate-50"
+                        }`}
+                        onDragOver={(e) => handleDragOver(e, latest.id)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDropOnFile(e, latest)}
+                      >
+                        <td className="px-3 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={latest.isCurrent}
+                            disabled={togglingCurrent === latest.id}
+                            onChange={() => handleToggleCurrent(latest.id, latest.isCurrent)}
+                            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer disabled:opacity-50"
+                            title="Mark as most up to date"
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`/api/files/${latest.id}/download`}
+                              className="font-medium text-brand-600 hover:text-brand-500"
+                            >
+                              {fileName}
+                            </a>
+                            {latest.isCurrent && (
+                              <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                Current
+                              </span>
+                            )}
+                            {latest.version > 1 && (
+                              <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+                                v{latest.version}
+                              </span>
+                            )}
+                            {versionCount > 1 && (
+                              <button
+                                onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
+                                className="inline-flex items-center gap-0.5 text-xs text-slate-500 hover:text-brand-600"
+                              >
+                                {expandedGroup === latest.id ? (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                )}
+                                {versionCount} versions
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-600">{formatSize(latest.size)}</td>
+                        <td className="px-6 py-4 text-slate-600">
+                          <span className="inline-flex items-center gap-1.5">
+                            <FileIcon className="h-4 w-4 text-slate-400" />
+                            {getFileLabel(latest.mimeType, latest.originalName)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={latest.category}
+                            disabled={updatingCategory === latest.id}
+                            onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
+                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                          >
+                            <option value="RENDER">Renders</option>
+                            <option value="DRAWING">Drawings</option>
+                            <option value="OTHER">Others</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4 text-slate-600">
+                          {formatRelativeDate(latest.createdAt)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {canPreview(latest.mimeType, latest.originalName) && (
+                              <button
+                                onClick={() => setPreviewFile(latest)}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                              >
+                                <Eye className="h-4 w-4" />
+                                View
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setDeleteFileTarget(latest.id)}
+                              disabled={deleting === latest.id}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            >
+                              {deleting === latest.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {/* Version history expansion */}
+                      {expandedGroup === latest.id && versionCount > 1 && (
+                        <tr key={`${latest.id}-versions`}>
+                          <td colSpan={7} className="bg-slate-50 px-6 py-3">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                                Version History
+                              </p>
+                              {(versionHistory[latest.id] || []).map((v) => (
+                                <div
+                                  key={v.id}
+                                  className="flex items-center justify-between rounded-lg bg-white px-4 py-2 border border-slate-100"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                      v{v.version}
+                                    </span>
+                                    <span className="text-sm text-slate-700">
+                                      {formatSize(v.size)}
+                                    </span>
+                                    <span className="text-sm text-slate-400">
+                                      {formatRelativeDate(v.createdAt)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    {canPreview(v.mimeType, v.originalName || latest.originalName) && (
+                                      <button
+                                        onClick={() => setPreviewFile(v as ProjectFile)}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                        View
+                                      </button>
+                                    )}
+                                    <a
+                                      href={`/api/files/${v.id}/download`}
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                      Download
+                                    </a>
+                                    <button
+                                      onClick={() => setDeleteFileTarget(v.id)}
+                                      disabled={deleting === v.id}
+                                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
+                                    >
+                                      {deleting === v.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              {!versionHistory[latest.id] && (
+                                <div className="flex justify-center py-2">
+                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <PageHeader
         title={project.name}
-        description={`Created by ${project.createdBy.name} on ${new Date(project.createdAt).toLocaleDateString()}`}
+        description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
       />
-
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">
-          {success}
-        </div>
-      )}
 
       {/* Project Details */}
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -447,239 +787,109 @@ export default function AdminProjectDetailPage() {
       {/* Upload File */}
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-medium text-slate-900">Upload File</h2>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleUpload}
-            disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-          >
-            {uploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
-            Upload
-          </button>
+        <DropZone
+          onFiles={handleFilesSelected}
+          uploading={uploading}
+          progress={uploadProgress}
+        />
+      </div>
+
+      {/* Files grouped by category */}
+      {project.files.length === 0 ? (
+        <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <EmptyState
+            icon={FileX}
+            title="No files yet"
+            description="Upload a file using the drop zone above"
+          />
         </div>
-        {/* Progress bar */}
-        {uploading && (
-          <div className="mt-3">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Uploading...</span>
-              <span>{uploadProgress}%</span>
+      ) : (
+        CATEGORY_ORDER.map((cat) => renderCategorySection(cat))
+      )}
+
+      {previewFile && (
+        <FilePreviewModal
+          file={previewFile}
+          onClose={() => setPreviewFile(null)}
+        />
+      )}
+
+      {/* Upload Modal */}
+      {uploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Upload File</h3>
+              <button
+                onClick={() => setUploadModal(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-brand-600 transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
+
+            <div className="mb-4 rounded-lg bg-slate-50 px-4 py-3">
+              <p className="text-sm text-slate-600 truncate">
+                {uploadModal.file.name}
+              </p>
+              <p className="text-xs text-slate-400">
+                {formatSize(uploadModal.file.size)}
+              </p>
+            </div>
+
+            {uploadModal.targetFileGroupId && (
+              <div className="mb-4 rounded-lg bg-brand-50 px-4 py-3">
+                <p className="text-xs font-medium text-brand-700">
+                  New version — will be added to the existing file group
+                </p>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Category
+              </label>
+              <select
+                value={uploadModal.category}
+                onChange={(e) =>
+                  setUploadModal({ ...uploadModal, category: e.target.value as FileCategory })
+                }
+                className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="RENDER">Renders</option>
+                <option value="DRAWING">Drawings</option>
+                <option value="OTHER">Others</option>
+              </select>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Display Name
+              </label>
+              <input
+                type="text"
+                value={uploadModal.displayName}
+                onChange={(e) =>
+                  setUploadModal({ ...uploadModal, displayName: e.target.value })
+                }
+                className="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Files Table */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 font-medium text-slate-500">File</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Size</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Type</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Date</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {grouped.map(({ latest, versionCount }) => (
-                <>
-                  <tr key={latest.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`/api/files/${latest.id}/download`}
-                          className="font-medium text-brand-600 hover:text-brand-500"
-                        >
-                          {latest.originalName}
-                        </a>
-                        {latest.version > 1 && (
-                          <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
-                            v{latest.version}
-                          </span>
-                        )}
-                        {versionCount > 1 && (
-                          <button
-                            onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
-                            className="inline-flex items-center gap-0.5 text-xs text-slate-500 hover:text-brand-600"
-                          >
-                            {expandedGroup === latest.id ? (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            )}
-                            {versionCount} versions
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">{formatSize(latest.size)}</td>
-                    <td className="px-6 py-4 text-slate-600">{latest.mimeType}</td>
-                    <td className="px-6 py-4 text-slate-600">
-                      {new Date(latest.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {canPreview(latest.mimeType) && (
-                          <button
-                            onClick={() => setPreviewFile(latest)}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
-                          >
-                            <Eye className="h-4 w-4" />
-                            View
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteFile(latest.id)}
-                          disabled={deleting === latest.id}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-                        >
-                          {deleting === latest.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {/* Version history expansion */}
-                  {expandedGroup === latest.id && versionCount > 1 && (
-                    <tr key={`${latest.id}-versions`}>
-                      <td colSpan={5} className="bg-slate-50 px-6 py-3">
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                            Version History
-                          </p>
-                          {(versionHistory[latest.id] || []).map((v) => (
-                            <div
-                              key={v.id}
-                              className="flex items-center justify-between rounded-lg bg-white px-4 py-2 border border-slate-100"
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                  v{v.version}
-                                </span>
-                                <span className="text-sm text-slate-700">
-                                  {formatSize(v.size)}
-                                </span>
-                                <span className="text-sm text-slate-400">
-                                  {new Date(v.createdAt).toLocaleDateString()}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                {canPreview(v.mimeType) && (
-                                  <button
-                                    onClick={() => setPreviewFile(v as ProjectFile)}
-                                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    View
-                                  </button>
-                                )}
-                                <a
-                                  href={`/api/files/${v.id}/download`}
-                                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                  Download
-                                </a>
-                                <button
-                                  onClick={() => handleDeleteFile(v.id)}
-                                  disabled={deleting === v.id}
-                                  className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
-                                >
-                                  {deleting === v.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                          {!versionHistory[latest.id] && (
-                            <div className="flex justify-center py-2">
-                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              ))}
-              {project.files.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                    No files uploaded yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Preview Modal */}
-      {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="relative flex h-[90vh] w-full max-w-5xl flex-col rounded-xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="font-medium text-slate-900 truncate">
-                {previewFile.originalName}
-                {previewFile.version > 1 && (
-                  <span className="ml-2 text-sm text-slate-400">v{previewFile.version}</span>
-                )}
-              </h3>
-              <div className="flex items-center gap-3">
-                <a
-                  href={`/api/files/${previewFile.id}/download`}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-500"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </a>
-                <button
-                  onClick={() => setPreviewFile(null)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-              {previewFile.mimeType === "application/pdf" ? (
-                <iframe
-                  src={`/api/files/${previewFile.id}/download?inline=true`}
-                  className="h-full w-full rounded-lg border border-slate-200"
-                />
-              ) : (
-                <img
-                  src={`/api/files/${previewFile.id}/download?inline=true`}
-                  alt={previewFile.originalName}
-                  className="mx-auto max-h-full max-w-full object-contain"
-                />
-              )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setUploadModal(null)}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeUpload}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+              >
+                <Upload className="h-4 w-4" />
+                Upload
+              </button>
             </div>
           </div>
         </div>
@@ -692,18 +902,38 @@ export default function AdminProjectDetailPage() {
           Deleting this project will permanently remove all associated files.
         </p>
         <button
-          onClick={handleDeleteProject}
+          onClick={() => setShowDeleteProject(true)}
           disabled={deletingProject}
           className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
         >
-          {deletingProject ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
+          <Trash2 className="h-4 w-4" />
           Delete Project
         </button>
       </div>
+
+      {/* Confirm delete file */}
+      <ConfirmModal
+        open={deleteFileTarget !== null}
+        title="Delete file"
+        message="Are you sure you want to delete this file? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting !== null}
+        onConfirm={() => deleteFileTarget && handleDeleteFile(deleteFileTarget)}
+        onCancel={() => setDeleteFileTarget(null)}
+      />
+
+      {/* Confirm delete project */}
+      <ConfirmModal
+        open={showDeleteProject}
+        title="Delete project"
+        message="Delete this entire project and all its files? This cannot be undone."
+        confirmLabel="Delete Project"
+        variant="danger"
+        loading={deletingProject}
+        onConfirm={handleDeleteProject}
+        onCancel={() => setShowDeleteProject(false)}
+      />
     </div>
   );
 }

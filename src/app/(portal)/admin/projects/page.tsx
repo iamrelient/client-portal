@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, FolderOpen, Loader2 } from "lucide-react";
+import { TableSkeleton } from "@/components/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { useToast } from "@/components/toast";
+import { formatRelativeDate } from "@/lib/format-date";
 
 interface ProjectRow {
   id: string;
@@ -17,12 +21,11 @@ interface ProjectRow {
 
 export default function AdminProjectsPage() {
   const router = useRouter();
+  const toast = useToast();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
 
   function loadProjects() {
     fetch("/api/projects")
@@ -40,8 +43,6 @@ export default function AdminProjectsPage() {
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setFormError("");
-    setFormSuccess("");
     setCreating(true);
 
     const formData = new FormData(e.currentTarget);
@@ -55,25 +56,26 @@ export default function AdminProjectsPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setFormError(data.error || "Something went wrong");
+        toast.error(data.error || "Something went wrong");
         setCreating(false);
         return;
       }
 
-      setFormSuccess("Project created successfully");
+      toast.success("Project created successfully");
       setCreating(false);
       (e.target as HTMLFormElement).reset();
       loadProjects();
     } catch {
-      setFormError("Something went wrong");
+      toast.error("Something went wrong");
       setCreating(false);
     }
   }
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+      <div>
+        <PageHeader title="Projects" description="Loading..." />
+        <TableSkeleton rows={4} cols={6} />
       </div>
     );
   }
@@ -87,11 +89,7 @@ export default function AdminProjectsPage() {
 
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <button
-          onClick={() => {
-            setFormOpen(!formOpen);
-            setFormError("");
-            setFormSuccess("");
-          }}
+          onClick={() => setFormOpen(!formOpen)}
           className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 transition-colors"
         >
           Create New Project
@@ -104,17 +102,6 @@ export default function AdminProjectsPage() {
 
         {formOpen && (
           <form onSubmit={handleCreate} className="border-t border-slate-200 px-6 py-4">
-            {formError && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                {formError}
-              </div>
-            )}
-            {formSuccess && (
-              <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">
-                {formSuccess}
-              </div>
-            )}
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-slate-700">
@@ -229,7 +216,7 @@ export default function AdminProjectsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-slate-600">
-                    {new Date(project.createdAt).toLocaleDateString()}
+                    {formatRelativeDate(project.createdAt)}
                   </td>
                   <td className="px-6 py-4">
                     <button
@@ -243,8 +230,12 @@ export default function AdminProjectsPage() {
               ))}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                    No projects yet
+                  <td colSpan={6}>
+                    <EmptyState
+                      icon={FolderOpen}
+                      title="No projects yet"
+                      description="Create your first project using the form above"
+                    />
                   </td>
                 </tr>
               )}

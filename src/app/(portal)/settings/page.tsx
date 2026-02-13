@@ -5,6 +5,8 @@ import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Loader2 } from "lucide-react";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { useToast } from "@/components/toast";
 
 export default function SettingsPage() {
   return (
@@ -17,6 +19,7 @@ export default function SettingsPage() {
 function SettingsContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
+  const toast = useToast();
   const isAdmin = session?.user?.role === "ADMIN";
 
   const [driveStatus, setDriveStatus] = useState<{
@@ -24,7 +27,7 @@ function SettingsContent() {
     email?: string;
   } | null>(null);
   const [driveLoading, setDriveLoading] = useState(false);
-  const [driveMessage, setDriveMessage] = useState("");
+  const [showDisconnect, setShowDisconnect] = useState(false);
 
   useEffect(() => {
     if (isAdmin) {
@@ -38,28 +41,28 @@ function SettingsContent() {
   useEffect(() => {
     const googleParam = searchParams.get("google");
     if (googleParam === "connected") {
-      setDriveMessage("Google Drive connected successfully!");
-      setDriveStatus(null); // Trigger re-fetch
+      toast.success("Google Drive connected successfully!");
+      setDriveStatus(null);
       fetch("/api/google/status")
         .then((res) => res.json())
         .then(setDriveStatus)
         .catch(() => {});
     } else if (googleParam === "error") {
-      setDriveMessage("Failed to connect Google Drive. Please try again.");
+      toast.error("Failed to connect Google Drive. Please try again.");
     }
   }, [searchParams]);
 
   async function handleDisconnect() {
-    if (!confirm("Disconnect Google Drive? Existing files will remain in Drive but new uploads won't work until reconnected.")) return;
     setDriveLoading(true);
     try {
       await fetch("/api/google/disconnect", { method: "POST" });
       setDriveStatus({ connected: false });
-      setDriveMessage("Google Drive disconnected.");
+      toast.info("Google Drive disconnected.");
     } catch {
-      setDriveMessage("Failed to disconnect.");
+      toast.error("Failed to disconnect.");
     }
     setDriveLoading(false);
+    setShowDisconnect(false);
   }
 
   return (
@@ -81,18 +84,6 @@ function SettingsContent() {
               and files added to Drive appear automatically in the portal.
             </p>
 
-            {driveMessage && (
-              <div
-                className={`mb-4 rounded-lg p-3 text-sm ${
-                  driveMessage.includes("successfully") || driveMessage.includes("connected")
-                    ? "bg-green-50 text-green-600"
-                    : "bg-red-50 text-red-600"
-                }`}
-              >
-                {driveMessage}
-              </div>
-            )}
-
             {driveStatus === null ? (
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -107,7 +98,7 @@ function SettingsContent() {
                   </span>
                 </div>
                 <button
-                  onClick={handleDisconnect}
+                  onClick={() => setShowDisconnect(true)}
                   disabled={driveLoading}
                   className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
                 >
@@ -232,6 +223,17 @@ function SettingsContent() {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showDisconnect}
+        title="Disconnect Google Drive"
+        message="Existing files will remain in Drive but new uploads won't work until reconnected."
+        confirmLabel="Disconnect"
+        variant="danger"
+        loading={driveLoading}
+        onConfirm={handleDisconnect}
+        onCancel={() => setShowDisconnect(false)}
+      />
     </div>
   );
 }
