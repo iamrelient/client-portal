@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { Download, Eye, Loader2, Trash2, Upload } from "lucide-react";
+import { Eye, Loader2, Trash2, Upload } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
