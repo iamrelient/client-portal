@@ -86,11 +86,16 @@ function getLatestFiles(files: ProjectFile[]) {
     result.push({ latest: group[0], versionCount: group.length });
   }
 
-  result.sort(
-    (a, b) =>
+  result.sort((a, b) => {
+    // Current files always come first
+    if (a.latest.isCurrent !== b.latest.isCurrent) {
+      return a.latest.isCurrent ? -1 : 1;
+    }
+    return (
       new Date(b.latest.createdAt).getTime() -
       new Date(a.latest.createdAt).getTime()
-  );
+    );
+  });
 
   return result;
 }

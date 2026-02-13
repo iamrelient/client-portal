@@ -69,6 +69,24 @@ export async function createFolder(
 ): Promise<string> {
   const accessToken = await getValidAccessToken();
 
+  // Check if folder already exists
+  const parentClause = parentId ? `and '${parentId}' in parents` : `and 'root' in parents`;
+  const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' ${parentClause} and trashed=false`;
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (searchRes.ok) {
+    const searchData = await searchRes.json();
+    if (searchData.files && searchData.files.length > 0) {
+      return searchData.files[0].id;
+    }
+  }
+
+  // Create new folder
   const metadata: Record<string, unknown> = {
     name,
     mimeType: "application/vnd.google-apps.folder",
