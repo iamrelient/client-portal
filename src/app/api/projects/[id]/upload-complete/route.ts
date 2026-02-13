@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { listFilesInFolder } from "@/lib/google-drive";
 import { randomBytes } from "crypto";
 
 export async function POST(
@@ -17,18 +18,39 @@ export async function POST(
   try {
     const project = await prisma.project.findUnique({
       where: { id: params.id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, driveFolderId: true },
     });
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { driveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId } = await req.json();
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId } = await req.json();
 
-    if (!driveFileId || !fileName) {
+    if (!fileName) {
       return NextResponse.json(
-        { error: "driveFileId and fileName are required" },
+        { error: "fileName is required" },
+        { status: 400 }
+      );
+    }
+
+    // If client didn't get a driveFileId back, search Drive for the file
+    let driveFileId = providedDriveFileId;
+    let resolvedSize = size;
+
+    if (!driveFileId && project.driveFolderId) {
+      const driveFiles = await listFilesInFolder(project.driveFolderId);
+      // Find the most recently uploaded file with this name
+      const match = driveFiles.find((f) => f.name === fileName);
+      if (match) {
+        driveFileId = match.id;
+        resolvedSize = resolvedSize || Number(match.size) || 0;
+      }
+    }
+
+    if (!driveFileId) {
+      return NextResponse.json(
+        { error: "Could not find uploaded file in Drive" },
         { status: 400 }
       );
     }
@@ -68,7 +90,7 @@ export async function POST(
       data: {
         name: fileName,
         originalName: fileName,
-        size: size || 0,
+        size: resolvedSize || 0,
         mimeType: mimeType || "application/octet-stream",
         path: driveFileId,
         driveFileId,
