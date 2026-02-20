@@ -64,7 +64,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
+      <div className="flex flex-1 items-center justify-center bg-[#0a0a0f] px-4">
         <div className="w-full max-w-md">
           {/* Mobile logo — shown only on small screens */}
           <div className="mb-8 text-center lg:hidden">
@@ -78,10 +78,10 @@ export default function RegisterPage() {
           </div>
 
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-slate-100">
               Create your account
             </h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-slate-400">
               Already have an account?{" "}
               <Link href="/login" className="text-brand-600 hover:text-brand-500 font-medium">
                 Sign in
@@ -91,10 +91,10 @@ export default function RegisterPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
+            className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 backdrop-blur-xl"
           >
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+              <div className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
                 {error}
               </div>
             )}
@@ -103,7 +103,7 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="name"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
                   Full name
                 </label>
@@ -112,7 +112,7 @@ export default function RegisterPage() {
                   name="name"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Jane Smith"
                 />
               </div>
@@ -120,15 +120,15 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="company"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
-                  Company name <span className="font-normal text-slate-400">(optional)</span>
+                  Company name <span className="font-normal text-slate-500">(optional)</span>
                 </label>
                 <input
                   id="company"
                   name="company"
                   type="text"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acme Corp"
                 />
               </div>
@@ -136,7 +136,7 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
                   Email address
                 </label>
@@ -146,7 +146,7 @@ export default function RegisterPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="you@example.com"
                 />
               </div>
@@ -154,7 +154,7 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
                   Password
                 </label>
@@ -165,7 +165,7 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                   required
                   minLength={8}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Min. 8 characters"
                 />
               </div>

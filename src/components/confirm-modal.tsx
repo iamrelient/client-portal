@@ -48,17 +48,17 @@ export function ConfirmModal({
       onClick={() => !loading && onCancel()}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md rounded-xl bg-[#12141f] p-6 shadow-xl border border-white/[0.08]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
+        <p className="mt-2 text-sm text-slate-400">{message}</p>
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            className="rounded-lg border border-white/[0.1] px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>

@@ -36,6 +36,11 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Track file view (fire-and-forget)
+    prisma.fileView.create({
+      data: { fileId: file.id, userId: session.user.id },
+    }).catch(() => {});
+
     // path stores the Drive file ID
     const { stream } = await downloadFile(file.path);
 

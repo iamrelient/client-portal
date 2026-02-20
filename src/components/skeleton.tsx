@@ -5,7 +5,7 @@ interface SkeletonProps {
 export function Skeleton({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded bg-slate-200 ${className}`}
+      className={`animate-pulse rounded bg-white/[0.06] ${className}`}
     />
   );
 }
@@ -18,11 +18,11 @@ export function TableSkeleton({
   cols?: number;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50">
+            <tr className="border-b border-white/[0.06] bg-white/[0.02]">
               {Array.from({ length: cols }).map((_, i) => (
                 <th key={i} className="px-6 py-3">
                   <Skeleton className="h-4 w-20" />
@@ -30,7 +30,7 @@ export function TableSkeleton({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-white/[0.06]">
             {Array.from({ length: rows }).map((_, row) => (
               <tr key={row}>
                 {Array.from({ length: cols }).map((_, col) => (
@@ -51,7 +51,7 @@ export function TableSkeleton({
 
 export function CardSkeleton() {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
       <Skeleton className="aspect-video w-full rounded-none" />
       <div className="p-4 space-y-2">
         <Skeleton className="h-5 w-3/4" />
@@ -64,7 +64,7 @@ export function CardSkeleton() {
 
 export function StatCardSkeleton() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
       <div className="flex items-center justify-between">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-8 w-8 rounded-lg" />
@@ -97,7 +97,7 @@ export function ProjectDetailSkeleton() {
         <Skeleton className="h-7 w-64 mb-2" />
         <Skeleton className="h-4 w-48" />
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl space-y-4">
         <Skeleton className="h-5 w-32" />
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

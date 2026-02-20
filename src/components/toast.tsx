@@ -80,15 +80,15 @@ const iconMap = {
 };
 
 const colorMap = {
-  success: "border-green-200 bg-green-50 text-green-800",
-  error: "border-red-200 bg-red-50 text-red-800",
-  info: "border-blue-200 bg-blue-50 text-blue-800",
+  success: "border-green-500/20 bg-green-500/10 text-green-300",
+  error: "border-red-500/20 bg-red-500/10 text-red-300",
+  info: "border-blue-500/20 bg-blue-500/10 text-blue-300",
 };
 
 const iconColorMap = {
-  success: "text-green-500",
-  error: "text-red-500",
-  info: "text-blue-500",
+  success: "text-green-400",
+  error: "text-red-400",
+  info: "text-blue-400",
 };
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {

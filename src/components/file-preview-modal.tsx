@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { Download, X } from "lucide-react";
+import { useEffect, useRef, useCallback } from "react";
+import { Download, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { canPreview3D, get3DFormat } from "@/lib/model-utils";
 import { ModelViewer } from "@/components/model-viewer";
 
@@ -15,17 +15,39 @@ interface PreviewFile {
 interface FilePreviewModalProps {
   file: PreviewFile;
   onClose: () => void;
+  files?: PreviewFile[];
+  onNavigate?: (file: PreviewFile) => void;
 }
 
-export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
-  // Close on Escape key
+export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePreviewModalProps) {
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  const currentIndex = files?.findIndex((f) => f.id === file.id) ?? -1;
+  const hasPrev = files && currentIndex > 0;
+  const hasNext = files && currentIndex < files.length - 1;
+
+  const goToPrev = useCallback(() => {
+    if (hasPrev && onNavigate) {
+      onNavigate(files![currentIndex - 1]);
+    }
+  }, [hasPrev, onNavigate, files, currentIndex]);
+
+  const goToNext = useCallback(() => {
+    if (hasNext && onNavigate) {
+      onNavigate(files![currentIndex + 1]);
+    }
+  }, [hasNext, onNavigate, files, currentIndex]);
+
+  // Keyboard: Escape to close, arrow keys to navigate
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") goToPrev();
+      if (e.key === "ArrowRight") goToNext();
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [onClose, goToPrev, goToNext]);
 
   // Prevent body scroll while modal is open
   useEffect(() => {
@@ -34,6 +56,29 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
       document.body.style.overflow = "";
     };
   }, []);
+
+  // Touch gesture handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStart.current || e.changedTouches.length !== 1) return;
+      const dx = e.changedTouches[0].clientX - touchStart.current.x;
+      const dy = e.changedTouches[0].clientY - touchStart.current.y;
+      touchStart.current = null;
+
+      // Only trigger if horizontal swipe > 50px and more horizontal than vertical
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) goToPrev();
+        else goToNext();
+      }
+    },
+    [goToPrev, goToNext]
+  );
 
   const downloadUrl = `/api/files/${file.id}/download`;
   const inlineUrl = `${downloadUrl}?inline=true`;
@@ -46,28 +91,35 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
       onClick={onClose}
     >
       <div
-        className="relative flex h-full w-full flex-col bg-white sm:h-[95vh] sm:max-h-[95vh] sm:max-w-[95vw] sm:rounded-xl sm:shadow-2xl"
+        className="relative flex h-full w-full flex-col bg-[#12141f] sm:h-[95vh] sm:max-h-[95vh] sm:max-w-[95vw] sm:rounded-xl sm:shadow-2xl border border-white/[0.08]"
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
-          <h3 className="min-w-0 flex-1 font-medium text-slate-900 truncate pr-4">
+        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 flex-1 font-medium text-slate-100 truncate pr-4">
             {file.originalName}
             {file.version && file.version > 1 && (
               <span className="ml-2 text-sm text-slate-400">v{file.version}</span>
+            )}
+            {files && files.length > 1 && (
+              <span className="ml-2 text-sm text-slate-500">
+                {currentIndex + 1} of {files.length}
+              </span>
             )}
           </h3>
           <div className="flex items-center gap-2 sm:gap-3">
             <a
               href={downloadUrl}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:text-brand-500 transition-colors"
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-brand-400 hover:bg-brand-500/10 hover:text-brand-300 transition-colors"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Download</span>
             </a>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -75,7 +127,7 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
         </div>
 
         {/* Content */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-slate-50 p-2 sm:p-4">
+        <div className="relative flex flex-1 flex-col overflow-hidden bg-black/30 p-2 sm:p-4" style={{ touchAction: "pinch-zoom" }}>
           {is3D ? (
             <div className="min-h-0 flex-1">
               <ModelViewer
@@ -86,16 +138,38 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
           ) : isPdf ? (
             <iframe
               src={inlineUrl}
-              className="min-h-0 flex-1 w-full rounded-lg border border-slate-200"
+              className="min-h-0 flex-1 w-full rounded-lg border border-white/[0.08]"
             />
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto">
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto" style={{ touchAction: "pinch-zoom" }}>
               <img
                 src={inlineUrl}
                 alt={file.originalName}
                 className="max-h-full max-w-full object-contain"
               />
             </div>
+          )}
+
+          {/* Navigation arrows */}
+          {files && files.length > 1 && (
+            <>
+              {hasPrev && (
+                <button
+                  onClick={goToPrev}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur-sm hover:bg-black/60 transition-colors"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              )}
+              {hasNext && (
+                <button
+                  onClick={goToNext}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur-sm hover:bg-black/60 transition-colors"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

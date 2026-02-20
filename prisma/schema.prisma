@@ -35,6 +35,7 @@ model User {
   sessions       Session[]
   files          File[]
   projects       Project[]
+  fileViews      FileView[]
 
   @@map("users")
 }
@@ -58,6 +59,7 @@ model File {
   version         Int      @default(1)
   fileGroupId     String?
   createdAt       DateTime @default(now())
+  fileViews       FileView[]
 
   @@index([uploadedById])
   @@index([projectId])
@@ -94,6 +96,7 @@ model Activity {
 model Project {
   id               String    @id @default(cuid())
   name             String
+  status           String    @default("concept")
   thumbnailPath    String?
   company          String?
   companyLogoPath  String?
@@ -107,6 +110,20 @@ model Project {
   updatedAt        DateTime  @updatedAt
 
   @@map("projects")
+}
+
+model FileView {
+  id       String   @id @default(cuid())
+  fileId   String
+  file     File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+
+  @@index([fileId])
+  @@index([userId])
+  @@index([viewedAt])
+  @@map("file_views")
 }
 
 model VerificationToken {

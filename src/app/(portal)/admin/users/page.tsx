@@ -93,24 +93,24 @@ export default function AdminUsersPage() {
       />
 
       {/* Create User Section */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <button
           onClick={() => setFormOpen(!formOpen)}
-          className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 transition-colors"
+          className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-100 hover:bg-white/[0.03] transition-colors"
         >
           Create New User
           {formOpen ? (
-            <ChevronUp className="h-4 w-4 text-slate-500" />
+            <ChevronUp className="h-4 w-4 text-slate-400" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-slate-500" />
+            <ChevronDown className="h-4 w-4 text-slate-400" />
           )}
         </button>
 
         {formOpen && (
-          <form onSubmit={handleCreateUser} className="border-t border-slate-200 px-6 py-4">
+          <form onSubmit={handleCreateUser} className="border-t border-white/[0.06] px-6 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="name" className="block text-sm font-medium text-slate-300">
                   Full name
                 </label>
                 <input
@@ -118,12 +118,12 @@ export default function AdminUsersPage() {
                   name="name"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Jane Smith"
                 />
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="email" className="block text-sm font-medium text-slate-300">
                   Email address
                 </label>
                 <input
@@ -131,12 +131,12 @@ export default function AdminUsersPage() {
                   name="email"
                   type="email"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="jane@example.com"
                 />
               </div>
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="password" className="block text-sm font-medium text-slate-300">
                   Password
                 </label>
                 <input
@@ -145,19 +145,19 @@ export default function AdminUsersPage() {
                   type="password"
                   required
                   minLength={8}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Min. 8 characters"
                 />
               </div>
               <div>
-                <label htmlFor="company" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="company" className="block text-sm font-medium text-slate-300">
                   Company <span className="font-normal text-slate-400">(optional)</span>
                 </label>
                 <input
                   id="company"
                   name="company"
                   type="text"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acme Inc."
                 />
               </div>
@@ -181,49 +181,49 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 font-medium text-slate-500">User</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Role</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Company</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Status</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Activities</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Last Login</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Joined</th>
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <th className="px-6 py-3 font-medium text-slate-400">User</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Role</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Company</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Status</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Activities</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Last Login</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Joined</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-white/[0.06]">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={user.id} className="hover:bg-white/[0.03] transition-colors">
                   <td className="px-6 py-4">
                     <div>
-                      <p className="font-medium text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500">{user.email}</p>
+                      <p className="font-medium text-slate-100">{user.name}</p>
+                      <p className="text-xs text-slate-400">{user.email}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         user.role === "ADMIN"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-brand-100 text-brand-700"
+                          ? "bg-purple-500/10 text-purple-400"
+                          : "bg-brand-500/10 text-brand-400"
                       }`}
                     >
                       {user.role}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {user.company || "--"}
                   </td>
                   <td className="px-6 py-4">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                         user.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
+                          ? "bg-green-500/10 text-green-400"
+                          : "bg-red-500/10 text-red-400"
                       }`}
                     >
                       <span
@@ -234,15 +234,15 @@ export default function AdminUsersPage() {
                       {user.isActive ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {user._count.activities}
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {user.lastLoginAt
                       ? formatRelativeDate(user.lastLoginAt)
                       : "Never"}
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {formatRelativeDate(user.createdAt)}
                   </td>
                 </tr>

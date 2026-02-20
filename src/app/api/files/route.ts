@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthorized } from "@/lib/auth-utils";
 import {
   findOrCreateRootFolder,
   createFolder,
@@ -16,19 +17,47 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const files = await prisma.file.findMany({
-    where: session.user.role === "ADMIN" ? { projectId: null } : { projectId: null },
-    select: {
-      id: true,
-      name: true,
-      originalName: true,
-      size: true,
-      mimeType: true,
-      createdAt: true,
-      uploadedBy: {
-        select: { name: true, email: true },
-      },
+  const fileSelect = {
+    id: true,
+    name: true,
+    originalName: true,
+    size: true,
+    mimeType: true,
+    createdAt: true,
+    uploadedBy: {
+      select: { name: true, email: true },
     },
+    project: {
+      select: { id: true, name: true },
+    },
+  } as const;
+
+  if (session.user.role === "ADMIN") {
+    const files = await prisma.file.findMany({
+      where: { projectId: null },
+      select: fileSelect,
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json(files);
+  }
+
+  // CLIENT: return files from authorized projects + orphan files they uploaded
+  const userEmail = (session.user.email ?? "").toLowerCase();
+  const allProjects = await prisma.project.findMany({
+    select: { id: true, authorizedEmails: true },
+  });
+  const authorizedProjectIds = allProjects
+    .filter((p) => isEmailAuthorized(userEmail, p.authorizedEmails))
+    .map((p) => p.id);
+
+  const files = await prisma.file.findMany({
+    where: {
+      OR: [
+        { projectId: { in: authorizedProjectIds } },
+        { projectId: null, uploadedById: session.user.id },
+      ],
+    },
+    select: fileSelect,
     orderBy: { createdAt: "desc" },
   });
 

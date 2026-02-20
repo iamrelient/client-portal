@@ -4,4 +4,5 @@
 
 body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  color-scheme: dark;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -14,6 +14,9 @@ import { formatRelativeDate } from "@/lib/format-date";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { canPreview3D } from "@/lib/model-utils";
 import { compressImage } from "@/lib/compress-image";
+import { PROJECT_STATUSES } from "@/lib/project-status";
+import { StatusTimeline } from "@/components/status-timeline";
+import { FileComparisonModal } from "@/components/file-comparison-modal";
 
 type FileCategory = "RENDER" | "DRAWING" | "OTHER";
 
@@ -40,6 +43,7 @@ interface ProjectFile {
 interface ProjectDetail {
   id: string;
   name: string;
+  status: string;
   thumbnailPath: string | null;
   company: string | null;
   companyLogoPath: string | null;
@@ -137,6 +141,8 @@ export default function AdminProjectDetailPage() {
   const [togglingCurrent, setTogglingCurrent] = useState<string | null>(null);
   const [updatingCategory, setUpdatingCategory] = useState<string | null>(null);
 
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
 
@@ -150,6 +156,18 @@ export default function AdminProjectDetailPage() {
   const [editName, setEditName] = useState("");
   const [editEmails, setEditEmails] = useState("");
   const [editCompany, setEditCompany] = useState("");
+  const [editStatus, setEditStatus] = useState("concept");
+
+  const [compareTarget, setCompareTarget] = useState<string | null>(null);
+
+  // Client activity
+  const [showActivity, setShowActivity] = useState(false);
+  const [activityData, setActivityData] = useState<Array<{
+    id: string;
+    viewedAt: string;
+    user: { name: string; email: string };
+    file: { originalName: string; displayName: string | null };
+  }> | null>(null);
 
   function loadProject() {
     fetch(`/api/projects/${projectId}`)
@@ -159,6 +177,7 @@ export default function AdminProjectDetailPage() {
         setEditName(data.name);
         setEditEmails(data.authorizedEmails?.join(", ") || "");
         setEditCompany(data.company || "");
+        setEditStatus(data.status || "concept");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -187,6 +206,7 @@ export default function AdminProjectDetailPage() {
     formData.set("name", editName);
     formData.set("emails", editEmails);
     formData.set("company", editCompany);
+    formData.set("status", editStatus);
 
     // Compress images before uploading
     const thumbnail = formData.get("thumbnail") as File | null;
@@ -332,7 +352,7 @@ export default function AdminProjectDetailPage() {
     return true;
   }
 
-  // Process all files in the upload queue
+  // Process all files in the upload queue in parallel batches
   async function executeUpload() {
     if (!uploadQueue || uploadQueue.length === 0) return;
 
@@ -343,15 +363,25 @@ export default function AdminProjectDetailPage() {
     setUploadProgress(0);
 
     let successCount = 0;
+    let failCount = 0;
+    const BATCH_SIZE = 3;
 
-    for (let i = 0; i < entries.length; i++) {
-      setUploadProgress(0);
-      try {
-        const ok = await uploadSingleFile(entries[i]);
-        if (ok) successCount++;
-      } catch {
-        toast.error(`${entries[i].file.name}: Upload failed`);
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const batch = entries.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((entry) => uploadSingleFile(entry))
+      );
+
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          successCount++;
+        } else {
+          failCount++;
+        }
       }
+
+      // Update progress based on completed batches
+      setUploadProgress(Math.round(((i + batch.length) / entries.length) * 100));
     }
 
     setUploading(false);
@@ -359,12 +389,19 @@ export default function AdminProjectDetailPage() {
     setExpandedGroup(null);
     setVersionHistory({});
 
-    if (successCount > 0) {
+    // Single summary toast
+    if (successCount > 0 && failCount === 0) {
       toast.success(
         successCount === 1
           ? "File uploaded successfully"
           : `${successCount} files uploaded successfully`
       );
+    } else if (successCount > 0 && failCount > 0) {
+      toast.info(
+        `${successCount} file${successCount !== 1 ? "s" : ""} uploaded successfully, ${failCount} failed`
+      );
+    } else if (failCount > 0) {
+      toast.error(`${failCount} file${failCount !== 1 ? "s" : ""} failed to upload`);
     }
 
     // Always refresh the file list
@@ -465,6 +502,57 @@ export default function AdminProjectDetailPage() {
     }
   }
 
+  async function handleDownloadAll() {
+    setDownloadingZip(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/download-all`);
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project?.name || "project"}_files.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download files");
+    }
+    setDownloadingZip(false);
+  }
+
+  async function handleCompare(fileId: string, fileGroupId: string | null) {
+    if (fileGroupId && !versionHistory[fileId]) {
+      try {
+        const res = await fetch(`/api/files/${fileId}/versions`);
+        if (res.ok) {
+          const versions = await res.json();
+          setVersionHistory((prev) => ({ ...prev, [fileId]: versions }));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setCompareTarget(fileId);
+  }
+
+  async function loadActivity() {
+    if (activityData) {
+      setShowActivity(!showActivity);
+      return;
+    }
+    setShowActivity(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/activity`);
+      if (res.ok) {
+        setActivityData(await res.json());
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const handleDragOver = useCallback((e: React.DragEvent, fileId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -482,7 +570,7 @@ export default function AdminProjectDetailPage() {
 
   if (!project) {
     return (
-      <div className="flex h-96 items-center justify-center text-slate-500">
+      <div className="flex h-96 items-center justify-center text-slate-400">
         Project not found
       </div>
     );
@@ -496,26 +584,26 @@ export default function AdminProjectDetailPage() {
 
     return (
       <div key={category} className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">
+        <h2 className="mb-3 text-lg font-semibold text-slate-100">
           {CATEGORY_LABELS[category]}
         </h2>
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="w-10 px-3 py-3 font-medium text-slate-500">
+                <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                  <th className="w-10 px-3 py-3 font-medium text-slate-400">
                     <span className="sr-only">Current</span>
                   </th>
-                  <th className="px-6 py-3 font-medium text-slate-500">File</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Size</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Type</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Category</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Date</th>
-                  <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">File</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">Size</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">Type</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">Category</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">Date</th>
+                  <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-white/[0.06]">
                 {items.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-400">
@@ -534,10 +622,10 @@ export default function AdminProjectDetailPage() {
                         key={latest.id}
                         className={`transition-colors ${
                           latest.isCurrent
-                            ? "bg-green-50/60 hover:bg-green-50"
+                            ? "bg-green-500/[0.06] hover:bg-green-500/10"
                             : isDragOver
-                              ? "bg-brand-50 ring-2 ring-inset ring-brand-400"
-                              : "hover:bg-slate-50"
+                              ? "bg-brand-500/10 ring-2 ring-inset ring-brand-400"
+                              : "hover:bg-white/[0.03]"
                         }`}
                         onDragOver={(e) => handleDragOver(e, latest.id)}
                         onDragLeave={handleDragLeave}
@@ -549,7 +637,7 @@ export default function AdminProjectDetailPage() {
                             checked={latest.isCurrent}
                             disabled={togglingCurrent === latest.id}
                             onChange={() => handleToggleCurrent(latest.id, latest.isCurrent)}
-                            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer disabled:opacity-50"
+                            className="h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-500 focus:ring-brand-500 cursor-pointer disabled:opacity-50"
                             title="Mark as most up to date"
                           />
                         </td>
@@ -557,37 +645,46 @@ export default function AdminProjectDetailPage() {
                           <div className="flex items-center gap-2">
                             <a
                               href={`/api/files/${latest.id}/download`}
-                              className="font-medium text-brand-600 hover:text-brand-500"
+                              className="font-medium text-brand-400 hover:text-brand-300"
                             >
                               {fileName}
                             </a>
                             {latest.isCurrent && (
-                              <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                              <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                                 Current
                               </span>
                             )}
                             {latest.version > 1 && (
-                              <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+                              <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
                                 v{latest.version}
                               </span>
                             )}
                             {versionCount > 1 && (
-                              <button
-                                onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
-                                className="inline-flex items-center gap-0.5 text-xs text-slate-500 hover:text-brand-600"
-                              >
-                                {expandedGroup === latest.id ? (
-                                  <ChevronDown className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ChevronRight className="h-3.5 w-3.5" />
-                                )}
-                                {versionCount} versions
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
+                                  className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-brand-600"
+                                >
+                                  {expandedGroup === latest.id ? (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  )}
+                                  {versionCount} versions
+                                </button>
+                                <button
+                                  onClick={() => handleCompare(latest.id, latest.fileGroupId)}
+                                  className="inline-flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300"
+                                >
+                                  <Columns className="h-3.5 w-3.5" />
+                                  Compare
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-600">{formatSize(latest.size)}</td>
-                        <td className="px-6 py-4 text-slate-600">
+                        <td className="px-6 py-4 text-slate-400">{formatSize(latest.size)}</td>
+                        <td className="px-6 py-4 text-slate-400">
                           <span className="inline-flex items-center gap-1.5">
                             <FileIcon className="h-4 w-4 text-slate-400" />
                             {getFileLabel(latest.mimeType, latest.originalName)}
@@ -598,14 +695,14 @@ export default function AdminProjectDetailPage() {
                             value={latest.category}
                             disabled={updatingCategory === latest.id}
                             onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                            className="rounded-md border border-white/[0.1] bg-white/[0.05] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
                           >
                             <option value="RENDER">Renders</option>
                             <option value="DRAWING">Drawings</option>
                             <option value="OTHER">Others</option>
                           </select>
                         </td>
-                        <td className="px-6 py-4 text-slate-600">
+                        <td className="px-6 py-4 text-slate-400">
                           {formatRelativeDate(latest.createdAt)}
                         </td>
                         <td className="px-6 py-4">
@@ -613,7 +710,7 @@ export default function AdminProjectDetailPage() {
                             {canPreview(latest.mimeType, latest.originalName) && (
                               <button
                                 onClick={() => setPreviewFile(latest)}
-                                className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                                className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
                               >
                                 <Eye className="h-4 w-4" />
                                 View
@@ -622,7 +719,7 @@ export default function AdminProjectDetailPage() {
                             <button
                               onClick={() => setDeleteFileTarget(latest.id)}
                               disabled={deleting === latest.id}
-                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                             >
                               {deleting === latest.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -637,7 +734,7 @@ export default function AdminProjectDetailPage() {
                       {/* Version history expansion */}
                       {expandedGroup === latest.id && versionCount > 1 && (
                         <tr key={`${latest.id}-versions`}>
-                          <td colSpan={7} className="bg-slate-50 px-6 py-3">
+                          <td colSpan={7} className="bg-white/[0.02] px-6 py-3">
                             <div className="space-y-2">
                               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
                                 Version History
@@ -645,13 +742,13 @@ export default function AdminProjectDetailPage() {
                               {(versionHistory[latest.id] || []).map((v) => (
                                 <div
                                   key={v.id}
-                                  className="flex items-center justify-between rounded-lg bg-white px-4 py-2 border border-slate-100"
+                                  className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-2 border border-white/[0.06]"
                                 >
                                   <div className="flex items-center gap-3">
-                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                                    <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
                                       v{v.version}
                                     </span>
-                                    <span className="text-sm text-slate-700">
+                                    <span className="text-sm text-slate-300">
                                       {formatSize(v.size)}
                                     </span>
                                     <span className="text-sm text-slate-400">
@@ -662,7 +759,7 @@ export default function AdminProjectDetailPage() {
                                     {canPreview(v.mimeType, v.originalName || latest.originalName) && (
                                       <button
                                         onClick={() => setPreviewFile(v as ProjectFile)}
-                                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
                                       >
                                         <Eye className="h-3.5 w-3.5" />
                                         View
@@ -670,7 +767,7 @@ export default function AdminProjectDetailPage() {
                                     )}
                                     <a
                                       href={`/api/files/${v.id}/download`}
-                                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-100"
                                     >
                                       <Download className="h-3.5 w-3.5" />
                                       Download
@@ -678,7 +775,7 @@ export default function AdminProjectDetailPage() {
                                     <button
                                       onClick={() => setDeleteFileTarget(v.id)}
                                       disabled={deleting === v.id}
-                                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
+                                      className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-700 disabled:opacity-50"
                                     >
                                       {deleting === v.id ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -717,12 +814,12 @@ export default function AdminProjectDetailPage() {
       />
 
       {/* Project Details */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-sm font-medium text-slate-900">Project Details</h2>
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <h2 className="mb-4 text-sm font-medium text-slate-100">Project Details</h2>
         <form onSubmit={handleSave}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="edit-name" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="edit-name" className="block text-sm font-medium text-slate-300">
                 Project name
               </label>
               <input
@@ -731,11 +828,11 @@ export default function AdminProjectDetailPage() {
                 required
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
             <div>
-              <label htmlFor="edit-company" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="edit-company" className="block text-sm font-medium text-slate-300">
                 Company name <span className="font-normal text-slate-400">(optional)</span>
               </label>
               <input
@@ -743,12 +840,29 @@ export default function AdminProjectDetailPage() {
                 type="text"
                 value={editCompany}
                 onChange={(e) => setEditCompany(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 placeholder="Acme Corp"
               />
             </div>
             <div>
-              <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="edit-status" className="block text-sm font-medium text-slate-300">
+                Project status
+              </label>
+              <select
+                id="edit-status"
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                {PROJECT_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-300">
                 Replace thumbnail <span className="font-normal text-slate-400">(optional)</span>
               </label>
               <input
@@ -756,11 +870,11 @@ export default function AdminProjectDetailPage() {
                 name="thumbnail"
                 type="file"
                 accept="image/*"
-                className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+                className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
               />
             </div>
             <div>
-              <label htmlFor="edit-companyLogo" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="edit-companyLogo" className="block text-sm font-medium text-slate-300">
                 Company logo <span className="font-normal text-slate-400">(optional)</span>
               </label>
               <input
@@ -768,11 +882,11 @@ export default function AdminProjectDetailPage() {
                 name="companyLogo"
                 type="file"
                 accept="image/*"
-                className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+                className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
               />
             </div>
             <div className="sm:col-span-2">
-              <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-300">
                 Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
               </label>
               <textarea
@@ -780,7 +894,7 @@ export default function AdminProjectDetailPage() {
                 rows={2}
                 value={editEmails}
                 onChange={(e) => setEditEmails(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 placeholder="client@example.com, @acmecorp.com"
               />
             </div>
@@ -789,21 +903,21 @@ export default function AdminProjectDetailPage() {
           <div className="mt-4 flex flex-wrap items-center gap-4">
             {project.thumbnailPath && (
               <div>
-                <p className="mb-1 text-xs text-slate-500">Current thumbnail</p>
+                <p className="mb-1 text-xs text-slate-400">Current thumbnail</p>
                 <img
                   src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
                   alt="Thumbnail"
-                  className="h-20 w-auto rounded-lg border border-slate-200 object-cover"
+                  className="h-20 w-auto rounded-lg border border-white/[0.08] object-cover"
                 />
               </div>
             )}
             {project.companyLogoPath && (
               <div>
-                <p className="mb-1 text-xs text-slate-500">Current company logo</p>
+                <p className="mb-1 text-xs text-slate-400">Current company logo</p>
                 <img
                   src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath!)}`}
                   alt="Company logo"
-                  className="h-20 w-auto rounded-lg border border-slate-200 object-contain bg-white p-1"
+                  className="h-20 w-auto rounded-lg border border-white/[0.08] object-contain bg-white p-1"
                 />
               </div>
             )}
@@ -822,8 +936,8 @@ export default function AdminProjectDetailPage() {
       </div>
 
       {/* Upload File */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-sm font-medium text-slate-900">Upload File</h2>
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <h2 className="mb-4 text-sm font-medium text-slate-100">Upload File</h2>
         <DropZone
           onFiles={handleFilesSelected}
           uploading={uploading}
@@ -831,9 +945,32 @@ export default function AdminProjectDetailPage() {
         />
       </div>
 
+      {/* Status Timeline */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <StatusTimeline status={project.status} />
+      </div>
+
+      {/* Download All */}
+      {project.files.some((f) => f.isCurrent) && (
+        <div className="mb-6">
+          <button
+            onClick={handleDownloadAll}
+            disabled={downloadingZip}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
+          >
+            {downloadingZip ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Archive className="h-4 w-4" />
+            )}
+            Download All Files (.zip)
+          </button>
+        </div>
+      )}
+
       {/* Files grouped by category */}
       {project.files.length === 0 ? (
-        <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <EmptyState
             icon={FileX}
             title="No files yet"
@@ -848,36 +985,60 @@ export default function AdminProjectDetailPage() {
         <FilePreviewModal
           file={previewFile}
           onClose={() => setPreviewFile(null)}
+          files={project.files}
+          onNavigate={(f) => setPreviewFile(f as ProjectFile)}
         />
       )}
 
       {/* Upload Modal */}
       {uploadQueue && uploadQueue.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl max-h-[80vh] flex flex-col">
+          <div className="w-full max-w-lg rounded-xl bg-[#12141f] p-6 shadow-xl border border-white/[0.08] max-h-[80vh] flex flex-col">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">
+              <h3 className="text-lg font-semibold text-slate-100">
                 Upload {uploadQueue.length === 1 ? "File" : `${uploadQueue.length} Files`}
               </h3>
               <button
                 onClick={() => setUploadQueue(null)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-lg p-1 text-slate-400 hover:bg-white/[0.06] hover:text-slate-400"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {uploadQueue.length > 1 && (
+              <div className="mb-4 flex items-center gap-3">
+                <label className="text-xs font-medium text-slate-400 whitespace-nowrap">Set all to:</label>
+                <select
+                  onChange={(e) => {
+                    const cat = e.target.value as FileCategory;
+                    setUploadQueue((prev) =>
+                      prev ? prev.map((item) => ({ ...item, category: cat })) : null
+                    );
+                    e.target.value = "";
+                  }}
+                  defaultValue=""
+                  className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="" disabled>Choose category...</option>
+                  <option value="RENDER">Renders</option>
+                  <option value="DRAWING">Drawings</option>
+                  <option value="OTHER">Others</option>
+                </select>
+              </div>
+            )}
+
             <div className="overflow-y-auto flex-1 -mx-6 px-6 space-y-4">
               {uploadQueue.map((entry, idx) => (
-                <div key={idx} className="rounded-lg border border-slate-200 p-4">
+                <div key={idx} className="rounded-lg border border-white/[0.08] p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-900 truncate">{entry.file.name}</p>
+                    <p className="text-sm font-medium text-slate-100 truncate">{entry.file.name}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-400 whitespace-nowrap">{formatSize(entry.file.size)}</span>
                       {uploadQueue.length > 1 && (
                         <button
                           onClick={() => setUploadQueue((prev) => prev ? prev.filter((_, i) => i !== idx) : null)}
-                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          className="rounded p-0.5 text-slate-400 hover:bg-white/[0.06] hover:text-slate-400"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -886,8 +1047,8 @@ export default function AdminProjectDetailPage() {
                   </div>
 
                   {entry.targetFileGroupId && (
-                    <div className="mb-3 rounded-md bg-brand-50 px-3 py-2">
-                      <p className="text-xs font-medium text-brand-700">
+                    <div className="mb-3 rounded-md bg-brand-500/10 px-3 py-2">
+                      <p className="text-xs font-medium text-brand-400">
                         New version — will be added to the existing file group
                       </p>
                     </div>
@@ -895,7 +1056,7 @@ export default function AdminProjectDetailPage() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
                       <select
                         value={entry.category}
                         onChange={(e) =>
@@ -907,7 +1068,7 @@ export default function AdminProjectDetailPage() {
                               : null
                           )
                         }
-                        className="block w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       >
                         <option value="RENDER">Renders</option>
                         <option value="DRAWING">Drawings</option>
@@ -915,7 +1076,7 @@ export default function AdminProjectDetailPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Display Name</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Display Name</label>
                       <input
                         type="text"
                         value={entry.displayName}
@@ -928,7 +1089,7 @@ export default function AdminProjectDetailPage() {
                               : null
                           )
                         }
-                        className="block w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />
                     </div>
                   </div>
@@ -936,10 +1097,10 @@ export default function AdminProjectDetailPage() {
               ))}
             </div>
 
-            <div className="mt-4 flex justify-end gap-3 pt-4 border-t border-slate-200">
+            <div className="mt-4 flex justify-end gap-3 pt-4 border-t border-white/[0.06]">
               <button
                 onClick={() => setUploadQueue(null)}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] transition-colors"
               >
                 Cancel
               </button>
@@ -955,10 +1116,66 @@ export default function AdminProjectDetailPage() {
         </div>
       )}
 
+      {/* Client Activity */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <button
+          onClick={loadActivity}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          {showActivity ? (
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          )}
+          <Activity className="h-4 w-4 text-slate-400" />
+          <h2 className="text-sm font-medium text-slate-100">Client Activity</h2>
+        </button>
+
+        {showActivity && (
+          <div className="mt-4 space-y-2">
+            {activityData === null ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+              </div>
+            ) : activityData.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-400">
+                No file views recorded yet
+              </p>
+            ) : (
+              activityData.map((view) => (
+                <div
+                  key={view.id}
+                  className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-2.5 border border-white/[0.06]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-7 w-7 rounded-full bg-brand-500/20 flex items-center justify-center">
+                      <span className="text-xs font-medium text-brand-400">
+                        {view.user.name?.charAt(0).toUpperCase() || "?"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-200">
+                        <span className="font-medium">{view.user.name}</span>
+                        {" viewed "}
+                        <span className="text-brand-400">{view.file.displayName || view.file.originalName}</span>
+                      </p>
+                      <p className="text-xs text-slate-500">{view.user.email}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-500 whitespace-nowrap">
+                    {new Date(view.viewedAt).toLocaleDateString()} {new Date(view.viewedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Danger Zone */}
-      <div className="overflow-hidden rounded-xl border border-red-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-2 text-sm font-medium text-red-600">Danger Zone</h2>
-        <p className="mb-4 text-sm text-slate-600">
+      <div className="overflow-hidden rounded-xl border border-red-500/20 bg-white/[0.03] p-6 shadow-sm">
+        <h2 className="mb-2 text-sm font-medium text-red-400">Danger Zone</h2>
+        <p className="mb-4 text-sm text-slate-400">
           Deleting this project will permanently remove all associated files.
         </p>
         <button
@@ -994,6 +1211,13 @@ export default function AdminProjectDetailPage() {
         onConfirm={handleDeleteProject}
         onCancel={() => setShowDeleteProject(false)}
       />
+
+      {compareTarget && versionHistory[compareTarget] && (
+        <FileComparisonModal
+          versions={versionHistory[compareTarget]}
+          onClose={() => setCompareTarget(null)}
+        />
+      )}
     </div>
   );
 }

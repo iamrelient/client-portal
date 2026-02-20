@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Download, Eye, FileX } from "lucide-react";
+import Link from "next/link";
 import { TableSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FilePreviewModal } from "@/components/file-preview-modal";
@@ -18,6 +19,7 @@ interface FileRow {
   mimeType: string;
   createdAt: string;
   uploadedBy: { name: string; email: string };
+  project: { id: string; name: string } | null;
 }
 
 function formatSize(bytes: number) {
@@ -65,36 +67,49 @@ export default function DashboardFilesPage() {
         description={`${files.length} file${files.length !== 1 ? "s" : ""} available`}
       />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 font-medium text-slate-500">File</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Size</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Type</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Date</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <th className="px-6 py-3 font-medium text-slate-400">File</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Project</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Size</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Type</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Date</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-white/[0.06]">
               {files.map((file) => {
                 const FileIcon = getFileIcon(file.mimeType, file.originalName);
                 return (
-                  <tr key={file.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">
+                  <tr key={file.id} className="hover:bg-white/[0.03] transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-100">
                       {file.originalName}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
+                      {file.project ? (
+                        <Link
+                          href={`/dashboard/projects/${file.project.id}`}
+                          className="text-brand-400 hover:text-brand-300 transition-colors"
+                        >
+                          {file.project.name}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-slate-400">
                       {formatSize(file.size)}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       <span className="inline-flex items-center gap-1.5">
                         <FileIcon className="h-4 w-4 text-slate-400" />
                         {getFileLabel(file.mimeType, file.originalName)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       {formatRelativeDate(file.createdAt)}
                     </td>
                     <td className="px-6 py-4">
@@ -102,7 +117,7 @@ export default function DashboardFilesPage() {
                         {canPreview(file.mimeType, file.originalName) && (
                           <button
                             onClick={() => setPreviewFile(file)}
-                            className="inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-500"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-brand-400 hover:text-brand-300"
                           >
                             <Eye className="h-4 w-4" />
                             View
@@ -110,7 +125,7 @@ export default function DashboardFilesPage() {
                         )}
                         <a
                           href={`/api/files/${file.id}/download`}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-slate-600 hover:text-slate-900 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-slate-400 hover:text-slate-100 transition-colors"
                         >
                           <Download className="h-4 w-4" />
                           Download
@@ -122,7 +137,7 @@ export default function DashboardFilesPage() {
               })}
               {files.length === 0 && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     <EmptyState
                       icon={FileX}
                       title="No files available"
@@ -140,6 +155,8 @@ export default function DashboardFilesPage() {
         <FilePreviewModal
           file={previewFile}
           onClose={() => setPreviewFile(null)}
+          files={files}
+          onNavigate={(f) => setPreviewFile(f as FileRow)}
         />
       )}
     </div>

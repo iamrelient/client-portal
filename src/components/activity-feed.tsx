@@ -29,7 +29,7 @@ interface ActivityFeedProps {
 export function ActivityFeed({ activities, showUser }: ActivityFeedProps) {
   if (activities.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-slate-500">
+      <div className="py-8 text-center text-sm text-slate-400">
         No recent activity
       </div>
     );
@@ -46,19 +46,19 @@ export function ActivityFeed({ activities, showUser }: ActivityFeedProps) {
             <li key={activity.id} className="relative pb-4">
               {!isLast && (
                 <span
-                  className="absolute left-5 top-10 -ml-px h-full w-0.5 bg-slate-200"
+                  className="absolute left-5 top-10 -ml-px h-full w-0.5 bg-white/[0.06]"
                   aria-hidden="true"
                 />
               )}
               <div className="relative flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100">
-                  <Icon className="h-5 w-5 text-slate-600" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.06]">
+                  <Icon className="h-5 w-5 text-slate-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-900">
+                  <p className="text-sm text-slate-100">
                     {activity.description}
                   </p>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                  <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
                     <time>{formatRelativeDate(activity.createdAt)}</time>
                     {showUser && activity.user && (
                       <>

@@ -21,16 +21,16 @@ export function StatCard({
   return (
     <div
       className={clsx(
-        "rounded-xl border border-slate-200 bg-white p-6 shadow-sm",
+        "rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl",
         className
       )}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className="mt-1 text-3xl font-bold text-slate-900">{value}</p>
+          <p className="text-sm font-medium text-slate-400">{title}</p>
+          <p className="mt-1 text-3xl font-bold text-slate-100">{value}</p>
           {subtitle && (
-            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+            <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
           )}
           {trend && (
             <p
@@ -44,8 +44,8 @@ export function StatCard({
             </p>
           )}
         </div>
-        <div className="rounded-lg bg-brand-50 p-3">
-          <Icon className="h-6 w-6 text-brand-600" />
+        <div className="rounded-lg bg-brand-500/10 p-3">
+          <Icon className="h-6 w-6 text-brand-400" />
         </div>
       </div>
     </div>

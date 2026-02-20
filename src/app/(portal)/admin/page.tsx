@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, UserCheck, UserX, Activity } from "lucide-react";
+import { Users, UserCheck, UserX, Activity, AlertCircle } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { ActivityFeed } from "@/components/activity-feed";
 import { PageHeader } from "@/components/page-header";
 import { StatCardSkeleton, ActivityFeedSkeleton } from "@/components/skeleton";
+
+interface InactiveClient {
+  id: string;
+  name: string;
+  email: string;
+  lastLoginAt: string | null;
+  company: string | null;
+}
 
 interface AnalyticsData {
   totalUsers: number;
@@ -18,6 +26,7 @@ interface AnalyticsData {
     createdAt: string;
     user: { name: string; email: string };
   }[];
+  inactiveClients: InactiveClient[];
 }
 
 export default function AdminOverviewPage() {
@@ -47,8 +56,8 @@ export default function AdminOverviewPage() {
           ))}
         </div>
         <div className="mt-8">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 h-6 w-48 animate-pulse rounded bg-slate-200" />
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+            <div className="mb-4 h-6 w-48 animate-pulse rounded bg-white/[0.06]" />
             <ActivityFeedSkeleton />
           </div>
         </div>
@@ -90,9 +99,9 @@ export default function AdminOverviewPage() {
         />
       </div>
 
-      <div className="mt-8">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+          <h2 className="mb-4 text-lg font-semibold text-slate-100">
             Recent Platform Activity
           </h2>
           <ActivityFeed
@@ -100,6 +109,38 @@ export default function AdminOverviewPage() {
             showUser
           />
         </div>
+
+        {data?.inactiveClients && data.inactiveClients.length > 0 && (
+          <div className="rounded-xl border border-amber-500/20 bg-white/[0.03] p-6 backdrop-blur-xl">
+            <div className="mb-4 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-slate-100">
+                Clients Needing Attention
+              </h2>
+            </div>
+            <p className="mb-4 text-sm text-slate-400">
+              These clients haven&apos;t logged in for 30+ days.
+            </p>
+            <div className="space-y-2">
+              {data.inactiveClients.map((client) => (
+                <div
+                  key={client.id}
+                  className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-3 border border-white/[0.06]"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">{client.name}</p>
+                    <p className="text-xs text-slate-500">{client.email}</p>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    {client.lastLoginAt
+                      ? `Last login: ${new Date(client.lastLoginAt).toLocaleDateString()}`
+                      : "Never logged in"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

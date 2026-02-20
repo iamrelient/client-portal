@@ -13,7 +13,7 @@ function RegisteredBanner() {
   if (!registered) return null;
 
   return (
-    <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600">
+    <div className="mb-4 rounded-lg bg-green-500/10 p-3 text-sm text-green-400">
       Account created successfully. Sign in below.
     </div>
   );
@@ -69,7 +69,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
+      <div className="flex flex-1 items-center justify-center bg-[#0a0a0f] px-4">
         <div className="w-full max-w-md">
           {/* Mobile logo — shown only on small screens */}
           <div className="mb-8 text-center lg:hidden">
@@ -83,10 +83,10 @@ export default function LoginPage() {
           </div>
 
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-slate-100">
               Sign in to your account
             </h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-slate-400">
               Don&apos;t have an account?{" "}
               <Link href="/register" className="text-brand-600 hover:text-brand-500 font-medium">
                 Sign up
@@ -96,13 +96,13 @@ export default function LoginPage() {
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
+            className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 backdrop-blur-xl"
           >
             <Suspense>
               <RegisteredBanner />
             </Suspense>
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+              <div className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
                 {error}
               </div>
             )}
@@ -111,7 +111,7 @@ export default function LoginPage() {
               <div>
                 <label
                   htmlFor="email"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
                   Email address
                 </label>
@@ -121,7 +121,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="you@example.com"
                 />
               </div>
@@ -129,7 +129,7 @@ export default function LoginPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-300"
                 >
                   Password
                 </label>
@@ -139,7 +139,7 @@ export default function LoginPage() {
                   type="password"
                   autoComplete="current-password"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Enter your password"
                 />
               </div>

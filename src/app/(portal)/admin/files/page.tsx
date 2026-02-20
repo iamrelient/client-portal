@@ -169,8 +169,8 @@ export default function AdminFilesPage() {
     return (
       <div>
         <PageHeader title="File Management" description="Loading..." />
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+        <div className="mb-6 rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+          <div className="h-24 animate-pulse rounded-lg bg-white/[0.06]" />
         </div>
         <TableSkeleton rows={5} cols={6} />
       </div>
@@ -185,8 +185,8 @@ export default function AdminFilesPage() {
       />
 
       {/* Upload Zone */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label className="block text-sm font-medium text-slate-700 mb-3">
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <label className="block text-sm font-medium text-slate-300 mb-3">
           Upload a file
         </label>
         <DropZone
@@ -197,45 +197,45 @@ export default function AdminFilesPage() {
       </div>
 
       {/* Files Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 font-medium text-slate-500">File</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Size</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Type</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Uploaded By</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Date</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <th className="px-6 py-3 font-medium text-slate-400">File</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Size</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Type</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Uploaded By</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Date</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-white/[0.06]">
               {files.map((file) => {
                 const FileIcon = getFileIcon(file.mimeType, file.originalName);
                 return (
-                  <tr key={file.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={file.id} className="hover:bg-white/[0.03] transition-colors">
                     <td className="px-6 py-4">
                       <a
                         href={`/api/files/${file.id}/download`}
-                        className="font-medium text-brand-600 hover:text-brand-500"
+                        className="font-medium text-brand-400 hover:text-brand-300"
                       >
                         {file.originalName}
                       </a>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       {formatSize(file.size)}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       <span className="inline-flex items-center gap-1.5">
                         <FileIcon className="h-4 w-4 text-slate-400" />
                         {getFileLabel(file.mimeType, file.originalName)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       {file.uploadedBy.name}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-6 py-4 text-slate-400">
                       {formatRelativeDate(file.createdAt)}
                     </td>
                     <td className="px-6 py-4">
@@ -243,7 +243,7 @@ export default function AdminFilesPage() {
                         {canPreview(file.mimeType, file.originalName) && (
                           <button
                             onClick={() => setPreviewFile(file)}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
                           >
                             <Eye className="h-4 w-4" />
                             View
@@ -252,7 +252,7 @@ export default function AdminFilesPage() {
                         <button
                           onClick={() => setDeleteTarget(file.id)}
                           disabled={deleting === file.id}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                         >
                           {deleting === file.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

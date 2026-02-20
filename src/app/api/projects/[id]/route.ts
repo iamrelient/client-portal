@@ -57,6 +57,7 @@ export async function GET(
   const response: Record<string, unknown> = {
     id: project.id,
     name: project.name,
+    status: project.status,
     thumbnailPath: project.thumbnailPath,
     company: project.company,
     companyLogoPath: project.companyLogoPath,
@@ -99,6 +100,7 @@ export async function PATCH(
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
     const company = formData.get("company") as string | null;
+    const status = formData.get("status") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
     const companyLogo = formData.get("companyLogo") as globalThis.File | null;
 
@@ -110,6 +112,11 @@ export async function PATCH(
 
     if (formData.has("company")) {
       data.company = company?.trim() || null;
+    }
+
+    const validStatuses = ["concept", "in_progress", "review", "revisions", "complete"];
+    if (status && validStatuses.includes(status)) {
+      data.status = status;
     }
 
     if (emails !== null) {

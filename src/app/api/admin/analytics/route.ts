@@ -10,7 +10,10 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const [totalUsers, activeUsers, recentActivities, usersByMonth] =
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [totalUsers, activeUsers, recentActivities, usersByMonth, inactiveClients] =
     await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { isActive: true } }),
@@ -27,6 +30,25 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
         take: 12,
       }),
+      prisma.user.findMany({
+        where: {
+          role: "USER",
+          isActive: true,
+          OR: [
+            { lastLoginAt: null },
+            { lastLoginAt: { lt: thirtyDaysAgo } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          lastLoginAt: true,
+          company: true,
+        },
+        orderBy: { lastLoginAt: { sort: "asc", nulls: "first" } },
+        take: 10,
+      }),
     ]);
 
   return NextResponse.json({
@@ -35,5 +57,6 @@ export async function GET() {
     inactiveUsers: totalUsers - activeUsers,
     recentActivities,
     usersByMonth,
+    inactiveClients,
   });
 }

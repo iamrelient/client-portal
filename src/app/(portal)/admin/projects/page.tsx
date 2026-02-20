@@ -98,24 +98,24 @@ export default function AdminProjectsPage() {
         description={`${projects.length} project${projects.length !== 1 ? "s" : ""}`}
       />
 
-      <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <button
           onClick={() => setFormOpen(!formOpen)}
-          className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-900 hover:bg-slate-50 transition-colors"
+          className="flex w-full items-center justify-between px-6 py-4 text-left text-sm font-medium text-slate-100 hover:bg-white/[0.03] transition-colors"
         >
           Create New Project
           {formOpen ? (
-            <ChevronUp className="h-4 w-4 text-slate-500" />
+            <ChevronUp className="h-4 w-4 text-slate-400" />
           ) : (
-            <ChevronDown className="h-4 w-4 text-slate-500" />
+            <ChevronDown className="h-4 w-4 text-slate-400" />
           )}
         </button>
 
         {formOpen && (
-          <form onSubmit={handleCreate} className="border-t border-slate-200 px-6 py-4">
+          <form onSubmit={handleCreate} className="border-t border-white/[0.06] px-6 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="name" className="block text-sm font-medium text-slate-300">
                   Project name
                 </label>
                 <input
@@ -123,12 +123,12 @@ export default function AdminProjectsPage() {
                   name="name"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="My Project"
                 />
               </div>
               <div>
-                <label htmlFor="thumbnail" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="thumbnail" className="block text-sm font-medium text-slate-300">
                   Thumbnail image <span className="font-normal text-slate-400">(optional)</span>
                 </label>
                 <input
@@ -136,23 +136,23 @@ export default function AdminProjectsPage() {
                   name="thumbnail"
                   type="file"
                   accept="image/*"
-                  className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+                  className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
                 />
               </div>
               <div>
-                <label htmlFor="company" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="company" className="block text-sm font-medium text-slate-300">
                   Company name <span className="font-normal text-slate-400">(optional)</span>
                 </label>
                 <input
                   id="company"
                   name="company"
                   type="text"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="Acme Corp"
                 />
               </div>
               <div>
-                <label htmlFor="companyLogo" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="companyLogo" className="block text-sm font-medium text-slate-300">
                   Company logo <span className="font-normal text-slate-400">(optional)</span>
                 </label>
                 <input
@@ -160,18 +160,18 @@ export default function AdminProjectsPage() {
                   name="companyLogo"
                   type="file"
                   accept="image/*"
-                  className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+                  className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
                 />
               </div>
               <div className="sm:col-span-2">
-                <label htmlFor="emails" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="emails" className="block text-sm font-medium text-slate-300">
                   Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
                 </label>
                 <textarea
                   id="emails"
                   name="emails"
                   rows={2}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="client@example.com, @acmecorp.com"
                 />
               </div>
@@ -194,45 +194,45 @@ export default function AdminProjectsPage() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="px-6 py-3 font-medium text-slate-500">Project</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Company</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Files</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Access</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Created</th>
-                <th className="px-6 py-3 font-medium text-slate-500">Actions</th>
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                <th className="px-6 py-3 font-medium text-slate-400">Project</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Company</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Files</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Access</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Created</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-white/[0.06]">
               {projects.map((project) => (
-                <tr key={project.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={project.id} className="hover:bg-white/[0.03] transition-colors">
                   <td className="px-6 py-4">
-                    <p className="font-medium text-slate-900">{project.name}</p>
+                    <p className="font-medium text-slate-100">{project.name}</p>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {project.company || "--"}
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {project._count.files}
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     <span className="max-w-[200px] truncate block">
                       {project.authorizedEmails.length > 0
                         ? project.authorizedEmails.join(", ")
                         : "--"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-slate-600">
+                  <td className="px-6 py-4 text-slate-400">
                     {formatRelativeDate(project.createdAt)}
                   </td>
                   <td className="px-6 py-4">
                     <button
                       onClick={() => router.push(`/admin/projects/${project.id}`)}
-                      className="text-sm font-medium text-brand-600 hover:text-brand-500"
+                      className="text-sm font-medium text-brand-400 hover:text-brand-300"
                     >
                       Manage
                     </button>

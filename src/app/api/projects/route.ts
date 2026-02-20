@@ -21,6 +21,7 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      status: true,
       thumbnailPath: true,
       company: true,
       companyLogoPath: true,
