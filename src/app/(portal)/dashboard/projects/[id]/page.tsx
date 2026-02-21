@@ -13,12 +13,14 @@ import { canPreview3D } from "@/lib/model-utils";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 
-type FileCategory = "RENDER" | "DRAWING" | "OTHER";
+type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "OTHER";
 
-const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "OTHER"];
+const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"];
 const CATEGORY_LABELS: Record<FileCategory, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
+  CAD_DRAWING: "CAD Drawings",
+  SUPPORTING: "Supporting Documents",
   OTHER: "Others",
 };
 
@@ -96,6 +98,8 @@ function groupByCategory(files: ProjectFile[]) {
   const grouped: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
     RENDER: [],
     DRAWING: [],
+    CAD_DRAWING: [],
+    SUPPORTING: [],
     OTHER: [],
   };
 
@@ -410,17 +414,6 @@ export default function ClientProjectDetailPage() {
 
   return (
     <div>
-      {/* Company branding header — only when both company and logo exist */}
-      {project.company && project.companyLogoPath && (
-        <div className="mb-6 flex items-center gap-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-sm">
-          <img
-            src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath)}`}
-            alt={project.company}
-            className="h-14 w-auto object-contain"
-          />
-        </div>
-      )}
-
       <PageHeader title={project.name} />
 
       {/* Status Timeline */}

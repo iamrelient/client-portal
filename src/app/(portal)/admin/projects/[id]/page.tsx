@@ -17,12 +17,14 @@ import { compressImage } from "@/lib/compress-image";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 
-type FileCategory = "RENDER" | "DRAWING" | "OTHER";
+type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "OTHER";
 
-const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "OTHER"];
+const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"];
 const CATEGORY_LABELS: Record<FileCategory, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
+  CAD_DRAWING: "CAD Drawings",
+  SUPPORTING: "Supporting Documents",
   OTHER: "Others",
 };
 
@@ -110,6 +112,8 @@ function groupByCategory(files: ProjectFile[]) {
   const grouped: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
     RENDER: [],
     DRAWING: [],
+    CAD_DRAWING: [],
+    SUPPORTING: [],
     OTHER: [],
   };
 
@@ -719,9 +723,11 @@ export default function AdminProjectDetailPage() {
                             onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
                             className="rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
                           >
-                            <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
-                            <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
-                            <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
+                            <option value="RENDER">Renders</option>
+                            <option value="DRAWING">Drawings</option>
+                            <option value="CAD_DRAWING">CAD Drawings</option>
+                            <option value="SUPPORTING">Supporting Docs</option>
+                            <option value="OTHER">Others</option>
                           </select>
                         </td>
                         <td className="px-6 py-4 text-slate-400">
@@ -1025,10 +1031,12 @@ export default function AdminProjectDetailPage() {
                   defaultValue=""
                   className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 >
-                  <option value="" disabled style={{ background: "#1a1d2e", color: "#94a3b8" }}>Choose category...</option>
-                  <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
-                  <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
-                  <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
+                  <option value="" disabled>Choose category...</option>
+                  <option value="RENDER">Renders</option>
+                  <option value="DRAWING">Drawings</option>
+                  <option value="CAD_DRAWING">CAD Drawings</option>
+                  <option value="SUPPORTING">Supporting Docs</option>
+                  <option value="OTHER">Others</option>
                 </select>
               </div>
             )}
@@ -1075,9 +1083,11 @@ export default function AdminProjectDetailPage() {
                         }
                         className="block w-full rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       >
-                        <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
-                        <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
-                        <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
+                        <option value="RENDER">Renders</option>
+                        <option value="DRAWING">Drawings</option>
+                        <option value="CAD_DRAWING">CAD Drawings</option>
+                        <option value="SUPPORTING">Supporting Docs</option>
+                        <option value="OTHER">Others</option>
                       </select>
                     </div>
                     <div>

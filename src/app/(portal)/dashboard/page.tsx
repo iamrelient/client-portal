@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { FolderOpen } from "lucide-react";
+import { Check, Copy, FolderOpen } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { CardSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -25,6 +25,8 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const [projects, setProjects] = useState<ProjectCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const isAdmin = session?.user?.role === "ADMIN";
 
   useEffect(() => {
     fetch("/api/projects")
@@ -70,41 +72,62 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
-              <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] hover:border-brand-500/30 hover:shadow-[0_0_20px_rgba(74,97,153,0.15)] transition-all duration-300">
-                <div className="aspect-video bg-white/[0.02]">
-                  {project.thumbnailPath ? (
-                    <BlurImage
-                      src={`/api/projects/${project.id}/thumbnail`}
-                      alt={project.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <ProjectThumbnail name={project.name} />
-                  )}
-                </div>
-                <div className="p-4">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-slate-100">{project.name}</h3>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        project.status === "complete"
-                          ? "bg-green-500/10 text-green-400"
-                          : "bg-brand-500/10 text-brand-400"
-                      }`}
-                    >
-                      {getStatusLabel(project.status)}
-                    </span>
+            <div key={project.id} className="relative">
+              <Link href={isAdmin ? `/admin/projects/${project.id}` : `/dashboard/projects/${project.id}`}>
+                <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] hover:border-brand-500/30 hover:shadow-[0_0_20px_rgba(74,97,153,0.15)] transition-all duration-300">
+                  <div className="aspect-video bg-white/[0.02]">
+                    {project.thumbnailPath ? (
+                      <BlurImage
+                        src={`/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`}
+                        alt={project.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <ProjectThumbnail name={project.name} />
+                    )}
                   </div>
-                  {project.company && (
-                    <p className="mt-0.5 text-sm text-slate-400">{project.company}</p>
-                  )}
-                  <p className="mt-1 text-sm text-slate-400">
-                    {project._count.files} file{project._count.files !== 1 ? "s" : ""}
-                  </p>
+                  <div className="p-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-slate-100">{project.name}</h3>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          project.status === "complete"
+                            ? "bg-green-500/10 text-green-400"
+                            : "bg-brand-500/10 text-brand-400"
+                        }`}
+                      >
+                        {getStatusLabel(project.status)}
+                      </span>
+                    </div>
+                    {project.company && (
+                      <p className="mt-0.5 text-sm text-slate-400">{project.company}</p>
+                    )}
+                    <p className="mt-1 text-sm text-slate-400">
+                      {project._count.files} file{project._count.files !== 1 ? "s" : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+              {isAdmin && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const url = `${window.location.origin}/dashboard/projects/${project.id}`;
+                    navigator.clipboard.writeText(url);
+                    setCopiedId(project.id);
+                    setTimeout(() => setCopiedId(null), 2000);
+                  }}
+                  className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white/70 hover:bg-black/80 hover:text-white backdrop-blur-sm transition-colors"
+                  title="Copy client link"
+                >
+                  {copiedId === project.id ? (
+                    <Check className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

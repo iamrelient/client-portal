@@ -9,6 +9,8 @@ import JSZip from "jszip";
 const CATEGORY_FOLDERS: Record<string, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
+  CAD_DRAWING: "CAD Drawings",
+  SUPPORTING: "Supporting Documents",
   OTHER: "Other",
 };
 

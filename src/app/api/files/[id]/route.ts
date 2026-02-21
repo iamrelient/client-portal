@@ -31,7 +31,7 @@ export async function PATCH(
       data.isCurrent = Boolean(body.isCurrent);
     }
 
-    if ("category" in body && ["RENDER", "DRAWING", "OTHER"].includes(body.category)) {
+    if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"].includes(body.category)) {
       data.category = body.category;
     }
 

@@ -204,12 +204,11 @@ export default function AdminProjectsPage() {
                 <th className="px-6 py-3 font-medium text-slate-400">Files</th>
                 <th className="px-6 py-3 font-medium text-slate-400">Access</th>
                 <th className="px-6 py-3 font-medium text-slate-400">Created</th>
-                <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
               {projects.map((project) => (
-                <tr key={project.id} className="hover:bg-white/[0.03] transition-colors">
+                <tr key={project.id} onClick={() => router.push(`/admin/projects/${project.id}`)} className="cursor-pointer hover:bg-white/[0.03] transition-colors">
                   <td className="px-6 py-4">
                     <p className="font-medium text-slate-100">{project.name}</p>
                   </td>
@@ -229,19 +228,11 @@ export default function AdminProjectsPage() {
                   <td className="px-6 py-4 text-slate-400">
                     {formatRelativeDate(project.createdAt)}
                   </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => router.push(`/admin/projects/${project.id}`)}
-                      className="text-sm font-medium text-brand-400 hover:text-brand-300"
-                    >
-                      Manage
-                    </button>
-                  </td>
                 </tr>
               ))}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     <EmptyState
                       icon={FolderOpen}
                       title="No projects yet"
