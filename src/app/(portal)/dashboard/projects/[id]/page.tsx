@@ -410,18 +410,14 @@ export default function ClientProjectDetailPage() {
 
   return (
     <div>
-      {/* Company branding header */}
-      {project.company && (
+      {/* Company branding header — only when both company and logo exist */}
+      {project.company && project.companyLogoPath && (
         <div className="mb-6 flex items-center gap-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-sm">
-          {project.companyLogoPath ? (
-            <img
-              src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath!)}`}
-              alt={project.company}
-              className="h-14 w-auto object-contain"
-            />
-          ) : (
-            <p className="text-lg font-semibold text-slate-100">{project.company}</p>
-          )}
+          <img
+            src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath)}`}
+            alt={project.company}
+            className="h-14 w-auto object-contain"
+          />
         </div>
       )}
 
