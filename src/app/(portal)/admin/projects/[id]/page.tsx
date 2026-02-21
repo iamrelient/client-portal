@@ -837,125 +837,6 @@ export default function AdminProjectDetailPage() {
         description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
       />
 
-      {/* Project Details */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <h2 className="mb-4 text-sm font-medium text-slate-100">Project Details</h2>
-        <form onSubmit={handleSave}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="edit-name" className="block text-sm font-medium text-slate-300">
-                Project name
-              </label>
-              <input
-                id="edit-name"
-                type="text"
-                required
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="edit-company" className="block text-sm font-medium text-slate-300">
-                Company name <span className="font-normal text-slate-400">(optional)</span>
-              </label>
-              <input
-                id="edit-company"
-                type="text"
-                value={editCompany}
-                onChange={(e) => setEditCompany(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Acme Corp"
-              />
-            </div>
-            <div>
-              <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-300">
-                Replace thumbnail <span className="font-normal text-slate-400">(optional)</span>
-              </label>
-              <input
-                id="edit-thumbnail"
-                name="thumbnail"
-                type="file"
-                accept="image/*"
-                className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-300">
-                Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
-              </label>
-              <textarea
-                id="edit-emails"
-                rows={2}
-                value={editEmails}
-                onChange={(e) => setEditEmails(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="client@example.com, @acmecorp.com"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            {project.thumbnailPath && (
-              <div>
-                <p className="mb-1 text-xs text-slate-400">Current thumbnail</p>
-                <div className="relative group inline-block">
-                  <img
-                    src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
-                    alt="Thumbnail"
-                    className="h-20 w-auto rounded-lg border border-white/[0.08] object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/projects/${projectId}`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ removeThumbnail: true }),
-                        });
-                        if (res.ok) {
-                          toast.success("Thumbnail removed");
-                          loadProject();
-                        } else {
-                          toast.error("Failed to remove thumbnail");
-                        }
-                      } catch {
-                        toast.error("Something went wrong");
-                      }
-                    }}
-                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
-                    title="Remove thumbnail"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Upload File */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <h2 className="mb-4 text-sm font-medium text-slate-100">Upload File</h2>
-        <DropZone
-          onFiles={handleFilesSelected}
-          uploading={uploading}
-          progress={uploadProgress}
-        />
-      </div>
-
       {/* Status Timeline */}
       <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
         <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
@@ -1185,6 +1066,125 @@ export default function AdminProjectDetailPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Project Details */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <h2 className="mb-4 text-sm font-medium text-slate-100">Project Details</h2>
+        <form onSubmit={handleSave}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="edit-name" className="block text-sm font-medium text-slate-300">
+                Project name
+              </label>
+              <input
+                id="edit-name"
+                type="text"
+                required
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-company" className="block text-sm font-medium text-slate-300">
+                Company name <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="edit-company"
+                type="text"
+                value={editCompany}
+                onChange={(e) => setEditCompany(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="Acme Corp"
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-300">
+                Replace thumbnail <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="edit-thumbnail"
+                name="thumbnail"
+                type="file"
+                accept="image/*"
+                className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-300">
+                Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
+              </label>
+              <textarea
+                id="edit-emails"
+                rows={2}
+                value={editEmails}
+                onChange={(e) => setEditEmails(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="client@example.com, @acmecorp.com"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            {project.thumbnailPath && (
+              <div>
+                <p className="mb-1 text-xs text-slate-400">Current thumbnail</p>
+                <div className="relative group inline-block">
+                  <img
+                    src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
+                    alt="Thumbnail"
+                    className="h-20 w-auto rounded-lg border border-white/[0.08] object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/projects/${projectId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ removeThumbnail: true }),
+                        });
+                        if (res.ok) {
+                          toast.success("Thumbnail removed");
+                          loadProject();
+                        } else {
+                          toast.error("Failed to remove thumbnail");
+                        }
+                      } catch {
+                        toast.error("Something went wrong");
+                      }
+                    }}
+                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
+                    title="Remove thumbnail"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Upload File */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+        <h2 className="mb-4 text-sm font-medium text-slate-100">Upload File</h2>
+        <DropZone
+          onFiles={handleFilesSelected}
+          uploading={uploading}
+          progress={uploadProgress}
+        />
       </div>
 
       {/* Danger Zone */}

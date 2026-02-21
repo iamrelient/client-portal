@@ -29,6 +29,11 @@ export async function GET() {
       createdAt: true,
       updatedAt: true,
       _count: { select: { files: true } },
+      files: {
+        select: { createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
     orderBy: { createdAt: "desc" },
   });

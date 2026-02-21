@@ -20,12 +20,36 @@ interface ProjectCard {
   thumbnailPath: string | null;
   createdAt: string;
   updatedAt: string;
+  lastFileAt: string | null;
   _count: { files: number };
 }
 
-function isRecentlyUpdated(updatedAt: string): boolean {
-  const diff = Date.now() - new Date(updatedAt).getTime();
+function isRecentlyUpdated(lastFileAt: string | null): boolean {
+  if (!lastFileAt) return false;
+  const diff = Date.now() - new Date(lastFileAt).getTime();
   return diff < 24 * 60 * 60 * 1000; // 24 hours
+}
+
+function copyProjectLink(
+  project: ProjectCard,
+  setCopiedId: (id: string | null) => void
+) {
+  const slug = project.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const url = `${window.location.origin}/p/${project.id}/${slug}`;
+
+  const html = `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;"><tr><td style="width:4px;background-color:#4a6199;" width="4"></td><td style="padding:12px 16px;background-color:#f8f9fa;border:1px solid #e2e5ea;border-left:none;"><p style="margin:0 0 4px 0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Ray Renders Portal</p><p style="margin:0 0 4px 0;font-size:14px;"><a href="${url}" style="color:#4a6199;text-decoration:none;font-weight:600;">${project.name}</a></p>${project.company ? `<p style="margin:0;font-size:12px;color:#6b7280;">${project.company}</p>` : ""}</td></tr></table>`;
+
+  const clipboardItem = new ClipboardItem({
+    "text/html": new Blob([html], { type: "text/html" }),
+    "text/plain": new Blob([url], { type: "text/plain" }),
+  });
+
+  navigator.clipboard.write([clipboardItem]);
+  setCopiedId(project.id);
+  setTimeout(() => setCopiedId(null), 2000);
 }
 
 export default function DashboardPage() {
@@ -39,7 +63,13 @@ export default function DashboardPage() {
     fetch("/api/projects")
       .then((res) => res.json())
       .then((data) => {
-        setProjects(data);
+        const mapped = (data as Array<Record<string, unknown>>).map((p) => ({
+          ...p,
+          lastFileAt:
+            (p.files as Array<{ createdAt: string }> | undefined)?.[0]
+              ?.createdAt ?? null,
+        }));
+        setProjects(mapped as unknown as ProjectCard[]);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -108,7 +138,7 @@ export default function DashboardPage() {
                         ) : (
                           <ProjectThumbnail name={project.name} />
                         )}
-                        {project.updatedAt && isRecentlyUpdated(project.updatedAt) && (
+                        {isRecentlyUpdated(project.lastFileAt) && (
                           <span className="absolute top-2 left-2 inline-flex items-center rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
                             Recently Updated
                           </span>
@@ -141,11 +171,7 @@ export default function DashboardPage() {
                     <button
                       onClick={(e) => {
                         e.preventDefault();
-                        const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-                        const url = `${window.location.origin}/p/${project.id}/${slug}`;
-                        navigator.clipboard.writeText(url);
-                        setCopiedId(project.id);
-                        setTimeout(() => setCopiedId(null), 2000);
+                        copyProjectLink(project, setCopiedId);
                       }}
                       className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white/70 hover:bg-black/80 hover:text-white backdrop-blur-sm transition-colors"
                       title="Copy client link"
@@ -200,11 +226,7 @@ export default function DashboardPage() {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-                              const url = `${window.location.origin}/p/${project.id}/${slug}`;
-                              navigator.clipboard.writeText(url);
-                              setCopiedId(project.id);
-                              setTimeout(() => setCopiedId(null), 2000);
+                              copyProjectLink(project, setCopiedId);
                             }}
                             className="flex-shrink-0 rounded-md p-1 text-slate-500 hover:bg-white/[0.06] hover:text-slate-300 transition-colors"
                             title="Copy client link"

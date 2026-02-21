@@ -29,7 +29,7 @@ export function ProjectThumbnail({
       {/* Project name centered */}
       <span
         className={`relative text-center font-bold leading-tight text-white/90 ${
-          compact ? "px-1 text-[7px]" : "px-4 text-lg"
+          compact ? "px-1 text-[7px]" : "px-4 text-2xl"
         }`}
       >
         {compact ? name.charAt(0).toUpperCase() : name}
