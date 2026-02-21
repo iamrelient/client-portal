@@ -28,7 +28,22 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(companies);
+  // Supplement counts with domain-based email matching
+  const enriched = await Promise.all(
+    companies.map(async (company) => {
+      const domainCount = await prisma.user.count({
+        where: { email: { endsWith: `@${company.domain}` } },
+      });
+      return {
+        ...company,
+        _count: {
+          users: Math.max(company._count.users, domainCount),
+        },
+      };
+    })
+  );
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(req: Request) {
@@ -89,6 +104,15 @@ export async function POST(req: Request) {
         domain: normalizedDomain,
         logoPath,
       },
+    });
+
+    // Backfill: link existing users whose email matches this domain
+    await prisma.user.updateMany({
+      where: {
+        email: { endsWith: `@${normalizedDomain}` },
+        companyId: null,
+      },
+      data: { companyId: company.id },
     });
 
     return NextResponse.json(

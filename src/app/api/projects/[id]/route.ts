@@ -60,7 +60,6 @@ export async function GET(
     status: project.status,
     thumbnailPath: project.thumbnailPath,
     company: project.company,
-    companyLogoPath: project.companyLogoPath,
     driveFolderId: project.driveFolderId,
     files: project.files,
     createdBy: project.createdBy,
@@ -110,13 +109,6 @@ export async function PATCH(
         jsonData.thumbnailPath = null;
       }
 
-      if (body.removeCompanyLogo) {
-        const driveConn = await isGoogleDriveConnected();
-        if (driveConn && project.companyLogoPath) {
-          try { await deleteFile(project.companyLogoPath); } catch { /* already gone */ }
-        }
-        jsonData.companyLogoPath = null;
-      }
 
       await prisma.project.update({ where: { id: params.id }, data: jsonData });
       return NextResponse.json({ message: "Project updated" });
@@ -128,7 +120,6 @@ export async function PATCH(
     const company = formData.get("company") as string | null;
     const status = formData.get("status") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
-    const companyLogo = formData.get("companyLogo") as globalThis.File | null;
 
     const data: Record<string, unknown> = {};
 
@@ -182,36 +173,6 @@ export async function PATCH(
           buffer
         );
         data.thumbnailPath = result.id;
-      }
-    }
-
-    if (companyLogo && companyLogo.size > 0) {
-      if (driveConnected && project.companyLogoPath) {
-        try {
-          await deleteFile(project.companyLogoPath);
-        } catch {
-          // Old logo may already be gone
-        }
-      }
-
-      if (driveConnected && project.driveFolderId) {
-        const bytes = await companyLogo.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
-        let assetsId: string;
-        try {
-          assetsId = await createFolder("_assets", project.driveFolderId);
-        } catch {
-          assetsId = project.driveFolderId;
-        }
-
-        const result = await uploadFileToFolder(
-          assetsId,
-          `logo_${companyLogo.name}`,
-          companyLogo.type || "image/jpeg",
-          buffer
-        );
-        data.companyLogoPath = result.id;
       }
     }
 

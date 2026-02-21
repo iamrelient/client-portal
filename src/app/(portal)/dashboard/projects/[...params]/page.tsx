@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Archive, Columns } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, FileX, Loader2, Archive, Columns } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FilePreviewModal } from "@/components/file-preview-modal";
@@ -267,12 +267,16 @@ export default function ClientProjectDetailPage() {
                 {items.map(({ latest, versionCount }) => {
                   const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
                   const fileName = latest.displayName || latest.originalName;
+                  const previewable = canPreview(latest.mimeType, latest.originalName);
 
                   return (
                     <>
                       <tr
                         key={latest.id}
+                        onClick={() => previewable && setPreviewFile(latest)}
                         className={`transition-colors ${
+                          previewable ? "cursor-pointer" : ""
+                        } ${
                           latest.isCurrent
                             ? "bg-green-500/[0.06] hover:bg-green-500/10"
                             : "hover:bg-white/[0.03]"
@@ -296,7 +300,7 @@ export default function ClientProjectDetailPage() {
                             {versionCount > 1 && (
                               <>
                                 <button
-                                  onClick={() => toggleVersionHistory(latest.id, latest.fileGroupId)}
+                                  onClick={(e) => { e.stopPropagation(); toggleVersionHistory(latest.id, latest.fileGroupId); }}
                                   className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-brand-600"
                                 >
                                   {expandedGroup === latest.id ? (
@@ -307,7 +311,7 @@ export default function ClientProjectDetailPage() {
                                   {versionCount} versions
                                 </button>
                                 <button
-                                  onClick={() => handleCompare(latest.id, latest.fileGroupId)}
+                                  onClick={(e) => { e.stopPropagation(); handleCompare(latest.id, latest.fileGroupId); }}
                                   className="inline-flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300"
                                 >
                                   <Columns className="h-3.5 w-3.5" />
@@ -328,24 +332,14 @@ export default function ClientProjectDetailPage() {
                           {formatRelativeDate(latest.createdAt)}
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            {canPreview(latest.mimeType, latest.originalName) && (
-                              <button
-                                onClick={() => setPreviewFile(latest)}
-                                className="inline-flex items-center gap-1 text-sm font-medium text-brand-400 hover:text-brand-300"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View
-                              </button>
-                            )}
-                            <a
-                              href={`/api/files/${latest.id}/download`}
-                              className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-100"
-                            >
-                              <Download className="h-4 w-4" />
-                              Download
-                            </a>
-                          </div>
+                          <a
+                            href={`/api/files/${latest.id}/download`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-100"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                          </a>
                         </td>
                       </tr>
                       {/* Version history expansion */}
@@ -376,9 +370,8 @@ export default function ClientProjectDetailPage() {
                                     {canPreview(v.mimeType, v.originalName || latest.originalName) && (
                                       <button
                                         onClick={() => setPreviewFile(v as ProjectFile)}
-                                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
+                                        className="text-xs font-medium text-brand-400 hover:text-brand-300"
                                       >
-                                        <Eye className="h-3.5 w-3.5" />
                                         View
                                       </button>
                                     )}

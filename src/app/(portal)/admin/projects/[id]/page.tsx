@@ -239,10 +239,6 @@ export default function AdminProjectDetailPage() {
     if (thumbnail && thumbnail.size > 0) {
       formData.set("thumbnail", await compressImage(thumbnail));
     }
-    const companyLogo = formData.get("companyLogo") as File | null;
-    if (companyLogo && companyLogo.size > 0) {
-      formData.set("companyLogo", await compressImage(companyLogo));
-    }
 
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -884,18 +880,6 @@ export default function AdminProjectDetailPage() {
                 className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
               />
             </div>
-            <div>
-              <label htmlFor="edit-companyLogo" className="block text-sm font-medium text-slate-300">
-                Company logo <span className="font-normal text-slate-400">(optional)</span>
-              </label>
-              <input
-                id="edit-companyLogo"
-                name="companyLogo"
-                type="file"
-                accept="image/*"
-                className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
-              />
-            </div>
             <div className="sm:col-span-2">
               <label htmlFor="edit-emails" className="block text-sm font-medium text-slate-300">
                 Authorized access <span className="font-normal text-slate-400">(emails or @domain.com, comma-separated)</span>
@@ -946,16 +930,6 @@ export default function AdminProjectDetailPage() {
                     <X className="h-3 w-3" />
                   </button>
                 </div>
-              </div>
-            )}
-            {project.companyLogoPath && (
-              <div>
-                <p className="mb-1 text-xs text-slate-400">Current company logo</p>
-                <img
-                  src={`/api/projects/${projectId}/company-logo?v=${encodeURIComponent(project.companyLogoPath!)}`}
-                  alt="Company logo"
-                  className="h-20 w-auto rounded-lg border border-white/[0.08] object-contain bg-white p-1"
-                />
               </div>
             )}
           </div>

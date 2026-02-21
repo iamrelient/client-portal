@@ -27,6 +27,7 @@ export async function GET() {
       companyLogoPath: true,
       authorizedEmails: true,
       createdAt: true,
+      updatedAt: true,
       _count: { select: { files: true } },
     },
     orderBy: { createdAt: "desc" },
