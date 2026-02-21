@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
 
 interface Props {
-  params: { id: string };
+  params: { params: string[] };
   children: React.ReactNode;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const projectId = params.params[0];
   const project = await prisma.project.findUnique({
-    where: { id: params.id },
+    where: { id: projectId },
     select: { name: true, company: true, thumbnailPath: true, status: true },
   });
 
@@ -38,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         ? {
             images: [
               {
-                url: `${baseUrl}/api/projects/${params.id}/thumbnail`,
+                url: `${baseUrl}/api/projects/${projectId}/thumbnail`,
                 width: 1200,
                 height: 400,
                 alt: project.name,

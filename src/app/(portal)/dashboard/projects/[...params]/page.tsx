@@ -113,7 +113,7 @@ function groupByCategory(files: ProjectFile[]) {
 
 export default function ClientProjectDetailPage() {
   const params = useParams();
-  const projectId = params.id as string;
+  const projectId = (params.params as string[])[0];
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);

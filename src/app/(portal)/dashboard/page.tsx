@@ -112,7 +112,8 @@ export default function DashboardPage() {
                 <button
                   onClick={(e) => {
                     e.preventDefault();
-                    const url = `${window.location.origin}/dashboard/projects/${project.id}`;
+                    const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+                    const url = `${window.location.origin}/dashboard/projects/${project.id}/${slug}`;
                     navigator.clipboard.writeText(url);
                     setCopiedId(project.id);
                     setTimeout(() => setCopiedId(null), 2000);

@@ -915,11 +915,37 @@ export default function AdminProjectDetailPage() {
             {project.thumbnailPath && (
               <div>
                 <p className="mb-1 text-xs text-slate-400">Current thumbnail</p>
-                <img
-                  src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
-                  alt="Thumbnail"
-                  className="h-20 w-auto rounded-lg border border-white/[0.08] object-cover"
-                />
+                <div className="relative group inline-block">
+                  <img
+                    src={`/api/projects/${projectId}/thumbnail?v=${encodeURIComponent(project.thumbnailPath!)}`}
+                    alt="Thumbnail"
+                    className="h-20 w-auto rounded-lg border border-white/[0.08] object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/projects/${projectId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ removeThumbnail: true }),
+                        });
+                        if (res.ok) {
+                          toast.success("Thumbnail removed");
+                          loadProject();
+                        } else {
+                          toast.error("Failed to remove thumbnail");
+                        }
+                      } catch {
+                        toast.error("Something went wrong");
+                      }
+                    }}
+                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors"
+                    title="Remove thumbnail"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             )}
             {project.companyLogoPath && (

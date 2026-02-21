@@ -96,6 +96,32 @@ export async function PATCH(
       );
     }
 
+    // Handle JSON requests (e.g. removeThumbnail)
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      const jsonData: Record<string, unknown> = {};
+
+      if (body.removeThumbnail) {
+        const driveConn = await isGoogleDriveConnected();
+        if (driveConn && project.thumbnailPath) {
+          try { await deleteFile(project.thumbnailPath); } catch { /* already gone */ }
+        }
+        jsonData.thumbnailPath = null;
+      }
+
+      if (body.removeCompanyLogo) {
+        const driveConn = await isGoogleDriveConnected();
+        if (driveConn && project.companyLogoPath) {
+          try { await deleteFile(project.companyLogoPath); } catch { /* already gone */ }
+        }
+        jsonData.companyLogoPath = null;
+      }
+
+      await prisma.project.update({ where: { id: params.id }, data: jsonData });
+      return NextResponse.json({ message: "Project updated" });
+    }
+
     const formData = await req.formData();
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
