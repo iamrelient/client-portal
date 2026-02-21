@@ -18,6 +18,17 @@ enum FileCategory {
   OTHER
 }
 
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  domain    String   @unique
+  logoPath  String?
+  createdAt DateTime @default(now())
+  users     User[]
+
+  @@map("companies")
+}
+
 model User {
   id             String     @id @default(cuid())
   name           String
@@ -25,6 +36,8 @@ model User {
   hashedPassword String
   role           Role       @default(USER)
   company        String?
+  companyId      String?
+  companyRef     Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
   phone          String?
   avatarUrl      String?
   isActive       Boolean    @default(true)
@@ -37,6 +50,7 @@ model User {
   projects       Project[]
   fileViews      FileView[]
 
+  @@index([companyId])
   @@map("users")
 }
 

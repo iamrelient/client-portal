@@ -14,7 +14,6 @@ import { formatRelativeDate } from "@/lib/format-date";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { canPreview3D } from "@/lib/model-utils";
 import { compressImage } from "@/lib/compress-image";
-import { PROJECT_STATUSES } from "@/lib/project-status";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 
@@ -197,6 +196,29 @@ export default function AdminProjectDetailPage() {
         .catch(() => {});
     }
   }, [project?.driveFolderId]);
+
+  async function handleStatusChange(newStatus: string) {
+    setEditStatus(newStatus);
+    try {
+      const fd = new FormData();
+      fd.set("name", editName);
+      fd.set("emails", editEmails);
+      fd.set("company", editCompany);
+      fd.set("status", newStatus);
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        body: fd,
+      });
+      if (res.ok) {
+        toast.success("Status updated");
+        loadProject();
+      } else {
+        toast.error("Failed to update status");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+  }
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -695,11 +717,11 @@ export default function AdminProjectDetailPage() {
                             value={latest.category}
                             disabled={updatingCategory === latest.id}
                             onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
-                            className="rounded-md border border-white/[0.1] bg-white/[0.05] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                            className="rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
                           >
-                            <option value="RENDER">Renders</option>
-                            <option value="DRAWING">Drawings</option>
-                            <option value="OTHER">Others</option>
+                            <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
+                            <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
+                            <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
                           </select>
                         </td>
                         <td className="px-6 py-4 text-slate-400">
@@ -845,23 +867,6 @@ export default function AdminProjectDetailPage() {
               />
             </div>
             <div>
-              <label htmlFor="edit-status" className="block text-sm font-medium text-slate-300">
-                Project status
-              </label>
-              <select
-                id="edit-status"
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                {PROJECT_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-300">
                 Replace thumbnail <span className="font-normal text-slate-400">(optional)</span>
               </label>
@@ -947,7 +952,7 @@ export default function AdminProjectDetailPage() {
 
       {/* Status Timeline */}
       <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <StatusTimeline status={project.status} />
+        <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
       </div>
 
       {/* Download All */}
@@ -1018,12 +1023,12 @@ export default function AdminProjectDetailPage() {
                     e.target.value = "";
                   }}
                   defaultValue=""
-                  className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 >
-                  <option value="" disabled>Choose category...</option>
-                  <option value="RENDER">Renders</option>
-                  <option value="DRAWING">Drawings</option>
-                  <option value="OTHER">Others</option>
+                  <option value="" disabled style={{ background: "#1a1d2e", color: "#94a3b8" }}>Choose category...</option>
+                  <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
+                  <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
+                  <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
                 </select>
               </div>
             )}
@@ -1068,11 +1073,11 @@ export default function AdminProjectDetailPage() {
                               : null
                           )
                         }
-                        className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        className="block w-full rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       >
-                        <option value="RENDER">Renders</option>
-                        <option value="DRAWING">Drawings</option>
-                        <option value="OTHER">Others</option>
+                        <option value="RENDER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Renders</option>
+                        <option value="DRAWING" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Drawings</option>
+                        <option value="OTHER" style={{ background: "#1a1d2e", color: "#e2e8f0" }}>Others</option>
                       </select>
                     </div>
                     <div>

@@ -66,7 +66,7 @@ export default function ClientProjectsPage() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
             <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
-              <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] transition-shadow">
+              <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] hover:border-brand-500/30 hover:shadow-[0_0_20px_rgba(74,97,153,0.15)] transition-all duration-300">
                 <div className="aspect-video bg-white/[0.02]">
                   {project.thumbnailPath ? (
                     <BlurImage

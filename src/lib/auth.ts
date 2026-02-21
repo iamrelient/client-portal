@@ -24,6 +24,7 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
+          include: { companyRef: true },
         });
 
         if (!user || !user.isActive) {
@@ -39,17 +40,57 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        });
+        // Auto-link user to company by email domain if not already linked
+        let companyId = user.companyId;
+        let companyLogoId = user.companyRef?.logoPath ?? null;
+        let companyName = user.company;
+
+        if (!companyId) {
+          const domain = credentials.email.split("@")[1]?.toLowerCase();
+          if (domain) {
+            const company = await prisma.company.findUnique({
+              where: { domain },
+            });
+            if (company) {
+              companyId = company.id;
+              companyLogoId = company.logoPath;
+              companyName = company.name;
+              // Link user to company
+              await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                  companyId: company.id,
+                  company: company.name,
+                  lastLoginAt: new Date(),
+                },
+              });
+            } else {
+              await prisma.user.update({
+                where: { id: user.id },
+                data: { lastLoginAt: new Date() },
+              });
+            }
+          }
+        } else {
+          // Already linked — just update lastLoginAt and sync company name
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              lastLoginAt: new Date(),
+              company: user.companyRef?.name ?? user.company,
+            },
+          });
+          companyName = user.companyRef?.name ?? user.company;
+        }
 
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.role,
-          company: user.company,
+          company: companyName,
+          companyId,
+          companyLogoId,
           phone: user.phone,
         };
       },
@@ -61,6 +102,8 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.role = (user as { role: string }).role;
         token.company = (user as { company?: string | null }).company ?? null;
+        token.companyId = (user as { companyId?: string | null }).companyId ?? null;
+        token.companyLogoId = (user as { companyLogoId?: string | null }).companyLogoId ?? null;
         token.phone = (user as { phone?: string | null }).phone ?? null;
       }
       return token;
@@ -70,6 +113,8 @@ export const authOptions: NextAuthOptions = {
         (session.user as { id: string }).id = token.id as string;
         (session.user as { role: string }).role = token.role as string;
         (session.user as { company?: string | null }).company = token.company ?? null;
+        (session.user as { companyId?: string | null }).companyId = token.companyId ?? null;
+        (session.user as { companyLogoId?: string | null }).companyLogoId = token.companyLogoId ?? null;
         (session.user as { phone?: string | null }).phone = token.phone ?? null;
       }
       return session;

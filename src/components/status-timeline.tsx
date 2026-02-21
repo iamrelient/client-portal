@@ -4,10 +4,12 @@ import { PROJECT_STATUSES, getStatusIndex } from "@/lib/project-status";
 
 interface StatusTimelineProps {
   status: string;
+  onStatusChange?: (status: string) => void;
 }
 
-export function StatusTimeline({ status }: StatusTimelineProps) {
+export function StatusTimeline({ status, onStatusChange }: StatusTimelineProps) {
   const currentIndex = getStatusIndex(status);
+  const interactive = !!onStatusChange;
 
   return (
     <div className="flex items-center gap-0 overflow-x-auto py-2">
@@ -28,7 +30,14 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
             )}
 
             {/* Step circle + label */}
-            <div className="flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              disabled={!interactive}
+              onClick={() => onStatusChange?.(step.value)}
+              className={`flex flex-col items-center gap-1.5 ${
+                interactive ? "cursor-pointer group" : "cursor-default"
+              }`}
+            >
               <div
                 className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all ${
                   isComplete
@@ -38,7 +47,7 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
                       : isCompleted
                         ? "border-brand-500 bg-brand-500 text-white"
                         : "border-white/[0.15] bg-white/[0.03]"
-                }`}
+                } ${interactive && !isCurrent ? "group-hover:border-brand-400 group-hover:shadow-[0_0_10px_rgba(74,97,153,0.3)]" : ""}`}
               >
                 {isCompleted || isComplete ? (
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -53,7 +62,7 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
                 )}
               </div>
               <span
-                className={`whitespace-nowrap text-xs font-medium ${
+                className={`whitespace-nowrap text-xs font-medium transition-colors ${
                   isComplete
                     ? "text-green-400"
                     : isCurrent
@@ -61,11 +70,11 @@ export function StatusTimeline({ status }: StatusTimelineProps) {
                       : isCompleted
                         ? "text-slate-300"
                         : "text-slate-500"
-                }`}
+                } ${interactive && !isCurrent ? "group-hover:text-brand-300" : ""}`}
               >
                 {step.label}
               </span>
-            </div>
+            </button>
           </div>
         );
       })}

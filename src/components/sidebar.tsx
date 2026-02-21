@@ -14,6 +14,7 @@ import {
   X,
   FileText,
   FolderOpen,
+  Building2,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,7 @@ const clientLinks = [
 const adminLinks = [
   { href: "/admin", label: "Overview", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/companies", label: "Companies", icon: Building2 },
   { href: "/admin/projects", label: "Projects", icon: FolderOpen },
   { href: "/admin/files", label: "Files", icon: FileText },
 ];
@@ -99,6 +101,15 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-brand-700 p-4">
+        {session?.user?.companyLogoId && session?.user?.companyId && (
+          <div className="mb-3 flex justify-center px-2">
+            <img
+              src={`/api/companies/${session.user.companyId}/logo`}
+              alt="Company logo"
+              className="h-10 w-auto max-w-[140px] rounded object-contain"
+            />
+          </div>
+        )}
         <div className="mb-3 px-2">
           <p className="text-sm font-medium text-white truncate">
             {session?.user?.name}
