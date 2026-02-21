@@ -40,7 +40,20 @@ function copyProjectLink(
     .replace(/(^-|-$)/g, "");
   const url = `${window.location.origin}/p/${project.id}/${slug}`;
 
-  const html = `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;"><tr><td style="width:4px;background-color:#4a6199;" width="4"></td><td style="padding:12px 16px;background-color:#f8f9fa;border:1px solid #e2e5ea;border-left:none;"><p style="margin:0 0 4px 0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Ray Renders Portal</p><p style="margin:0 0 4px 0;font-size:14px;"><a href="${url}" style="color:#4a6199;text-decoration:none;font-weight:600;">${project.name}</a></p>${project.company ? `<p style="margin:0;font-size:12px;color:#6b7280;">${project.company}</p>` : ""}</td></tr></table>`;
+  const thumbUrl = project.thumbnailPath
+    ? `${window.location.origin}/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`
+    : null;
+
+  const thumbCell = thumbUrl
+    ? `<td width="40" style="width:40px;padding:0;vertical-align:middle;"><img src="${thumbUrl}" width="40" height="40" style="display:block;width:40px;height:40px;object-fit:cover;border-radius:4px;" /></td>`
+    : `<td width="40" style="width:40px;padding:0;vertical-align:middle;"><div style="width:40px;height:40px;background:linear-gradient(135deg,#1e3a5f,#2d6a9f);border-radius:4px;text-align:center;line-height:40px;color:#fff;font-weight:700;font-size:16px;font-family:Arial,sans-serif;">${project.name.charAt(0).toUpperCase()}</div></td>`;
+
+  const textParts = [
+    `<a href="${url}" style="color:#1e3a5f;text-decoration:none;font-weight:600;font-size:13px;line-height:1.2;">${project.name}</a>`,
+    project.company ? `<span style="font-size:11px;color:#6b7280;">${project.company}</span>` : null,
+  ].filter(Boolean).join(`<br/>`);
+
+  const html = `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;"><tr>${thumbCell}<td style="padding:0 0 0 10px;vertical-align:middle;">${textParts}</td></tr></table>`;
 
   const clipboardItem = new ClipboardItem({
     "text/html": new Blob([html], { type: "text/html" }),
