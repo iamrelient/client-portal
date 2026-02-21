@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { CardSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ProjectThumbnail } from "@/components/project-thumbnail";
-import { getStatusLabel } from "@/lib/project-status";
+import { getStatusLabel, getStatusColorClass } from "@/lib/project-status";
 import { BlurImage } from "@/components/blur-image";
 
 interface ProjectCard {
@@ -90,11 +90,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-100">{project.name}</h3>
                       <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          project.status === "complete"
-                            ? "bg-green-500/10 text-green-400"
-                            : "bg-brand-500/10 text-brand-400"
-                        }`}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColorClass(project.status)}`}
                       >
                         {getStatusLabel(project.status)}
                       </span>
