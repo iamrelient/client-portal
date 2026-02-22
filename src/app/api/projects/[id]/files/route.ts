@@ -54,9 +54,9 @@ export async function POST(
       buffer
     );
 
-    // Version detection: check for existing files with same name in this project
+    // Version detection: check for existing files with same name in this project (case-insensitive)
     const existingFiles = await prisma.file.findMany({
-      where: { projectId: params.id, originalName: file.name },
+      where: { projectId: params.id, originalName: { equals: file.name, mode: "insensitive" } },
       orderBy: { version: "desc" },
     });
 

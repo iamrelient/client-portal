@@ -40,8 +40,16 @@ export async function POST(
 
     if (!driveFileId && project.driveFolderId) {
       const driveFiles = await listFilesInFolder(project.driveFolderId);
-      // Find the most recently uploaded file with this name
-      const match = driveFiles.find((f) => f.name === fileName);
+      // Get existing DB driveFileIds so we can prefer the NEW file (not already in DB)
+      const existingDriveIds = new Set(
+        (await prisma.file.findMany({
+          where: { projectId: params.id, driveFileId: { not: null } },
+          select: { driveFileId: true },
+        })).map((f) => f.driveFileId)
+      );
+      const nameMatches = driveFiles.filter((f) => f.name === fileName);
+      // Prefer a Drive file that isn't already registered in DB (i.e. the just-uploaded one)
+      const match = nameMatches.find((f) => !existingDriveIds.has(f.id)) || nameMatches[0];
       if (match) {
         driveFileId = match.id;
         resolvedSize = resolvedSize || Number(match.size) || 0;
@@ -64,7 +72,7 @@ export async function POST(
       });
     } else {
       existingFiles = await prisma.file.findMany({
-        where: { projectId: params.id, originalName: fileName },
+        where: { projectId: params.id, originalName: { equals: fileName, mode: "insensitive" } },
         orderBy: { version: "desc" },
       });
     }

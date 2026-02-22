@@ -61,9 +61,9 @@ export async function POST(
     // NEW FILES: in Drive but not in DB
     for (const driveFile of driveFiles) {
       if (!dbDriveIdMap.has(driveFile.id)) {
-        // Version detection
+        // Version detection (case-insensitive to handle name variations)
         const existingFiles = await prisma.file.findMany({
-          where: { projectId: params.id, originalName: driveFile.name },
+          where: { projectId: params.id, originalName: { equals: driveFile.name, mode: "insensitive" } },
           orderBy: { version: "desc" },
         });
 
