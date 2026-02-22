@@ -642,13 +642,20 @@ export default function AdminProjectDetailPage() {
                     <>
                       <tr
                         key={latest.id}
-                        className={`transition-colors ${
+                        className={`transition-colors cursor-pointer ${
                           latest.isCurrent
                             ? "bg-green-500/[0.06] hover:bg-green-500/10"
                             : isDragOver
                               ? "bg-brand-500/10 ring-2 ring-inset ring-brand-400"
                               : "hover:bg-white/[0.03]"
                         }`}
+                        onClick={(e) => {
+                          const tag = (e.target as HTMLElement).closest("input, select, button, a");
+                          if (tag) return;
+                          if (canPreview(latest.mimeType, latest.originalName)) {
+                            setPreviewFile(latest);
+                          }
+                        }}
                         onDragOver={(e) => handleDragOver(e, latest.id)}
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDropOnFile(e, latest)}
@@ -731,15 +738,6 @@ export default function AdminProjectDetailPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            {canPreview(latest.mimeType, latest.originalName) && (
-                              <button
-                                onClick={() => setPreviewFile(latest)}
-                                className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
-                              >
-                                <Eye className="h-4 w-4" />
-                                View
-                              </button>
-                            )}
                             <button
                               onClick={() => setDeleteFileTarget(latest.id)}
                               disabled={deleting === latest.id}
