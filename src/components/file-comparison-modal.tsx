@@ -102,10 +102,10 @@ export function FileComparisonModal({ versions, onClose }: FileComparisonModalPr
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setActivePanel(panel)}
-        className="rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-1.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
       >
         {sorted.map((v) => (
-          <option key={v.id} value={v.id}>
+          <option key={v.id} value={v.id} className="bg-[#1a1d2e] text-slate-100">
             v{v.version} — {v.originalName}
           </option>
         ))}
