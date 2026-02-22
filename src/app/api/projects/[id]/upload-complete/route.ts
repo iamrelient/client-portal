@@ -66,10 +66,18 @@ export async function POST(
     // Version detection: use targetFileGroupId (drag-to-iterate) or fall back to name matching
     let existingFiles;
     if (targetFileGroupId) {
+      // First try matching by fileGroupId
       existingFiles = await prisma.file.findMany({
         where: { fileGroupId: targetFileGroupId },
         orderBy: { version: "desc" },
       });
+      // If no group found, the targetFileGroupId may be a file ID (first version with no group yet)
+      if (existingFiles.length === 0) {
+        const targetFile = await prisma.file.findUnique({ where: { id: targetFileGroupId } });
+        if (targetFile) {
+          existingFiles = [targetFile];
+        }
+      }
     } else {
       existingFiles = await prisma.file.findMany({
         where: { projectId: params.id, originalName: { equals: fileName, mode: "insensitive" } },
