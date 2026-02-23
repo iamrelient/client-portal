@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-import { Download, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { Download, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import { TransformWrapper, TransformComponent, useControls } from "react-zoom-pan-pinch";
 import { canPreview3D, get3DFormat } from "@/lib/model-utils";
 import { ModelViewer } from "@/components/model-viewer";
 
@@ -19,8 +20,26 @@ interface FilePreviewModalProps {
   onNavigate?: (file: PreviewFile) => void;
 }
 
+function ZoomControls() {
+  const { zoomIn, zoomOut, resetTransform } = useControls();
+  return (
+    <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/50 px-2 py-1 backdrop-blur-sm">
+      <button onClick={() => zoomOut()} className="rounded-full p-1.5 text-white/70 hover:text-white transition-colors">
+        <ZoomOut className="h-4 w-4" />
+      </button>
+      <button onClick={() => resetTransform()} className="rounded-full px-2 py-1 text-xs text-white/70 hover:text-white transition-colors">
+        Reset
+      </button>
+      <button onClick={() => zoomIn()} className="rounded-full p-1.5 text-white/70 hover:text-white transition-colors">
+        <ZoomIn className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePreviewModalProps) {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const currentIndex = files?.findIndex((f) => f.id === file.id) ?? -1;
   const hasPrev = files && currentIndex > 0;
@@ -57,16 +76,16 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
     };
   }, []);
 
-  // Touch gesture handlers
+  // Touch gesture handlers — only navigate when not zoomed in
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && !isZoomed) {
       touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
-  }, []);
+  }, [isZoomed]);
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      if (!touchStart.current || e.changedTouches.length !== 1) return;
+      if (!touchStart.current || e.changedTouches.length !== 1 || isZoomed) return;
       const dx = e.changedTouches[0].clientX - touchStart.current.x;
       const dy = e.changedTouches[0].clientY - touchStart.current.y;
       touchStart.current = null;
@@ -77,13 +96,14 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
         else goToNext();
       }
     },
-    [goToPrev, goToNext]
+    [goToPrev, goToNext, isZoomed]
   );
 
   const downloadUrl = `/api/files/${file.id}/download`;
   const inlineUrl = `${downloadUrl}?inline=true`;
   const is3D = canPreview3D(file.mimeType, file.originalName);
   const isPdf = file.mimeType === "application/pdf";
+  const isImage = file.mimeType.startsWith("image/");
 
   return (
     <div
@@ -127,7 +147,7 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
         </div>
 
         {/* Content */}
-        <div className="relative flex flex-1 flex-col overflow-hidden bg-black/30 p-2 sm:p-4" style={{ touchAction: "pinch-zoom" }}>
+        <div className="relative flex flex-1 flex-col overflow-hidden bg-black/30 p-2 sm:p-4">
           {is3D ? (
             <div className="min-h-0 flex-1">
               <ModelViewer
@@ -140,8 +160,33 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
               src={inlineUrl}
               className="min-h-0 flex-1 w-full rounded-lg border border-white/[0.08]"
             />
+          ) : isImage ? (
+            <TransformWrapper
+              key={file.id}
+              minScale={1}
+              maxScale={8}
+              doubleClick={{ mode: "zoomIn", step: 2 }}
+              pinch={{ step: 5 }}
+              wheel={{ step: 0.1 }}
+              onTransformed={(_ref, state) => {
+                setIsZoomed(state.scale > 1.05);
+              }}
+            >
+              <ZoomControls />
+              <TransformComponent
+                wrapperClass="!flex-1 !min-h-0 !w-full"
+                contentClass="!flex !items-center !justify-center !min-h-full !w-full"
+              >
+                <img
+                  src={inlineUrl}
+                  alt={file.originalName}
+                  className="max-h-full max-w-full object-contain"
+                  draggable={false}
+                />
+              </TransformComponent>
+            </TransformWrapper>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto" style={{ touchAction: "pinch-zoom" }}>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto">
               <img
                 src={inlineUrl}
                 alt={file.originalName}

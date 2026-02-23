@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { X, GripVertical } from "lucide-react";
+import { X, GripVertical, ZoomIn, ZoomOut } from "lucide-react";
+import { TransformWrapper, TransformComponent, useControls } from "react-zoom-pan-pinch";
 import { canPreview3D, get3DFormat } from "@/lib/model-utils";
 import { ModelViewer } from "@/components/model-viewer";
 
@@ -113,6 +114,23 @@ export function FileComparisonModal({ versions, onClose }: FileComparisonModalPr
     );
   }
 
+  function ComparisonZoomControls() {
+    const { zoomIn, zoomOut, resetTransform } = useControls();
+    return (
+      <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/50 px-1.5 py-0.5 backdrop-blur-sm">
+        <button onClick={() => zoomOut()} className="rounded-full p-1 text-white/70 hover:text-white transition-colors">
+          <ZoomOut className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={() => resetTransform()} className="rounded-full px-1.5 py-0.5 text-[10px] text-white/70 hover:text-white transition-colors">
+          Reset
+        </button>
+        <button onClick={() => zoomIn()} className="rounded-full p-1 text-white/70 hover:text-white transition-colors">
+          <ZoomIn className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
   function renderContent(file: FileVersion) {
     const url = `/api/files/${file.id}/download?inline=true`;
 
@@ -131,9 +149,22 @@ export function FileComparisonModal({ versions, onClose }: FileComparisonModalPr
     }
 
     return (
-      <div className="flex h-full w-full items-center justify-center overflow-auto">
-        <img src={url} alt={file.originalName} className="max-h-full max-w-full object-contain" />
-      </div>
+      <TransformWrapper
+        key={file.id}
+        minScale={1}
+        maxScale={8}
+        doubleClick={{ mode: "zoomIn", step: 2 }}
+        pinch={{ step: 5 }}
+        wheel={{ step: 0.1 }}
+      >
+        <ComparisonZoomControls />
+        <TransformComponent
+          wrapperClass="!h-full !w-full"
+          contentClass="!flex !items-center !justify-center !h-full !w-full"
+        >
+          <img src={url} alt={file.originalName} className="max-h-full max-w-full object-contain" draggable={false} />
+        </TransformComponent>
+      </TransformWrapper>
     );
   }
 
