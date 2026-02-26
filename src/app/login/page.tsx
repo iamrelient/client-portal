@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
@@ -19,10 +18,12 @@ function RegisteredBanner() {
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -33,21 +34,114 @@ export default function LoginPage() {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, rememberMe }),
+      });
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      setLoading(false);
-    } else {
-      router.push("/dashboard");
+      if (!res.ok) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      const callbackUrl = searchParams.get("callbackUrl");
+      const redirect =
+        callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
+      router.push(redirect);
       router.refresh();
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setLoading(false);
     }
   }
 
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 backdrop-blur-xl"
+    >
+      <Suspense>
+        <RegisteredBanner />
+      </Suspense>
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-slate-300"
+          >
+            Email address
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-slate-300"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            placeholder="Enter your password"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center">
+        <input
+          id="rememberMe"
+          type="checkbox"
+          checked={rememberMe}
+          onChange={(e) => setRememberMe(e.target.checked)}
+          className="h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-600 focus:ring-brand-500 focus:ring-offset-0"
+        />
+        <label
+          htmlFor="rememberMe"
+          className="ml-2 text-sm text-slate-400"
+        >
+          Remember me
+        </label>
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+      >
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          "Sign in"
+        )}
+      </button>
+    </form>
+  );
+}
+
+export default function LoginPage() {
   return (
     <div className="flex min-h-screen">
       {/* Left brand panel — hidden on mobile */}
@@ -94,69 +188,9 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 backdrop-blur-xl"
-          >
-            <Suspense>
-              <RegisteredBanner />
-            </Suspense>
-            {error && (
-              <div className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-slate-300"
-                >
-                  Email address
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="you@example.com"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-slate-300"
-                >
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="Enter your password"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-6 flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-            >
-              {loading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                "Sign in"
-              )}
-            </button>
-          </form>
+          <Suspense>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
     </div>

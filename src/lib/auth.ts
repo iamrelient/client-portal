@@ -3,6 +3,91 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+export interface ValidatedUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  company: string | null;
+  companyId: string | null;
+  companyLogoId: string | null;
+  phone: string | null;
+}
+
+export async function validateCredentials(
+  email: string,
+  password: string
+): Promise<ValidatedUser> {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { companyRef: true },
+  });
+
+  if (!user || !user.isActive) {
+    throw new Error("Invalid email or password");
+  }
+
+  const isPasswordValid = await compare(password, user.hashedPassword);
+
+  if (!isPasswordValid) {
+    throw new Error("Invalid email or password");
+  }
+
+  // Auto-link user to company by email domain if not already linked
+  let companyId = user.companyId;
+  let companyLogoId = user.companyRef?.logoPath ?? null;
+  let companyName = user.company;
+
+  if (!companyId) {
+    const domain = email.split("@")[1]?.toLowerCase();
+    if (domain) {
+      const company = await prisma.company.findUnique({
+        where: { domain },
+      });
+      if (company) {
+        companyId = company.id;
+        companyLogoId = company.logoPath;
+        companyName = company.name;
+        // Link user to company
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            companyId: company.id,
+            company: company.name,
+            lastLoginAt: new Date(),
+          },
+        });
+      } else {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        });
+      }
+    }
+  } else {
+    // Already linked — just update lastLoginAt and sync company name
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        lastLoginAt: new Date(),
+        company: user.companyRef?.name ?? user.company,
+      },
+    });
+    companyName = user.companyRef?.name ?? user.company;
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    company: companyName,
+    companyId,
+    companyLogoId,
+    phone: user.phone,
+  };
+}
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -22,77 +107,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-          include: { companyRef: true },
-        });
-
-        if (!user || !user.isActive) {
-          throw new Error("Invalid email or password");
-        }
-
-        const isPasswordValid = await compare(
-          credentials.password,
-          user.hashedPassword
-        );
-
-        if (!isPasswordValid) {
-          throw new Error("Invalid email or password");
-        }
-
-        // Auto-link user to company by email domain if not already linked
-        let companyId = user.companyId;
-        let companyLogoId = user.companyRef?.logoPath ?? null;
-        let companyName = user.company;
-
-        if (!companyId) {
-          const domain = credentials.email.split("@")[1]?.toLowerCase();
-          if (domain) {
-            const company = await prisma.company.findUnique({
-              where: { domain },
-            });
-            if (company) {
-              companyId = company.id;
-              companyLogoId = company.logoPath;
-              companyName = company.name;
-              // Link user to company
-              await prisma.user.update({
-                where: { id: user.id },
-                data: {
-                  companyId: company.id,
-                  company: company.name,
-                  lastLoginAt: new Date(),
-                },
-              });
-            } else {
-              await prisma.user.update({
-                where: { id: user.id },
-                data: { lastLoginAt: new Date() },
-              });
-            }
-          }
-        } else {
-          // Already linked — just update lastLoginAt and sync company name
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              lastLoginAt: new Date(),
-              company: user.companyRef?.name ?? user.company,
-            },
-          });
-          companyName = user.companyRef?.name ?? user.company;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          company: companyName,
-          companyId,
-          companyLogoId,
-          phone: user.phone,
-        };
+        return validateCredentials(credentials.email, credentials.password);
       },
     }),
   ],
