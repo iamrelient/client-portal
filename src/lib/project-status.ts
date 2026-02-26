@@ -1,8 +1,9 @@
 export const PROJECT_STATUSES = [
   { value: "concept", label: "Concept" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "review", label: "Review" },
-  { value: "revisions", label: "Revisions" },
+  { value: "design", label: "Design" },
+  { value: "construction_drawings", label: "Construction Drawings" },
+  { value: "awaiting_state_review", label: "Awaiting State Review" },
+  { value: "in_construction", label: "In Construction" },
   { value: "complete", label: "Complete" },
 ] as const;
 
@@ -19,9 +20,10 @@ export function getStatusIndex(status: string): number {
 
 const STATUS_COLORS: Record<string, string> = {
   concept: "bg-slate-500/10 text-slate-400",
-  in_progress: "bg-blue-500/10 text-blue-400",
-  review: "bg-amber-500/10 text-amber-400",
-  revisions: "bg-orange-500/10 text-orange-400",
+  design: "bg-blue-500/10 text-blue-400",
+  construction_drawings: "bg-violet-500/10 text-violet-400",
+  awaiting_state_review: "bg-amber-500/10 text-amber-400",
+  in_construction: "bg-orange-500/10 text-orange-400",
   complete: "bg-green-500/10 text-green-400",
 };
 

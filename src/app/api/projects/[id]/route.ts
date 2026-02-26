@@ -131,7 +131,7 @@ export async function PATCH(
       data.company = company?.trim() || null;
     }
 
-    const validStatuses = ["concept", "in_progress", "review", "revisions", "complete"];
+    const validStatuses = ["concept", "design", "construction_drawings", "awaiting_state_review", "in_construction", "complete"];
     if (status && validStatuses.includes(status)) {
       data.status = status;
     }
