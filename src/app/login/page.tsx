@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
@@ -19,7 +19,6 @@ function RegisteredBanner() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,8 +49,7 @@ function LoginForm() {
       const callbackUrl = searchParams.get("callbackUrl");
       const redirect =
         callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
-      router.push(redirect);
-      router.refresh();
+      window.location.href = redirect;
     } catch {
       setError("Something went wrong. Please try again.");
       setLoading(false);
