@@ -4,13 +4,16 @@ import { memo, useMemo } from "react";
 import type { SectionData } from "./presentation-shell";
 
 /* ------------------------------------------------------------------ */
-/*  Chapter-aware Timeline Navigator                                    */
-/*  Groups dots by chapter name with visual hierarchy.                  */
+/*  Wayfinding Timeline Navigator                                       */
+/*  One dot per chapter. Labels always visible. Progress line + ring.   */
 /* ------------------------------------------------------------------ */
 
-interface ChapterGroup {
-  name: string | null;
-  items: { section: SectionData; index: number }[];
+interface TimelineDot {
+  label: string;
+  navigateToIndex: number;
+  kind: "intro" | "chapter" | "closing";
+  /** All flat section indices belonging to this dot */
+  sectionIndices: number[];
 }
 
 interface TimelineNavigatorProps {
@@ -23,102 +26,107 @@ interface TimelineNavigatorProps {
 export const TimelineNavigator = memo(function TimelineNavigator({
   sections,
   activeSectionIndex,
-  overallProgress,
   onNavigate,
 }: TimelineNavigatorProps) {
-  // Build chapter groups from navigable sections (exclude hero, closing, divider)
-  const chapterGroups = useMemo(() => {
-    const groups: ChapterGroup[] = [];
-    let current: ChapterGroup | null = null;
+  /* ---- Build one dot per chapter ---- */
+  const dots = useMemo(() => {
+    const result: TimelineDot[] = [];
+    let currentChapterName: string | null | undefined = undefined;
+    let currentDot: TimelineDot | null = null;
 
     for (let i = 0; i < sections.length; i++) {
-      const section = sections[i];
-      if (
-        section.type === "hero" ||
-        section.type === "closing" ||
-        section.type === "divider"
-      ) {
+      const s = sections[i];
+
+      if (s.type === "hero") {
+        result.push({
+          label: "Intro",
+          navigateToIndex: i,
+          kind: "intro",
+          sectionIndices: [i],
+        });
         continue;
       }
 
-      const chapterName = section.chapter ?? null;
-
-      if (!current || current.name !== chapterName) {
-        current = { name: chapterName, items: [] };
-        groups.push(current);
+      if (s.type === "closing") {
+        // Flush any pending chapter
+        if (currentDot) {
+          currentDot = null;
+          currentChapterName = undefined;
+        }
+        result.push({
+          label: "Close",
+          navigateToIndex: i,
+          kind: "closing",
+          sectionIndices: [i],
+        });
+        continue;
       }
 
-      current.items.push({ section, index: i });
+      if (s.type === "divider") {
+        // Dividers flush the current chapter but don't get their own dot
+        if (currentDot) {
+          currentDot = null;
+          currentChapterName = undefined;
+        }
+        continue;
+      }
+
+      // Content section — group by chapter name
+      const chapterName = s.chapter ?? null;
+
+      if (currentDot && chapterName === currentChapterName) {
+        // Same chapter — add to current dot
+        currentDot.sectionIndices.push(i);
+      } else {
+        // New chapter — flush previous and start new dot
+        const label = chapterName || "Gallery";
+        currentDot = {
+          label,
+          navigateToIndex: i,
+          kind: "chapter",
+          sectionIndices: [i],
+        };
+        currentChapterName = chapterName;
+        result.push(currentDot);
+      }
     }
 
-    return groups;
+    return result;
   }, [sections]);
 
-  // Flatten all navigable items for progress calculation
-  const allItems = useMemo(
-    () => chapterGroups.flatMap((g) => g.items),
-    [chapterGroups]
-  );
-
-  // Find which chapter group and item the active section is in
-  const { activeGroupIdx, activeItemIdx, activeFlatIdx } = useMemo(() => {
-    let flatIdx = 0;
-    for (let gi = 0; gi < chapterGroups.length; gi++) {
-      const group = chapterGroups[gi];
-      for (let ii = 0; ii < group.items.length; ii++) {
-        if (group.items[ii].index === activeSectionIndex) {
-          return { activeGroupIdx: gi, activeItemIdx: ii, activeFlatIdx: flatIdx };
-        }
-        flatIdx++;
+  /* ---- Find active dot + intra-chapter progress ---- */
+  const { activeDotIdx, intraProgress } = useMemo(() => {
+    // Find which dot owns the activeSectionIndex
+    for (let di = dots.length - 1; di >= 0; di--) {
+      const dot = dots[di];
+      const idx = dot.sectionIndices.indexOf(activeSectionIndex);
+      if (idx !== -1) {
+        const total = dot.sectionIndices.length;
+        const progress = total <= 1 ? 0 : idx / (total - 1);
+        return { activeDotIdx: di, intraProgress: progress };
       }
     }
 
-    // Active section is hero/closing/divider — find nearest navigable
-    let bestGroupIdx = 0;
-    let bestItemIdx = 0;
-    let bestFlatIdx = 0;
-    flatIdx = 0;
-    for (let gi = 0; gi < chapterGroups.length; gi++) {
-      const group = chapterGroups[gi];
-      for (let ii = 0; ii < group.items.length; ii++) {
-        if (group.items[ii].index <= activeSectionIndex) {
-          bestGroupIdx = gi;
-          bestItemIdx = ii;
-          bestFlatIdx = flatIdx;
-        }
-        flatIdx++;
+    // activeSectionIndex is a divider or between dots — find nearest preceding
+    for (let di = dots.length - 1; di >= 0; di--) {
+      const dot = dots[di];
+      if (dot.navigateToIndex <= activeSectionIndex) {
+        return { activeDotIdx: di, intraProgress: 1 };
       }
     }
-    return {
-      activeGroupIdx: bestGroupIdx,
-      activeItemIdx: bestItemIdx,
-      activeFlatIdx: bestFlatIdx,
-    };
-  }, [chapterGroups, activeSectionIndex]);
 
-  // Progress fill percentage
+    return { activeDotIdx: 0, intraProgress: 0 };
+  }, [dots, activeSectionIndex]);
+
+  /* ---- Progress fill percentage ---- */
   const fillPercent = useMemo(() => {
-    if (allItems.length <= 1) return 0;
+    if (dots.length <= 1) return 0;
+    const basePct = (activeDotIdx / (dots.length - 1)) * 100;
+    const stepPct = (1 / (dots.length - 1)) * 100;
+    return basePct + intraProgress * stepPct;
+  }, [dots.length, activeDotIdx, intraProgress]);
 
-    const basePercent = (activeFlatIdx / (allItems.length - 1)) * 100;
-
-    // Interpolate within current position using overallProgress
-    const progressPerItem = 1 / (allItems.length - 1);
-    const itemProgress = activeFlatIdx * progressPerItem;
-    const intraProgress = Math.max(
-      0,
-      Math.min(1, (overallProgress - itemProgress) / progressPerItem)
-    );
-
-    const nextPercent =
-      activeFlatIdx < allItems.length - 1
-        ? ((activeFlatIdx + 1) / (allItems.length - 1)) * 100
-        : 100;
-
-    return basePercent + intraProgress * (nextPercent - basePercent);
-  }, [allItems.length, activeFlatIdx, overallProgress]);
-
-  if (chapterGroups.length === 0) return null;
+  if (dots.length === 0) return null;
 
   return (
     <nav
@@ -129,128 +137,114 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <div className="relative mx-auto max-w-5xl px-10 pt-4 pb-5">
-        {/* Background line */}
-        <div
-          className="absolute left-10 right-10 h-px"
-          style={{ top: "16px", backgroundColor: "rgba(255,255,255,0.06)" }}
-        />
+      <div className="relative mx-auto max-w-4xl px-12 pt-5 pb-6">
+        <div className="relative">
+          {/* Re-draw progress fill inside this container for accurate width */}
+          <div
+            className="absolute h-px transition-all duration-200 ease-out"
+            style={{
+              top: "8px",
+              left: 0,
+              width: `${fillPercent}%`,
+              backgroundColor: "rgba(255,255,255,0.15)",
+            }}
+          />
+          <div
+            className="absolute h-px w-full"
+            style={{
+              top: "8px",
+              backgroundColor: "rgba(255,255,255,0.06)",
+            }}
+          />
 
-        {/* Progress fill line */}
-        <div
-          className="absolute left-10 h-px transition-all duration-150 ease-out"
-          style={{
-            top: "16px",
-            width: `${fillPercent}%`,
-            maxWidth: "calc(100% - 80px)",
-            backgroundColor: "rgba(255,255,255,0.25)",
-          }}
-        />
+          {/* Dots */}
+          <div
+            className="relative flex justify-between items-start"
+            style={{ minHeight: "36px" }}
+          >
+            {dots.map((dot, di) => {
+              const isCurrent = di === activeDotIdx;
+              const isPast = di < activeDotIdx;
 
-        {/* Chapter groups */}
-        <div
-          className="relative flex justify-between items-start"
-          style={{ minHeight: "40px" }}
-        >
-          {chapterGroups.map((group, gi) => {
-            const isCurrentChapter = gi === activeGroupIdx;
-            const isPastChapter = gi < activeGroupIdx;
+              const dotSize = isCurrent ? 7 : 5;
+              const dotColor = isCurrent
+                ? "rgba(255,255,255,0.7)"
+                : isPast
+                  ? "rgba(255,255,255,0.3)"
+                  : "rgba(255,255,255,0.12)";
+              const labelColor = isCurrent
+                ? "rgba(255,255,255,0.5)"
+                : "rgba(255,255,255,0.25)";
 
-            return (
-              <div
-                key={`chapter-${gi}`}
-                className="flex flex-col items-center"
-                style={{ minWidth: 0 }}
-              >
-                {/* Chapter name label */}
-                {group.name && (
+              return (
+                <button
+                  key={`dot-${di}`}
+                  onClick={() => onNavigate(dot.navigateToIndex)}
+                  className="flex flex-col items-center group"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    minWidth: "40px",
+                  }}
+                >
+                  {/* Dot + progress ring */}
+                  <div
+                    className="relative flex items-center justify-center"
+                    style={{ width: "16px", height: "16px" }}
+                  >
+                    {/* Intra-chapter progress ring (only on current dot) */}
+                    {isCurrent && dot.sectionIndices.length > 1 && (
+                      <div
+                        className="absolute rounded-full transition-all duration-300"
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          background: `conic-gradient(
+                            rgba(255,255,255,0.12) ${intraProgress * 360}deg,
+                            transparent ${intraProgress * 360}deg
+                          )`,
+                          mask: "radial-gradient(circle at center, transparent 4.5px, black 5px)",
+                          WebkitMask:
+                            "radial-gradient(circle at center, transparent 4.5px, black 5px)",
+                        }}
+                      />
+                    )}
+
+                    {/* Dot */}
+                    <div
+                      className="rounded-full transition-all duration-300"
+                      style={{
+                        width: dotSize,
+                        height: dotSize,
+                        backgroundColor: dotColor,
+                        boxShadow: isCurrent
+                          ? "0 0 6px rgba(255,255,255,0.1)"
+                          : "none",
+                      }}
+                    />
+                  </div>
+
+                  {/* Label */}
                   <span
-                    className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] block text-center"
+                    className="transition-colors duration-300"
                     style={{
-                      fontSize: "9px",
+                      fontSize: "0.6rem",
+                      fontWeight: 300,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
-                      fontWeight: 300,
-                      color: isCurrentChapter
-                        ? "rgba(255,255,255,0.55)"
-                        : "rgba(255,255,255,0.35)",
-                      marginBottom: "6px",
-                      transition: "color 0.3s ease",
+                      color: labelColor,
+                      marginTop: "5px",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {group.name}
+                    {dot.label}
                   </span>
-                )}
-
-                {/* Spacer when no label to keep dots aligned */}
-                {!group.name && (
-                  <div style={{ height: "6px", marginBottom: "6px" }} />
-                )}
-
-                {/* Dot row */}
-                <div className="flex items-center" style={{ gap: "6px" }}>
-                  {group.items.map((item, ii) => {
-                    const isCurrent =
-                      gi === activeGroupIdx && ii === activeItemIdx;
-                    const isInCurrentChapter = isCurrentChapter;
-                    const isPast =
-                      isPastChapter ||
-                      (isCurrentChapter && ii < activeItemIdx);
-
-                    let dotSize: number;
-                    let dotBg: string;
-                    let dotShadow: string;
-
-                    if (isCurrent) {
-                      dotSize = 8;
-                      dotBg = "rgba(255,255,255,0.6)";
-                      dotShadow = "0 0 6px rgba(255,255,255,0.15)";
-                    } else if (isInCurrentChapter) {
-                      dotSize = 4;
-                      dotBg = "rgba(255,255,255,0.3)";
-                      dotShadow = "none";
-                    } else if (isPast) {
-                      dotSize = 4;
-                      dotBg = "rgba(255,255,255,0.2)";
-                      dotShadow = "none";
-                    } else {
-                      // Future
-                      dotSize = 4;
-                      dotBg = "rgba(255,255,255,0.08)";
-                      dotShadow = "none";
-                    }
-
-                    return (
-                      <button
-                        key={item.section.id}
-                        onClick={() => onNavigate(item.index)}
-                        className="flex items-center justify-center"
-                        style={{
-                          width: "16px",
-                          height: "16px",
-                          padding: 0,
-                          border: "none",
-                          background: "transparent",
-                          cursor: "pointer",
-                        }}
-                        title={item.section.title || item.section.type}
-                      >
-                        <div
-                          className="rounded-full transition-all duration-300"
-                          style={{
-                            width: dotSize,
-                            height: dotSize,
-                            backgroundColor: dotBg,
-                            boxShadow: dotShadow,
-                          }}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </nav>

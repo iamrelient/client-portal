@@ -119,18 +119,30 @@ export default function PasswordGatePage() {
         {/* Client logo */}
         {clientLogo && (
           <div style={{ marginBottom: "2rem" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/present/${params.token}/asset/${clientLogo}`}
-              alt=""
-              draggable={false}
+            <div
               style={{
-                height: "clamp(36px, 5vw, 60px)",
-                width: "auto",
-                opacity: 0.8,
-                pointerEvents: "none",
+                background: "rgba(255,255,255,0.12)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                padding: "1rem 1.5rem",
+                borderRadius: "4px",
+                display: "inline-block",
               }}
-            />
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/present/${params.token}/asset/${clientLogo}`}
+                alt=""
+                draggable={false}
+                style={{
+                  height: "clamp(36px, 5vw, 60px)",
+                  width: "auto",
+                  opacity: 0.8,
+                  pointerEvents: "none",
+                  filter: "brightness(1.15) drop-shadow(0 0 2px rgba(255,255,255,0.15))",
+                }}
+              />
+            </div>
           </div>
         )}
 

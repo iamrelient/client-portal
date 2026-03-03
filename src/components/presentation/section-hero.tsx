@@ -82,18 +82,29 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
             marginBottom: "2.5rem",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
-            alt=""
-            draggable={false}
+          <div
             style={{
-              height: "clamp(40px, 6vw, 72px)",
-              width: "auto",
-              pointerEvents: "none",
-              WebkitUserDrag: "none",
-            } as React.CSSProperties}
-          />
+              background: "rgba(255,255,255,0.12)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              padding: "1rem 1.5rem",
+              borderRadius: "4px",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
+              alt=""
+              draggable={false}
+              style={{
+                height: "clamp(40px, 6vw, 72px)",
+                width: "auto",
+                pointerEvents: "none",
+                WebkitUserDrag: "none",
+                filter: "brightness(1.15) drop-shadow(0 0 2px rgba(255,255,255,0.15))",
+              } as React.CSSProperties}
+            />
+          </div>
         </div>
       )}
 
