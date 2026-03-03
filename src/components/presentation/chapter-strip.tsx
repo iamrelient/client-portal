@@ -9,8 +9,6 @@ import {
   COLLAGE_SIZES,
   getCollageSize,
   getVerticalOffset,
-  getItemWidthPx,
-  type CollageSizeKey,
 } from "./use-scroll-progress";
 
 /* ------------------------------------------------------------------ */
@@ -63,7 +61,7 @@ export const ChapterStrip = memo(function ChapterStrip({
   ).length;
 
   // Calculate item widths and total content width
-  const { totalContentWidth, spacerHeight, horizontalTravel } = useMemo(() => {
+  const { spacerHeight, horizontalTravel } = useMemo(() => {
     if (dimensions.vw === 0) {
       return { totalContentWidth: 0, spacerHeight: 0, horizontalTravel: 0 };
     }
