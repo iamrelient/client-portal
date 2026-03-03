@@ -487,7 +487,7 @@ export default function EditPresentationPage() {
                                   fileId: e.target.value || null,
                                 })
                               }
-                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
                             >
                               <option value="">Select file...</option>
                               {projectFiles
@@ -530,7 +530,7 @@ export default function EditPresentationPage() {
                                   transitionStyle: e.target.value || null,
                                 })
                               }
-                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
                             >
                               {TRANSITIONS.map((t) => (
                                 <option key={t.value} value={t.value}>
@@ -605,7 +605,7 @@ export default function EditPresentationPage() {
                                 },
                               })
                             }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none sm:w-48"
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none sm:w-48"
                           >
                             {AMBIENT_STYLES.map((s) => (
                               <option key={s.value} value={s.value}>
@@ -639,7 +639,7 @@ export default function EditPresentationPage() {
               <select
                 value={addingType}
                 onChange={(e) => setAddingType(e.target.value)}
-                className="block rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+                className="block rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
               >
                 <option value="">Add section...</option>
                 {SECTION_TYPES.map((t) => (
@@ -704,7 +704,7 @@ export default function EditPresentationPage() {
                   <select
                     value={clientLogo}
                     onChange={(e) => setClientLogo(e.target.value)}
-                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
                   >
                     <option value="">No logo</option>
                     {projectFiles
@@ -762,7 +762,7 @@ export default function EditPresentationPage() {
                   type="datetime-local"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
-                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
                 />
               </div>
               <div>
