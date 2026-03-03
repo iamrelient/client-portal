@@ -36,19 +36,23 @@ export async function GET(
       }
     }
 
-    // Verify this file belongs to a section of this presentation
-    const section = await prisma.presentationSection.findFirst({
-      where: {
-        presentationId: presentation.id,
-        fileId: params.fileId,
-      },
-    });
+    // Verify this file belongs to a section of this presentation or is the client logo
+    const isClientLogo = presentation.clientLogo === params.fileId;
 
-    if (!section) {
-      return NextResponse.json(
-        { error: "File not found in presentation" },
-        { status: 404 }
-      );
+    if (!isClientLogo) {
+      const section = await prisma.presentationSection.findFirst({
+        where: {
+          presentationId: presentation.id,
+          fileId: params.fileId,
+        },
+      });
+
+      if (!section) {
+        return NextResponse.json(
+          { error: "File not found in presentation" },
+          { status: 404 }
+        );
+      }
     }
 
     const file = await prisma.file.findUnique({

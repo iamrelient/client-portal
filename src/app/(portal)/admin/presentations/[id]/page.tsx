@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { TableSkeleton } from "@/components/skeleton";
@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
   Eye,
+  Upload,
 } from "lucide-react";
 
 interface FileOption {
@@ -93,6 +94,11 @@ export default function EditPresentationPage() {
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
   const [newPassword, setNewPassword] = useState("");
 
+  // File upload
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
+
   // Add section
   const [addingType, setAddingType] = useState("");
   const [addingSectionLoading, setAddingSectionLoading] = useState(false);
@@ -136,6 +142,55 @@ export default function EditPresentationPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  function triggerUpload(accept: string, onUploaded: (fileId: string) => void) {
+    if (!fileInputRef.current || !pres) return;
+    uploadContextRef.current = { onUploaded };
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.value = "";
+    fileInputRef.current.click();
+  }
+
+  async function handleFileUpload(file: File) {
+    if (!pres) return;
+    setUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/projects/${pres.project.id}/files`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Refresh file list
+        const filesRes = await fetch(`/api/projects/${pres.project.id}/files`);
+        if (filesRes.ok) {
+          const files = await filesRes.json();
+          if (Array.isArray(files)) {
+            setProjectFiles(
+              files.map((f: FileOption & Record<string, unknown>) => ({
+                id: f.id,
+                originalName: f.originalName,
+                mimeType: f.mimeType,
+              }))
+            );
+          }
+        }
+        // Call the context callback with the new file ID
+        uploadContextRef.current?.onUploaded(data.fileId);
+        toast.success("File uploaded");
+      } else {
+        toast.error("Upload failed");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setUploading(false);
+  }
 
   async function handleSaveSettings(e: React.FormEvent) {
     e.preventDefault();
@@ -329,6 +384,15 @@ export default function EditPresentationPage() {
 
   return (
     <div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+        }}
+      />
       <PageHeader
         title={pres.title || pres.project.name}
         description={`Project: ${pres.project.name} · ${pres._count.accessLogs} view${pres._count.accessLogs !== 1 ? "s" : ""}`}
@@ -415,28 +479,49 @@ export default function EditPresentationPage() {
                         section.type === "video" ||
                         section.type === "panorama") && (
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <select
-                            value={section.fileId || ""}
-                            onChange={(e) =>
-                              handleUpdateSection(section.id, {
-                                fileId: e.target.value || null,
-                              })
-                            }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
-                          >
-                            <option value="">Select file...</option>
-                            {projectFiles
-                              .filter((f) => {
-                                if (section.type === "video")
-                                  return f.mimeType.startsWith("video/");
-                                return f.mimeType.startsWith("image/");
-                              })
-                              .map((f) => (
-                                <option key={f.id} value={f.id}>
-                                  {f.originalName}
-                                </option>
-                              ))}
-                          </select>
+                          <div className="flex gap-1.5">
+                            <select
+                              value={section.fileId || ""}
+                              onChange={(e) =>
+                                handleUpdateSection(section.id, {
+                                  fileId: e.target.value || null,
+                                })
+                              }
+                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+                            >
+                              <option value="">Select file...</option>
+                              {projectFiles
+                                .filter((f) => {
+                                  if (section.type === "video")
+                                    return f.mimeType.startsWith("video/");
+                                  return f.mimeType.startsWith("image/");
+                                })
+                                .map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.originalName}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={uploading}
+                              onClick={() =>
+                                triggerUpload(
+                                  section.type === "video" ? "video/*" : "image/*",
+                                  (fileId) =>
+                                    handleUpdateSection(section.id, { fileId })
+                                )
+                              }
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Upload from computer"
+                            >
+                              {uploading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
                           {section.type === "image" && (
                             <select
                               value={section.transitionStyle || ""}
@@ -615,20 +700,39 @@ export default function EditPresentationPage() {
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Client Logo
                 </label>
-                <select
-                  value={clientLogo}
-                  onChange={(e) => setClientLogo(e.target.value)}
-                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="">No logo</option>
-                  {projectFiles
-                    .filter((f) => f.mimeType.startsWith("image/"))
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.originalName}
-                      </option>
-                    ))}
-                </select>
+                <div className="flex gap-1.5">
+                  <select
+                    value={clientLogo}
+                    onChange={(e) => setClientLogo(e.target.value)}
+                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="">No logo</option>
+                    {projectFiles
+                      .filter((f) => f.mimeType.startsWith("image/"))
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.originalName}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() =>
+                      triggerUpload("image/*", (fileId) =>
+                        setClientLogo(fileId)
+                      )
+                    }
+                    className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                    title="Upload from computer"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
