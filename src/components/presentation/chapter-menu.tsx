@@ -4,20 +4,14 @@ import { memo, useMemo } from "react";
 import type { SectionData } from "./presentation-shell";
 
 /* ------------------------------------------------------------------ */
-/*  Timeline Navigator                                                 */
-/*  Bottom-docked timeline with dots, labels, and progress fill.       */
-/*  Replaces the old pill-button ChapterMenu.                          */
+/*  Chapter-aware Timeline Navigator                                    */
+/*  Groups dots by chapter name with visual hierarchy.                  */
 /* ------------------------------------------------------------------ */
 
-const TYPE_LABELS: Record<string, string> = {
-  hero: "Intro",
-  image: "Image",
-  video: "Video",
-  text: "Details",
-  divider: "",
-  closing: "Close",
-  panorama: "360\u00B0",
-};
+interface ChapterGroup {
+  name: string | null;
+  items: { section: SectionData; index: number }[];
+}
 
 interface TimelineNavigatorProps {
   sections: SectionData[];
@@ -32,53 +26,99 @@ export const TimelineNavigator = memo(function TimelineNavigator({
   overallProgress,
   onNavigate,
 }: TimelineNavigatorProps) {
-  // Build navigable sections (exclude dividers)
-  const navigable = useMemo(
-    () =>
-      sections
-        .map((section, index) => ({ section, index }))
-        .filter(({ section }) => section.type !== "divider"),
-    [sections]
+  // Build chapter groups from navigable sections (exclude hero, closing, divider)
+  const chapterGroups = useMemo(() => {
+    const groups: ChapterGroup[] = [];
+    let current: ChapterGroup | null = null;
+
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      if (
+        section.type === "hero" ||
+        section.type === "closing" ||
+        section.type === "divider"
+      ) {
+        continue;
+      }
+
+      const chapterName = section.chapter ?? null;
+
+      if (!current || current.name !== chapterName) {
+        current = { name: chapterName, items: [] };
+        groups.push(current);
+      }
+
+      current.items.push({ section, index: i });
+    }
+
+    return groups;
+  }, [sections]);
+
+  // Flatten all navigable items for progress calculation
+  const allItems = useMemo(
+    () => chapterGroups.flatMap((g) => g.items),
+    [chapterGroups]
   );
 
-  // Dot positions (evenly distributed 0-100%)
-  const dotPositions = useMemo(() => {
-    if (navigable.length <= 1) return [50];
-    return navigable.map((_, i) => (i / (navigable.length - 1)) * 100);
-  }, [navigable]);
-
-  // Find current dot index
-  const currentDotIndex = useMemo(() => {
-    const idx = navigable.findIndex((n) => n.index === activeSectionIndex);
-    // If active section is a divider, find the nearest navigable section
-    if (idx === -1) {
-      for (let i = navigable.length - 1; i >= 0; i--) {
-        if (navigable[i].index <= activeSectionIndex) return i;
+  // Find which chapter group and item the active section is in
+  const { activeGroupIdx, activeItemIdx, activeFlatIdx } = useMemo(() => {
+    let flatIdx = 0;
+    for (let gi = 0; gi < chapterGroups.length; gi++) {
+      const group = chapterGroups[gi];
+      for (let ii = 0; ii < group.items.length; ii++) {
+        if (group.items[ii].index === activeSectionIndex) {
+          return { activeGroupIdx: gi, activeItemIdx: ii, activeFlatIdx: flatIdx };
+        }
+        flatIdx++;
       }
-      return 0;
     }
-    return idx;
-  }, [navigable, activeSectionIndex]);
 
-  // Compute fill percentage based on dot position + inter-dot interpolation
+    // Active section is hero/closing/divider — find nearest navigable
+    let bestGroupIdx = 0;
+    let bestItemIdx = 0;
+    let bestFlatIdx = 0;
+    flatIdx = 0;
+    for (let gi = 0; gi < chapterGroups.length; gi++) {
+      const group = chapterGroups[gi];
+      for (let ii = 0; ii < group.items.length; ii++) {
+        if (group.items[ii].index <= activeSectionIndex) {
+          bestGroupIdx = gi;
+          bestItemIdx = ii;
+          bestFlatIdx = flatIdx;
+        }
+        flatIdx++;
+      }
+    }
+    return {
+      activeGroupIdx: bestGroupIdx,
+      activeItemIdx: bestItemIdx,
+      activeFlatIdx: bestFlatIdx,
+    };
+  }, [chapterGroups, activeSectionIndex]);
+
+  // Progress fill percentage
   const fillPercent = useMemo(() => {
-    if (navigable.length <= 1) return 0;
-    const currentPos = dotPositions[currentDotIndex] || 0;
-    const nextPos =
-      currentDotIndex < dotPositions.length - 1
-        ? dotPositions[currentDotIndex + 1]
-        : 100;
+    if (allItems.length <= 1) return 0;
 
-    // Use overall progress to interpolate within the current section
-    const progressPerDot = 1 / (navigable.length - 1);
-    const dotProgress = currentDotIndex * progressPerDot;
+    const basePercent = (activeFlatIdx / (allItems.length - 1)) * 100;
+
+    // Interpolate within current position using overallProgress
+    const progressPerItem = 1 / (allItems.length - 1);
+    const itemProgress = activeFlatIdx * progressPerItem;
     const intraProgress = Math.max(
       0,
-      Math.min(1, (overallProgress - dotProgress) / progressPerDot)
+      Math.min(1, (overallProgress - itemProgress) / progressPerItem)
     );
 
-    return currentPos + intraProgress * (nextPos - currentPos);
-  }, [dotPositions, currentDotIndex, overallProgress, navigable.length]);
+    const nextPercent =
+      activeFlatIdx < allItems.length - 1
+        ? ((activeFlatIdx + 1) / (allItems.length - 1)) * 100
+        : 100;
+
+    return basePercent + intraProgress * (nextPercent - basePercent);
+  }, [allItems.length, activeFlatIdx, overallProgress]);
+
+  if (chapterGroups.length === 0) return null;
 
   return (
     <nav
@@ -89,79 +129,126 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <div className="relative mx-auto max-w-5xl px-10 pt-5 pb-7">
+      <div className="relative mx-auto max-w-5xl px-10 pt-4 pb-5">
         {/* Background line */}
         <div
           className="absolute left-10 right-10 h-px"
-          style={{ top: "20px", backgroundColor: "rgba(255,255,255,0.1)" }}
+          style={{ top: "16px", backgroundColor: "rgba(255,255,255,0.06)" }}
         />
 
         {/* Progress fill line */}
         <div
           className="absolute left-10 h-px transition-all duration-150 ease-out"
           style={{
-            top: "20px",
+            top: "16px",
             width: `${fillPercent}%`,
             maxWidth: "calc(100% - 80px)",
-            backgroundColor: "rgba(255,255,255,0.6)",
+            backgroundColor: "rgba(255,255,255,0.25)",
           }}
         />
 
-        {/* Dots and labels */}
-        <div className="relative" style={{ height: "40px" }}>
-          {navigable.map(({ section, index }, dotIdx) => {
-            const isPast = index < activeSectionIndex;
-            const isCurrent = index === activeSectionIndex;
-            const isFuture = index > activeSectionIndex;
-            const label =
-              section.title || TYPE_LABELS[section.type] || section.type;
+        {/* Chapter groups */}
+        <div
+          className="relative flex justify-between items-start"
+          style={{ minHeight: "40px" }}
+        >
+          {chapterGroups.map((group, gi) => {
+            const isCurrentChapter = gi === activeGroupIdx;
+            const isPastChapter = gi < activeGroupIdx;
 
             return (
-              <button
-                key={section.id}
-                onClick={() => onNavigate(index)}
-                className="absolute flex flex-col items-center group"
-                style={{
-                  left: `${dotPositions[dotIdx]}%`,
-                  transform: "translateX(-50%)",
-                  top: 0,
-                }}
+              <div
+                key={`chapter-${gi}`}
+                className="flex flex-col items-center"
+                style={{ minWidth: 0 }}
               >
-                {/* Dot */}
-                <div
-                  className="rounded-full transition-all duration-300 flex-shrink-0"
-                  style={{
-                    width: isCurrent ? 10 : 6,
-                    height: isCurrent ? 10 : 6,
-                    marginTop: isCurrent ? 15 : 17,
-                    backgroundColor:
-                      isCurrent || isPast
-                        ? "rgba(255,255,255,0.9)"
-                        : "transparent",
-                    border: isFuture
-                      ? "1.5px solid rgba(255,255,255,0.3)"
-                      : "none",
-                    boxShadow: isCurrent
-                      ? "0 0 8px rgba(255,255,255,0.3)"
-                      : "none",
-                  }}
-                />
+                {/* Chapter name label */}
+                {group.name && (
+                  <span
+                    className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] block text-center"
+                    style={{
+                      fontSize: "9px",
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      fontWeight: 300,
+                      color: isCurrentChapter
+                        ? "rgba(255,255,255,0.55)"
+                        : "rgba(255,255,255,0.35)",
+                      marginBottom: "6px",
+                      transition: "color 0.3s ease",
+                    }}
+                  >
+                    {group.name}
+                  </span>
+                )}
 
-                {/* Label */}
-                <span
-                  className="mt-1.5 font-light tracking-wide whitespace-nowrap transition-colors duration-300"
-                  style={{
-                    fontSize: "9px",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase" as const,
-                    color: isCurrent
-                      ? "rgba(255,255,255,0.9)"
-                      : "rgba(255,255,255,0.35)",
-                  }}
-                >
-                  {label}
-                </span>
-              </button>
+                {/* Spacer when no label to keep dots aligned */}
+                {!group.name && (
+                  <div style={{ height: "6px", marginBottom: "6px" }} />
+                )}
+
+                {/* Dot row */}
+                <div className="flex items-center" style={{ gap: "6px" }}>
+                  {group.items.map((item, ii) => {
+                    const isCurrent =
+                      gi === activeGroupIdx && ii === activeItemIdx;
+                    const isInCurrentChapter = isCurrentChapter;
+                    const isPast =
+                      isPastChapter ||
+                      (isCurrentChapter && ii < activeItemIdx);
+
+                    let dotSize: number;
+                    let dotBg: string;
+                    let dotShadow: string;
+
+                    if (isCurrent) {
+                      dotSize = 8;
+                      dotBg = "rgba(255,255,255,0.6)";
+                      dotShadow = "0 0 6px rgba(255,255,255,0.15)";
+                    } else if (isInCurrentChapter) {
+                      dotSize = 4;
+                      dotBg = "rgba(255,255,255,0.3)";
+                      dotShadow = "none";
+                    } else if (isPast) {
+                      dotSize = 4;
+                      dotBg = "rgba(255,255,255,0.2)";
+                      dotShadow = "none";
+                    } else {
+                      // Future
+                      dotSize = 4;
+                      dotBg = "rgba(255,255,255,0.08)";
+                      dotShadow = "none";
+                    }
+
+                    return (
+                      <button
+                        key={item.section.id}
+                        onClick={() => onNavigate(item.index)}
+                        className="flex items-center justify-center"
+                        style={{
+                          width: "16px",
+                          height: "16px",
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          cursor: "pointer",
+                        }}
+                        title={item.section.title || item.section.type}
+                      >
+                        <div
+                          className="rounded-full transition-all duration-300"
+                          style={{
+                            width: dotSize,
+                            height: dotSize,
+                            backgroundColor: dotBg,
+                            boxShadow: dotShadow,
+                          }}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>

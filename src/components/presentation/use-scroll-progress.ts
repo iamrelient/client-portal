@@ -23,6 +23,7 @@ export function buildSegments(sections: SectionData[]): Segment[] {
   const segments: Segment[] = [];
   let pendingChapter: { section: SectionData; sectionIndex: number }[] = [];
   let pendingDivider: SectionData | null = null;
+  let currentChapterName: string | null | undefined = undefined;
 
   const flushChapter = () => {
     if (pendingChapter.length > 0) {
@@ -42,6 +43,7 @@ export function buildSegments(sections: SectionData[]): Segment[] {
       });
       pendingDivider = null;
     }
+    currentChapterName = undefined;
   };
 
   for (let i = 0; i < sections.length; i++) {
@@ -59,10 +61,17 @@ export function buildSegments(sections: SectionData[]): Segment[] {
         pendingDivider = section;
         break;
 
-      default:
+      default: {
         // image, video, text, panorama — accumulate into chapter
+        // If chapter name changes, flush and start new group
+        const chapterName = section.chapter ?? null;
+        if (currentChapterName !== undefined && chapterName !== currentChapterName) {
+          flushChapter();
+        }
+        currentChapterName = chapterName;
         pendingChapter.push({ section, sectionIndex: i });
         break;
+      }
     }
   }
 

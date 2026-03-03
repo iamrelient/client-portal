@@ -27,7 +27,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { type, fileId, title, description, transitionStyle, metadata } = body;
+    const { type, fileId, title, description, chapter, transitionStyle, metadata } = body;
 
     if (!type) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function POST(
         fileId: fileId || null,
         title: title || null,
         description: description || null,
+        chapter: chapter || null,
         transitionStyle: transitionStyle || null,
         metadata: metadata || null,
       },

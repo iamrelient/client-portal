@@ -26,13 +26,14 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { fileId, title, description, transitionStyle, metadata } = body;
+    const { fileId, title, description, chapter, transitionStyle, metadata } = body;
 
     const data: Record<string, unknown> = {};
 
     if (fileId !== undefined) data.fileId = fileId || null;
     if (title !== undefined) data.title = title || null;
     if (description !== undefined) data.description = description || null;
+    if (chapter !== undefined) data.chapter = chapter || null;
     if (transitionStyle !== undefined)
       data.transitionStyle = transitionStyle || null;
     if (metadata !== undefined) data.metadata = metadata;

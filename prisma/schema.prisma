@@ -201,6 +201,7 @@ model PresentationSection {
   file            File?        @relation(fields: [fileId], references: [id], onDelete: SetNull)
   title           String?
   description     String?
+  chapter         String?
   transitionStyle String?
   metadata        Json?
   createdAt       DateTime     @default(now())

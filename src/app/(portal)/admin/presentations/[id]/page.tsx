@@ -34,6 +34,7 @@ interface SectionRow {
   fileId: string | null;
   title: string | null;
   description: string | null;
+  chapter: string | null;
   transitionStyle: string | null;
   metadata: Record<string, unknown> | null;
   file: { id: string; originalName: string; mimeType: string; size: number } | null;
@@ -244,6 +245,17 @@ export default function EditPresentationPage() {
 
       if (addingType === "divider") {
         body.metadata = { ambientStyle: "" };
+      }
+
+      // Pre-fill chapter from last content section
+      if (addingType !== "divider" && pres) {
+        const sorted = [...pres.sections].sort((a, b) => a.order - b.order);
+        const lastContent = sorted
+          .filter((s) => !["hero", "closing", "divider"].includes(s.type))
+          .pop();
+        if (lastContent?.chapter) {
+          body.chapter = lastContent.chapter;
+        }
       }
 
       const res = await fetch(`/api/presentations/${params.id}/sections`, {
@@ -567,6 +579,17 @@ export default function EditPresentationPage() {
                             }
                             className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
                           />
+                          <input
+                            type="text"
+                            defaultValue={section.chapter || ""}
+                            placeholder="Chapter (e.g. Main Lobby)"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                chapter: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                          />
                         </div>
                       )}
 
@@ -593,6 +616,17 @@ export default function EditPresentationPage() {
                               })
                             }
                             className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none resize-y"
+                          />
+                          <input
+                            type="text"
+                            defaultValue={section.chapter || ""}
+                            placeholder="Chapter (e.g. Main Lobby)"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                chapter: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
                           />
                         </div>
                       )}

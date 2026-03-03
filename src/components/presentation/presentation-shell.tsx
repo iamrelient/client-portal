@@ -38,6 +38,7 @@ export interface SectionData {
   fileId: string | null;
   title: string | null;
   description: string | null;
+  chapter: string | null;
   transitionStyle: string | null;
   metadata: Record<string, unknown> | null;
   file: {
