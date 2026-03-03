@@ -54,72 +54,29 @@ export default function PresentPage() {
       });
   }, [params.token]);
 
-  // Pure black during loading — no flash
+  // Gallery white during loading — no flash
   if (state.status === "loading") {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          backgroundColor: "#000000",
-        }}
-      />
-    );
+    return <div className="fixed inset-0 bg-neutral-50" />;
   }
 
   if (state.status === "password_required") {
     // Redirect to password gate
     router.replace(`/present/${params.token}/password`);
-    return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          backgroundColor: "#000000",
-        }}
-      />
-    );
+    return <div className="fixed inset-0 bg-neutral-50" />;
   }
 
   if (state.status === "error") {
     return (
       <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          backgroundColor: "#060608",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          fontFamily: "'Inter', sans-serif",
-          color: "rgba(255,255,255,0.9)",
-          padding: "2rem",
-          textAlign: "center",
-        }}
+        className="fixed inset-0 bg-neutral-50 flex items-center justify-center flex-col p-8 text-center"
+        style={{ fontFamily: "'Inter', sans-serif" }}
       >
-        <p
-          style={{
-            fontSize: "1.125rem",
-            fontWeight: 300,
-            letterSpacing: "0.02em",
-            maxWidth: 400,
-            lineHeight: 1.6,
-          }}
-        >
+        <p className="text-lg font-light tracking-wide max-w-md leading-relaxed text-neutral-700">
           {state.code === "expired" || state.code === "revoked"
             ? "This presentation is no longer available. Contact Ray Renders for access."
             : state.error}
         </p>
-        <p
-          style={{
-            fontSize: "0.75rem",
-            color: "#666",
-            marginTop: "2rem",
-          }}
-        >
-          Ray Renders
-        </p>
+        <p className="text-xs text-neutral-400 mt-8">Ray Renders</p>
       </div>
     );
   }

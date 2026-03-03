@@ -22,6 +22,25 @@ const config: Config = {
           900: "#1a2038",
         },
       },
+      keyframes: {
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "slide-up-fade": {
+          "0%": { opacity: "0", transform: "translateY(20px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-out": {
+          "0%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in 500ms ease-in-out forwards",
+        "slide-up-fade": "slide-up-fade 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "fade-out": "fade-out 500ms ease-in-out forwards",
+      },
     },
   },
   plugins: [],
