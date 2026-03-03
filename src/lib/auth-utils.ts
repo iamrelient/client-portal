@@ -6,8 +6,9 @@ export function isEmailAuthorized(
   email: string,
   authorizedEmails: string[]
 ): boolean {
-  const lower = email.toLowerCase();
-  return authorizedEmails.some((pattern) => {
+  const lower = email.trim().toLowerCase();
+  return authorizedEmails.some((raw) => {
+    const pattern = raw.trim().toLowerCase();
     if (pattern.startsWith("@")) {
       return lower.endsWith(pattern);
     }

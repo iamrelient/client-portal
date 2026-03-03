@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronUp, Loader2, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Trash2, Users } from "lucide-react";
 import { TableSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
@@ -26,6 +26,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function loadUsers() {
     fetch("/api/admin/users")
@@ -40,6 +41,34 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  async function handleDeleteUser(user: UserRow) {
+    const confirmed = confirm(
+      `Delete "${user.name}" (${user.email})?\n\nThis will permanently remove the user and all their associated data (sessions, activities, files, projects).`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Something went wrong");
+        setDeletingId(null);
+        return;
+      }
+
+      toast.success(`User ${user.email} deleted`);
+      setDeletingId(null);
+      loadUsers();
+    } catch {
+      toast.error("Something went wrong");
+      setDeletingId(null);
+    }
+  }
 
   async function handleCreateUser(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -193,6 +222,7 @@ export default function AdminUsersPage() {
                 <th className="px-6 py-3 font-medium text-slate-400">Activities</th>
                 <th className="px-6 py-3 font-medium text-slate-400">Last Login</th>
                 <th className="px-6 py-3 font-medium text-slate-400">Joined</th>
+                <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
@@ -245,11 +275,27 @@ export default function AdminUsersPage() {
                   <td className="px-6 py-4 text-slate-400">
                     {formatRelativeDate(user.createdAt)}
                   </td>
+                  <td className="px-6 py-4">
+                    {user.role !== "ADMIN" && (
+                      <button
+                        onClick={() => handleDeleteUser(user)}
+                        disabled={deletingId === user.id}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50 transition-colors"
+                        title="Delete user"
+                      >
+                        {deletingId === user.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EmptyState
                       icon={Users}
                       title="No users found"
