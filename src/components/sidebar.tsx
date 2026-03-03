@@ -15,6 +15,7 @@ import {
   FileText,
   FolderOpen,
   Building2,
+  Presentation,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ const adminLinks = [
   { href: "/admin/companies", label: "Companies", icon: Building2 },
   { href: "/admin/projects", label: "Projects", icon: FolderOpen },
   { href: "/admin/files", label: "Files", icon: FileText },
+  { href: "/admin/presentations", label: "Presentations", icon: Presentation },
 ];
 
 export function Sidebar() {

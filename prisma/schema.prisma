@@ -51,6 +51,7 @@ model User {
   files          File[]
   projects       Project[]
   fileViews      FileView[]
+  presentations  Presentation[]
 
   @@index([companyId])
   @@map("users")
@@ -75,7 +76,8 @@ model File {
   version         Int      @default(1)
   fileGroupId     String?
   createdAt       DateTime @default(now())
-  fileViews       FileView[]
+  fileViews             FileView[]
+  presentationSections  PresentationSection[]
 
   @@index([uploadedById])
   @@index([projectId])
@@ -122,6 +124,7 @@ model Project {
   createdById      String
   createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   files            File[]
+  presentations    Presentation[]
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -161,4 +164,61 @@ model GoogleToken {
   updatedAt    DateTime @updatedAt
 
   @@map("google_tokens")
+}
+
+model Presentation {
+  id                String                  @id @default(cuid())
+  projectId         String
+  project           Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title             String?
+  subtitle          String?
+  clientLogo        String?
+  clientAccentColor String?
+  password          String?
+  expiresAt         DateTime?
+  isActive          Boolean                 @default(true)
+  accessToken       String                  @unique
+  watermarkEnabled  Boolean                 @default(true)
+  createdById       String
+  createdBy         User                    @relation(fields: [createdById], references: [id])
+  sections          PresentationSection[]
+  accessLogs        PresentationAccessLog[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([accessToken])
+  @@index([projectId])
+  @@map("presentations")
+}
+
+model PresentationSection {
+  id              String       @id @default(cuid())
+  presentationId  String
+  presentation    Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  type            String
+  order           Int
+  fileId          String?
+  file            File?        @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  title           String?
+  description     String?
+  transitionStyle String?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+
+  @@index([presentationId])
+  @@map("presentation_sections")
+}
+
+model PresentationAccessLog {
+  id              String       @id @default(cuid())
+  presentationId  String
+  presentation    Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  viewerEmail     String?
+  viewerName      String?
+  ipAddress       String?
+  userAgent       String?
+  viewedAt        DateTime     @default(now())
+
+  @@index([presentationId])
+  @@map("presentation_access_logs")
 }
