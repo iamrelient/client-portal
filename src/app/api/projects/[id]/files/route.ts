@@ -5,6 +5,33 @@ import { prisma } from "@/lib/prisma";
 import { uploadFileToFolder } from "@/lib/google-drive";
 import { randomBytes } from "crypto";
 
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  try {
+    const files = await prisma.file.findMany({
+      where: { projectId: params.id },
+      select: { id: true, originalName: true, mimeType: true, size: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(files);
+  } catch (error) {
+    console.error("Project files fetch error:", error);
+    return NextResponse.json(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }

@@ -87,6 +87,7 @@ export default function EditPresentationPage() {
   // Settings form
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [clientLogo, setClientLogo] = useState("");
   const [accentColor, setAccentColor] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
@@ -103,6 +104,7 @@ export default function EditPresentationPage() {
         setPres(data);
         setTitle(data.title || "");
         setSubtitle(data.subtitle || "");
+        setClientLogo(data.clientLogo || "");
         setAccentColor(data.clientAccentColor || "");
         setExpiresAt(
           data.expiresAt
@@ -143,6 +145,7 @@ export default function EditPresentationPage() {
       const body: Record<string, unknown> = {
         title: title || null,
         subtitle: subtitle || null,
+        clientLogo: clientLogo || null,
         clientAccentColor: accentColor || null,
         expiresAt: expiresAt || null,
         watermarkEnabled,
@@ -607,6 +610,25 @@ export default function EditPresentationPage() {
                   placeholder="Optional subtitle"
                   className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Client Logo
+                </label>
+                <select
+                  value={clientLogo}
+                  onChange={(e) => setClientLogo(e.target.value)}
+                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                >
+                  <option value="">No logo</option>
+                  {projectFiles
+                    .filter((f) => f.mimeType.startsWith("image/"))
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.originalName}
+                      </option>
+                    ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
