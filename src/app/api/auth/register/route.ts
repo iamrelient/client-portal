@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { isSpamEmail } from "@/lib/auth-utils";
 
 export async function POST(req: Request) {
   try {
@@ -16,6 +17,13 @@ export async function POST(req: Request) {
     if (password.length < 8) {
       return NextResponse.json(
         { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    if (isSpamEmail(email)) {
+      return NextResponse.json(
+        { error: "This email address is not allowed" },
         { status: 400 }
       );
     }
