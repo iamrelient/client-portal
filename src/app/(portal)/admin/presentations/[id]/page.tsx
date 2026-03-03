@@ -16,7 +16,10 @@ import {
   ChevronDown,
   Eye,
   Upload,
+  Settings2,
 } from "lucide-react";
+import { PanoramaEditor } from "@/components/admin/panorama-editor";
+import type { PanoramaMetadata } from "@/types/panorama";
 
 interface FileOption {
   id: string;
@@ -98,6 +101,9 @@ export default function EditPresentationPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
+
+  // Panorama editor
+  const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
 
   // Add section
   const [addingType, setAddingType] = useState("");
@@ -429,8 +435,8 @@ export default function EditPresentationPage() {
                   !isFixed && idx < sections.length - 2; // Can't go below closing
 
                 return (
+                  <div key={section.id}>
                   <div
-                    key={section.id}
                     className="px-6 py-3 flex items-start gap-3"
                   >
                     {/* Grip / order controls */}
@@ -617,17 +623,60 @@ export default function EditPresentationPage() {
                       )}
                     </div>
 
-                    {/* Delete */}
-                    {!isFixed && (
-                      <button
-                        onClick={() =>
-                          handleDeleteSection(section.id, section.type)
+                    {/* Actions */}
+                    <div className="flex flex-col gap-1 mt-1">
+                      {/* Configure 360° button for panorama sections */}
+                      {section.type === "panorama" && section.fileId && (
+                        <button
+                          onClick={() =>
+                            setExpandedPanoramaId(
+                              expandedPanoramaId === section.id
+                                ? null
+                                : section.id
+                            )
+                          }
+                          className={`rounded-lg p-1.5 transition-colors ${
+                            expandedPanoramaId === section.id
+                              ? "text-brand-400 bg-brand-500/10"
+                              : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-300"
+                          }`}
+                          title="Configure 360°"
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+
+                      {/* Delete */}
+                      {!isFixed && (
+                        <button
+                          onClick={() =>
+                            handleDeleteSection(section.id, section.type)
+                          }
+                          className="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                          title="Delete section"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Panorama editor expansion */}
+                  {section.type === "panorama" &&
+                    expandedPanoramaId === section.id &&
+                    section.fileId && (
+                      <PanoramaEditor
+                        sectionId={section.id}
+                        imageUrl={`/api/files/${section.fileId}/download?inline=true`}
+                        metadata={
+                          (section.metadata as PanoramaMetadata) || {}
                         }
-                        className="rounded-lg p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-colors mt-1"
-                        title="Delete section"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                        allSections={sections}
+                        projectFiles={projectFiles}
+                        onSave={async (metadata) => {
+                          await handleUpdateSection(section.id, { metadata });
+                        }}
+                      />
                     )}
                   </div>
                 );

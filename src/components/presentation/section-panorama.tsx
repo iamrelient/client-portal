@@ -2,18 +2,34 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { PresentationData, SectionData } from "./presentation-shell";
+import type { PanoramaMetadata } from "@/types/panorama";
 
 interface SectionPanoramaProps {
   section: SectionData;
   data: PresentationData;
+  onWalkthroughEnter?: () => void;
+  onWalkthroughExit?: () => void;
 }
 
-export function SectionPanorama({ section, data }: SectionPanoramaProps) {
+export function SectionPanorama({
+  section,
+  data,
+  onWalkthroughEnter,
+  onWalkthroughExit,
+}: SectionPanoramaProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [activated, setActivated] = useState(false);
-  const [PanoViewer, setPanoViewer] = useState<typeof import("./panorama-viewer").PanoramaViewer | null>(null);
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
+  const [PanoViewer, setPanoViewer] = useState<
+    typeof import("./panorama-viewer").PanoramaViewer | null
+  >(null);
+  const [WalkthroughComponent, setWalkthroughComponent] = useState<
+    typeof import("./panorama-walkthrough").PanoramaWalkthrough | null
+  >(null);
   const [reduced, setReduced] = useState(false);
+
+  const metadata = (section.metadata || {}) as PanoramaMetadata;
 
   useEffect(() => {
     setReduced(
@@ -47,21 +63,65 @@ export function SectionPanorama({ section, data }: SectionPanoramaProps) {
   }, [visible]);
 
   const handleActivate = useCallback(() => {
+    // Check if this panorama is part of a tour group
+    const tourGroupId = metadata.tourGroupId;
+
+    if (tourGroupId) {
+      // Find all sibling panorama sections in the same tour group
+      const siblings = data.sections.filter(
+        (s) =>
+          s.type === "panorama" &&
+          s.metadata &&
+          (s.metadata as PanoramaMetadata).tourGroupId === tourGroupId
+      );
+
+      if (siblings.length > 1) {
+        // Launch walkthrough
+        import("./panorama-walkthrough").then((mod) => {
+          setWalkthroughComponent(() => mod.PanoramaWalkthrough);
+          setWalkthroughActive(true);
+          onWalkthroughEnter?.();
+        });
+        return;
+      }
+    }
+
+    // Solo mode
     setActivated(true);
-  }, []);
+  }, [metadata.tourGroupId, data.sections, onWalkthroughEnter]);
 
   const handleExit = useCallback(() => {
     setActivated(false);
   }, []);
 
+  const handleWalkthroughExit = useCallback(() => {
+    setWalkthroughActive(false);
+    setWalkthroughComponent(null);
+    onWalkthroughExit?.();
+  }, [onWalkthroughExit]);
+
   const assetUrl = section.file
     ? `/api/present/${data.accessToken}/asset/${section.file.id}`
     : null;
 
-  const metadata = section.metadata as {
-    hotspots?: { pitch: number; yaw: number; label: string; targetSectionId: string }[];
-    initialView?: { pitch: number; yaw: number };
-  } | null;
+  // Build room data for walkthrough
+  const tourRooms = walkthroughActive
+    ? data.sections
+        .filter(
+          (s) =>
+            s.type === "panorama" &&
+            s.file &&
+            s.metadata &&
+            (s.metadata as PanoramaMetadata).tourGroupId ===
+              metadata.tourGroupId
+        )
+        .sort((a, b) => a.order - b.order)
+        .map((s) => ({
+          sectionId: s.id,
+          imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
+          metadata: (s.metadata || {}) as PanoramaMetadata,
+        }))
+    : [];
 
   return (
     <div
@@ -74,7 +134,7 @@ export function SectionPanorama({ section, data }: SectionPanoramaProps) {
         overflow: "hidden",
       }}
     >
-      {assetUrl && !activated && (
+      {assetUrl && !activated && !walkthroughActive && (
         <>
           {/* Static preview image */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -173,13 +233,26 @@ export function SectionPanorama({ section, data }: SectionPanoramaProps) {
         </>
       )}
 
-      {/* Active panorama */}
+      {/* Active solo panorama */}
       {assetUrl && activated && PanoViewer && (
         <>
           <PanoViewer
             imageUrl={assetUrl}
-            initialView={metadata?.initialView}
-            hotspots={metadata?.hotspots}
+            initialView={metadata.initialView}
+            hotspots={metadata.hotspots}
+            onNavigationHotspotClick={(targetId) => {
+              // In solo mode, navigate to the target section if in same tour
+              const targetSection = data.sections.find(
+                (s) => s.id === targetId
+              );
+              if (targetSection) {
+                // Scroll to that section
+                const el = document.querySelector(
+                  `[data-section-id="${targetId}"]`
+                );
+                if (el) el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
           />
 
           {/* Exit button */}
@@ -203,11 +276,35 @@ export function SectionPanorama({ section, data }: SectionPanoramaProps) {
             }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <line x1="2" y1="2" x2="12" y2="12" stroke="rgba(255,255,255,0.8)" strokeWidth="1" />
-              <line x1="12" y1="2" x2="2" y2="12" stroke="rgba(255,255,255,0.8)" strokeWidth="1" />
+              <line
+                x1="2"
+                y1="2"
+                x2="12"
+                y2="12"
+                stroke="rgba(255,255,255,0.8)"
+                strokeWidth="1"
+              />
+              <line
+                x1="12"
+                y1="2"
+                x2="2"
+                y2="12"
+                stroke="rgba(255,255,255,0.8)"
+                strokeWidth="1"
+              />
             </svg>
           </button>
         </>
+      )}
+
+      {/* Walkthrough overlay */}
+      {walkthroughActive && WalkthroughComponent && tourRooms.length > 0 && (
+        <WalkthroughComponent
+          rooms={tourRooms}
+          initialRoomId={section.id}
+          accessToken={data.accessToken}
+          onExit={handleWalkthroughExit}
+        />
       )}
 
       {/* No file fallback */}

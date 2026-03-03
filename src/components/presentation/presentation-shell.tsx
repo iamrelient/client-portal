@@ -49,6 +49,7 @@ interface PresentationShellProps {
 
 export function PresentationShell({ data, viewerName }: PresentationShellProps) {
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
   const { progress, currentSection, containerRef } = useScrollManager(
     data.sections.length
   );
@@ -127,7 +128,11 @@ export function PresentationShell({ data, viewerName }: PresentationShellProps) 
         }
       `}</style>
 
-      <div ref={containerRef} className="presentation-scroll">
+      <div
+        ref={containerRef}
+        className="presentation-scroll"
+        style={walkthroughActive ? { overflow: "hidden" } : undefined}
+      >
         {data.sections.map((section, index) => {
           // Find the previous image section's transition for auto-cycling
           const prevImageSection = data.sections
@@ -152,6 +157,8 @@ export function PresentationShell({ data, viewerName }: PresentationShellProps) 
                   fontsLoaded={fontsLoaded}
                   viewerName={viewerName}
                   previousTransition={prevImageSection?.transitionStyle}
+                  onWalkthroughEnter={() => setWalkthroughActive(true)}
+                  onWalkthroughExit={() => setWalkthroughActive(false)}
                 />
               ) : null}
             </div>
@@ -159,7 +166,7 @@ export function PresentationShell({ data, viewerName }: PresentationShellProps) 
         })}
       </div>
 
-      <ProgressIndicator progress={progress} />
+      {!walkthroughActive && <ProgressIndicator progress={progress} />}
       <WatermarkOverlay
         enabled={data.watermarkEnabled}
         viewerName={viewerName}
@@ -177,10 +184,12 @@ interface SectionRendererProps {
   fontsLoaded: boolean;
   viewerName?: string;
   previousTransition?: string | null;
+  onWalkthroughEnter?: () => void;
+  onWalkthroughExit?: () => void;
 }
 
 const MemoizedSectionRenderer = memo(function SectionRenderer(props: SectionRendererProps) {
-  const { section, data, fontsLoaded, previousTransition } = props;
+  const { section, data, fontsLoaded, previousTransition, onWalkthroughEnter, onWalkthroughExit } = props;
   // Each section component handles its own visibility via IntersectionObserver
   switch (section.type) {
     case "hero":
@@ -199,7 +208,14 @@ const MemoizedSectionRenderer = memo(function SectionRenderer(props: SectionRend
       return <SectionVideo section={section} data={data} />;
 
     case "panorama":
-      return <SectionPanorama section={section} data={data} />;
+      return (
+        <SectionPanorama
+          section={section}
+          data={data}
+          onWalkthroughEnter={onWalkthroughEnter}
+          onWalkthroughExit={onWalkthroughExit}
+        />
+      );
 
     case "text":
       return <SectionText section={section} data={data} />;

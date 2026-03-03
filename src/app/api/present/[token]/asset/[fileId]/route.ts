@@ -48,10 +48,24 @@ export async function GET(
       });
 
       if (!section) {
-        return NextResponse.json(
-          { error: "File not found in presentation" },
-          { status: 404 }
-        );
+        // Check if file is referenced in any section's metadata (hotspot images, PDFs, floor plans)
+        const allSections = await prisma.presentationSection.findMany({
+          where: { presentationId: presentation.id },
+          select: { id: true, metadata: true },
+        });
+
+        const referencedInMetadata = allSections.some((s) => {
+          if (!s.metadata) return false;
+          const metaStr = JSON.stringify(s.metadata);
+          return metaStr.includes(params.fileId);
+        });
+
+        if (!referencedInMetadata) {
+          return NextResponse.json(
+            { error: "File not found in presentation" },
+            { status: 404 }
+          );
+        }
       }
     }
 
