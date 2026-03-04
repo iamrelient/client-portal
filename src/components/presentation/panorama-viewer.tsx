@@ -228,6 +228,7 @@ export const PanoramaViewer = forwardRef<
     if (!el) return;
 
     let destroyed = false;
+    let resizeObserver: ResizeObserver | null = null;
 
     loadPannellum().then(() => {
       if (destroyed || !containerRef.current) return;
@@ -235,75 +236,96 @@ export const PanoramaViewer = forwardRef<
       const pannellum = (window as unknown as { pannellum: PannellumGlobal })
         .pannellum;
 
-      // Multi-scene mode
-      if (scenes && scenes.length > 0) {
-        const sceneConfigs: Record<string, Record<string, unknown>> = {};
-
-        for (const scene of scenes) {
-          sceneConfigs[scene.id] = {
-            type: "equirectangular",
-            panorama: scene.imageUrl,
-            pitch: scene.initialView?.pitch ?? 0,
-            yaw: scene.initialView?.yaw ?? 180,
-            hfov: scene.initialView?.hfov ?? 110,
-            hotSpots: buildHotspotConfigs(
-              scene.hotspots || [],
-              onNavigationHotspotClick,
-              onInfoHotspotClick
-            ),
-          };
+      // Wait for the container to have valid dimensions before initializing.
+      // On first activation the container may not have been painted yet,
+      // causing Pannellum to capture 0×0 dimensions and render broken/zoomed-in.
+      const initWhenReady = () => {
+        if (destroyed || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          requestAnimationFrame(initWhenReady);
+          return;
         }
 
-        viewerRef.current = pannellum.viewer(containerRef.current!, {
-          default: {
-            firstScene: initialScene || scenes[0].id,
+        // Multi-scene mode
+        if (scenes && scenes.length > 0) {
+          const sceneConfigs: Record<string, Record<string, unknown>> = {};
+
+          for (const scene of scenes) {
+            sceneConfigs[scene.id] = {
+              type: "equirectangular",
+              panorama: scene.imageUrl,
+              pitch: scene.initialView?.pitch ?? 0,
+              yaw: scene.initialView?.yaw ?? 180,
+              hfov: scene.initialView?.hfov ?? 110,
+              hotSpots: buildHotspotConfigs(
+                scene.hotspots || [],
+                onNavigationHotspotClick,
+                onInfoHotspotClick
+              ),
+            };
+          }
+
+          viewerRef.current = pannellum.viewer(containerRef.current!, {
+            default: {
+              firstScene: initialScene || scenes[0].id,
+              autoLoad: true,
+              autoRotate: autoRotate,
+              compass: false,
+              showControls: false,
+              showFullscreenCtrl: false,
+              mouseZoom: true,
+              touchPanSpeedCoeffFactor: 1,
+              draggable: true,
+              sceneFadeDuration: 500,
+            },
+            scenes: sceneConfigs,
+          });
+
+          if (onSceneChange) {
+            viewerRef.current.on("scenechange", (sceneId: unknown) => {
+              onSceneChange(sceneId as string);
+            });
+          }
+        } else {
+          // Single panorama mode
+          const hotspotConfigs = buildHotspotConfigs(
+            hotspots || [],
+            onNavigationHotspotClick,
+            onInfoHotspotClick
+          );
+
+          viewerRef.current = pannellum.viewer(containerRef.current!, {
+            type: "equirectangular",
+            panorama: imageUrl,
             autoLoad: true,
             autoRotate: autoRotate,
             compass: false,
             showControls: false,
             showFullscreenCtrl: false,
+            hfov: initialView?.hfov ?? 110,
             mouseZoom: true,
             touchPanSpeedCoeffFactor: 1,
             draggable: true,
-            sceneFadeDuration: 500,
-          },
-          scenes: sceneConfigs,
-        });
-
-        if (onSceneChange) {
-          viewerRef.current.on("scenechange", (sceneId: unknown) => {
-            onSceneChange(sceneId as string);
+            pitch: initialView?.pitch ?? 0,
+            yaw: initialView?.yaw ?? 180,
+            hotSpots: hotspotConfigs,
           });
         }
-      } else {
-        // Single panorama mode
-        const hotspotConfigs = buildHotspotConfigs(
-          hotspots || [],
-          onNavigationHotspotClick,
-          onInfoHotspotClick
-        );
 
-        viewerRef.current = pannellum.viewer(containerRef.current!, {
-          type: "equirectangular",
-          panorama: imageUrl,
-          autoLoad: true,
-          autoRotate: autoRotate,
-          compass: false,
-          showControls: false,
-          showFullscreenCtrl: false,
-          hfov: initialView?.hfov ?? 110,
-          mouseZoom: true,
-          touchPanSpeedCoeffFactor: 1,
-          draggable: true,
-          pitch: initialView?.pitch ?? 0,
-          yaw: initialView?.yaw ?? 180,
-          hotSpots: hotspotConfigs,
+        // Watch for container resize (window resize, orientation change, etc.)
+        resizeObserver = new ResizeObserver(() => {
+          viewerRef.current?.resize();
         });
-      }
+        resizeObserver.observe(containerRef.current!);
+      };
+
+      requestAnimationFrame(initWhenReady);
     });
 
     return () => {
       destroyed = true;
+      resizeObserver?.disconnect();
       if (viewerRef.current) {
         viewerRef.current.destroy();
         viewerRef.current = null;
