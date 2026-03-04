@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { Check, Copy, FolderOpen } from "lucide-react";
+import { AlertTriangle, Check, Copy, FolderOpen } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { CardSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [driveDisconnected, setDriveDisconnected] = useState(false);
   const isAdmin = session?.user?.role === "ADMIN";
 
   useEffect(() => {
@@ -82,6 +83,17 @@ export default function DashboardPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  // Check Google Drive connection status for admins
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/google/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.connected) setDriveDisconnected(true);
+      })
+      .catch(() => {});
+  }, [isAdmin]);
 
   const { active, completed } = useMemo(() => {
     const active: ProjectCard[] = [];
@@ -118,6 +130,23 @@ export default function DashboardPage() {
         title={`Welcome back, ${session?.user?.name?.split(" ")[0] || "User"}`}
         description="Here are your projects."
       />
+
+      {driveDisconnected && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-300">
+              Google Drive disconnected
+            </p>
+            <p className="mt-0.5 text-amber-300/70">
+              Images and files won&apos;t load until reconnected.{" "}
+              <Link href="/settings" className="underline hover:text-amber-200">
+                Reconnect in Settings
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
 
       {projects.length === 0 ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">

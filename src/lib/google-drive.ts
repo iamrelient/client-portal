@@ -38,6 +38,14 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
 
   if (!res.ok) {
     const err = await res.text();
+
+    // If the refresh token is revoked/expired (e.g. Google project in "Testing" mode),
+    // delete the stored token so the UI shows "disconnected" instead of silently failing.
+    if (err.includes("invalid_grant") || err.includes("Token has been expired or revoked")) {
+      console.error("Google refresh token revoked — clearing stored credentials");
+      await prisma.googleToken.delete({ where: { id: "singleton" } }).catch(() => {});
+    }
+
     throw new Error(`Failed to refresh token: ${err}`);
   }
 
