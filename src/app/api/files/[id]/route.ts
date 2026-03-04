@@ -29,6 +29,14 @@ export async function PATCH(
 
     if ("isCurrent" in body) {
       data.isCurrent = Boolean(body.isCurrent);
+
+      // When unchecking current on a grouped file, also uncheck all versions in the group
+      if (!body.isCurrent && file.fileGroupId) {
+        await prisma.file.updateMany({
+          where: { fileGroupId: file.fileGroupId },
+          data: { isCurrent: false },
+        });
+      }
     }
 
     if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"].includes(body.category)) {
