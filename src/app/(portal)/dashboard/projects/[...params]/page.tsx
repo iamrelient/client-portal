@@ -20,7 +20,7 @@ const CATEGORY_LABELS: Record<FileCategory, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
   CAD_DRAWING: "CAD Drawings",
-  SUPPORTING: "Supporting Documents",
+  SUPPORTING: "Owner Provided",
   OTHER: "Others",
 };
 
