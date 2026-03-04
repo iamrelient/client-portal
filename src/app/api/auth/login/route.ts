@@ -15,8 +15,12 @@ export async function POST(req: NextRequest) {
 
     const user = await validateCredentials(email, password);
 
+    // 30 days if "remember me", 24 hours otherwise
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60;
+
     const token = await encode({
       secret: process.env.NEXTAUTH_SECRET!,
+      maxAge, // JWT exp must match cookie maxAge
       token: {
         sub: user.id,
         name: user.name,
@@ -37,8 +41,6 @@ export async function POST(req: NextRequest) {
       ? "__Secure-next-auth.session-token"
       : "next-auth.session-token";
 
-    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : undefined; // 30 days or session
-
     const res = NextResponse.json({ ok: true });
 
     res.cookies.set(cookieName, token, {
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
       sameSite: "lax",
       secure: isSecure,
       path: "/",
-      ...(maxAge !== undefined && { maxAge }),
+      maxAge,
     });
 
     return res;
