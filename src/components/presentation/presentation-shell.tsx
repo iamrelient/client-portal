@@ -85,7 +85,6 @@ export function PresentationShell({
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [walkthroughActive, setWalkthroughActive] = useState(false);
   const [fadeCutActive, setFadeCutActive] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [model3DSnapshot, setModel3DSnapshot] = useState<string | null>(null);
 
   /* ---- Build segments from flat sections ---- */
@@ -260,6 +259,7 @@ export function PresentationShell({
                 onWalkthroughEnter={() => setWalkthroughActive(true)}
                 onWalkthroughExit={() => setWalkthroughActive(false)}
                 onChapterNavigate={handleChapterNavigate}
+                onSnapshot={seg.section.type === "3d-model" ? setModel3DSnapshot : undefined}
               />
             </div>
           );
@@ -336,6 +336,7 @@ interface FullscreenSectionProps {
   onWalkthroughEnter: () => void;
   onWalkthroughExit: () => void;
   onChapterNavigate: (targetChapter: string) => void;
+  onSnapshot?: (dataUrl: string) => void;
 }
 
 function FullscreenSection({
@@ -346,6 +347,7 @@ function FullscreenSection({
   onWalkthroughEnter,
   onWalkthroughExit,
   onChapterNavigate,
+  onSnapshot,
 }: FullscreenSectionProps) {
   switch (section.type) {
     case "hero":
@@ -388,7 +390,7 @@ function FullscreenSection({
           section={section}
           data={data}
           onNavigate={onChapterNavigate}
-          onSnapshot={setModel3DSnapshot}
+          onSnapshot={onSnapshot}
         />
       );
 
