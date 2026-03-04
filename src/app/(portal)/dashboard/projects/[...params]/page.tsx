@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { ChevronDown, ChevronRight, Download, FileX, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
@@ -64,6 +64,57 @@ function canPreview(mimeType: string, fileName: string) {
 
 function isImage(mimeType: string) {
   return mimeType.startsWith("image/");
+}
+
+/** Renders first page of a PDF as a canvas thumbnail */
+function PdfThumbnail({ fileId, alt }: { fileId: string; alt: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const render = useCallback(async () => {
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const pdf = await pdfjsLib.getDocument(`/api/files/${fileId}/download?inline=true`).promise;
+      const page = await pdf.getPage(1);
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      // Render at 2x for sharpness, capped at reasonable size
+      const targetWidth = 576; // 288px card × 2
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const scale = targetWidth / unscaledViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      setLoaded(true);
+    } catch {
+      // PDF failed to render — fallback stays visible
+    }
+  }, [fileId]);
+
+  useEffect(() => {
+    render();
+  }, [render]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-label={alt}
+      className={`h-full w-full object-cover transition-opacity duration-300 ${
+        loaded ? "opacity-100" : "opacity-0"
+      }`}
+      style={{ display: "block" }}
+    />
+  );
 }
 
 const CATEGORY_ACCENT: Record<FileCategory, string> = {
@@ -468,15 +519,29 @@ export default function ClientProjectDetailPage() {
                     previewable ? "cursor-pointer" : ""
                   }`}
                 >
-                  {isImage(file.mimeType) ? (
-                    /* ── Image Card ── */
+                  {isImage(file.mimeType) || file.mimeType === "application/pdf" ? (
+                    /* ── Visual Card (Image or PDF thumbnail) ── */
                     <div className="relative aspect-[4/3]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/files/${file.id}/download?inline=true`}
-                        alt={fileName}
-                        className="h-full w-full object-cover"
-                      />
+                      {/* Thumbnail */}
+                      {isImage(file.mimeType) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/files/${file.id}/download?inline=true`}
+                          alt={fileName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <>
+                          {/* PDF first-page render */}
+                          <div className="absolute inset-0 bg-white">
+                            <PdfThumbnail fileId={file.id} alt={fileName} />
+                          </div>
+                          {/* Fallback icon while PDF loads */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/[0.03]">
+                            <FileIcon className="h-12 w-12 text-slate-600" />
+                          </div>
+                        </>
+                      )}
                       {/* Gradient overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
@@ -504,7 +569,7 @@ export default function ClientProjectDetailPage() {
                       </div>
                     </div>
                   ) : (
-                    /* ── Document Card (PDF, CAD, etc.) ── */
+                    /* ── Document Card (CAD, etc.) ── */
                     <div className="relative aspect-[4/3] flex flex-col">
                       {/* Colored accent strip */}
                       <div className={`h-1.5 w-full bg-gradient-to-r ${accent}`} />
