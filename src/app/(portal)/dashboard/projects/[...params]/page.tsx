@@ -83,7 +83,7 @@ function PdfThumbnail({ fileId, alt }: { fileId: string; alt: string }) {
       if (!canvas) return;
 
       // Render at 2x for sharpness, capped at reasonable size
-      const targetWidth = 576; // 288px card × 2
+      const targetWidth = 768; // 384px card × 2
       const unscaledViewport = page.getViewport({ scale: 1 });
       const scale = targetWidth / unscaledViewport.width;
       const viewport = page.getViewport({ scale });
@@ -305,7 +305,18 @@ export default function ClientProjectDetailPage() {
   }
 
   const categorized = groupByCategory(project.files);
-  const featuredFiles = project.files.filter((f) => f.isCurrent);
+  const featuredFiles = (() => {
+    const currentFiles = project.files.filter((f) => f.isCurrent);
+    const groups = new Map<string, ProjectFile>();
+    for (const file of currentFiles) {
+      const key = file.fileGroupId || file.id;
+      const existing = groups.get(key);
+      if (!existing || file.version > existing.version) {
+        groups.set(key, file);
+      }
+    }
+    return Array.from(groups.values());
+  })();
 
   function renderCategorySection(category: FileCategory) {
     const items = categorized[category];
@@ -515,7 +526,7 @@ export default function ClientProjectDetailPage() {
                 <div
                   key={file.id}
                   onClick={() => previewable ? setPreviewFile(file) : undefined}
-                  className={`group relative w-72 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 ${
+                  className={`group relative w-96 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 ${
                     previewable ? "cursor-pointer" : ""
                   }`}
                 >
