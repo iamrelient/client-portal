@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, FileX, Loader2, Archive, Columns } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, FileX, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FilePreviewModal } from "@/components/file-preview-modal";
@@ -61,6 +61,18 @@ function canPreview(mimeType: string, fileName: string) {
     canPreview3D(mimeType, fileName)
   );
 }
+
+function isImage(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+const CATEGORY_ACCENT: Record<FileCategory, string> = {
+  RENDER: "from-brand-500/80 to-brand-600/80",
+  DRAWING: "from-amber-500/80 to-amber-600/80",
+  CAD_DRAWING: "from-violet-500/80 to-violet-600/80",
+  SUPPORTING: "from-cyan-500/80 to-cyan-600/80",
+  OTHER: "from-slate-500/80 to-slate-600/80",
+};
 
 /** Group files so only the latest version of each name shows in the main table */
 function getLatestFiles(files: ProjectFile[]) {
@@ -242,6 +254,7 @@ export default function ClientProjectDetailPage() {
   }
 
   const categorized = groupByCategory(project.files);
+  const featuredFiles = project.files.filter((f) => f.isCurrent);
 
   function renderCategorySection(category: FileCategory) {
     const items = categorized[category];
@@ -414,25 +427,141 @@ export default function ClientProjectDetailPage() {
         <StatusTimeline status={project.status} />
       </div>
 
-      {/* Download All */}
-      {project.files.some((f) => f.isCurrent) && (
-        <div className="mb-6">
-          <button
-            onClick={handleDownloadAll}
-            disabled={downloadingZip}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
-          >
-            {downloadingZip ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Archive className="h-4 w-4" />
-            )}
-            Download All Files (.zip)
-          </button>
+      {/* Featured Deliverables */}
+      {featuredFiles.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Star className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-slate-100">
+                Featured Deliverables
+              </h2>
+              <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
+                {featuredFiles.length}
+              </span>
+            </div>
+            <button
+              onClick={handleDownloadAll}
+              disabled={downloadingZip}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
+            >
+              {downloadingZip ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Archive className="h-4 w-4" />
+              )}
+              Download All (.zip)
+            </button>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+            {featuredFiles.map((file) => {
+              const FileIcon = getFileIcon(file.mimeType, file.originalName);
+              const fileName = file.displayName || file.originalName;
+              const previewable = canPreview(file.mimeType, file.originalName);
+              const accent = CATEGORY_ACCENT[file.category] || CATEGORY_ACCENT.OTHER;
+
+              return (
+                <div
+                  key={file.id}
+                  onClick={() => previewable ? setPreviewFile(file) : undefined}
+                  className={`group relative w-72 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 ${
+                    previewable ? "cursor-pointer" : ""
+                  }`}
+                >
+                  {isImage(file.mimeType) ? (
+                    /* ── Image Card ── */
+                    <div className="relative aspect-[4/3]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/files/${file.id}/download?inline=true`}
+                        alt={fileName}
+                        className="h-full w-full object-cover"
+                      />
+                      {/* Gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+                      {/* Category pill – top left */}
+                      <div className="absolute left-3 top-3">
+                        <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
+                          {CATEGORY_LABELS[file.category]}
+                        </span>
+                      </div>
+
+                      {/* Bottom info bar */}
+                      <div className="absolute inset-x-0 bottom-0 p-4">
+                        <p className="truncate text-sm font-medium text-white">
+                          {fileName}
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-xs text-white/60">
+                            {formatSize(file.size)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-white/[0.15] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm transition-colors group-hover:bg-white/[0.25]">
+                            <Eye className="h-3 w-3" />
+                            View
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Document Card (PDF, CAD, etc.) ── */
+                    <div className="relative aspect-[4/3] flex flex-col">
+                      {/* Colored accent strip */}
+                      <div className={`h-1.5 w-full bg-gradient-to-r ${accent}`} />
+
+                      {/* Category pill – top left */}
+                      <div className="absolute left-3 top-4">
+                        <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
+                          {CATEGORY_LABELS[file.category]}
+                        </span>
+                      </div>
+
+                      {/* Center icon */}
+                      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
+                        <div className="rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/[0.08]">
+                          <FileIcon className="h-10 w-10 text-slate-300" />
+                        </div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                          {getFileLabel(file.mimeType, file.originalName)}
+                        </span>
+                      </div>
+
+                      {/* Bottom info bar */}
+                      <div className="border-t border-white/[0.06] px-4 py-3">
+                        <p className="truncate text-sm font-medium text-slate-200">
+                          {fileName}
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-xs text-slate-500">
+                            {formatSize(file.size)}
+                          </span>
+                          {previewable ? (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors group-hover:bg-white/[0.1]">
+                              <Eye className="h-3 w-3" />
+                              View
+                            </span>
+                          ) : (
+                            <a
+                              href={`/api/files/${file.id}/download`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.1]"
+                            >
+                              <Download className="h-3 w-3" />
+                              Download
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Files grouped by category */}
+      {/* All Files grouped by category */}
       {project.files.length === 0 ? (
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <EmptyState
@@ -442,9 +571,20 @@ export default function ClientProjectDetailPage() {
           />
         </div>
       ) : (
-        CATEGORY_ORDER.filter((cat) => categorized[cat].length > 0).map((cat) =>
-          renderCategorySection(cat)
-        )
+        <>
+          {featuredFiles.length > 0 && (
+            <div className="mb-4 flex items-center gap-2">
+              <div className="h-px flex-1 bg-white/[0.06]" />
+              <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                All Files
+              </span>
+              <div className="h-px flex-1 bg-white/[0.06]" />
+            </div>
+          )}
+          {CATEGORY_ORDER.filter((cat) => categorized[cat].length > 0).map((cat) =>
+            renderCategorySection(cat)
+          )}
+        </>
       )}
 
       {previewFile && (
