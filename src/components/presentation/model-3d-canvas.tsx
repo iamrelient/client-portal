@@ -131,6 +131,32 @@ function ZoomBridge({
 }
 
 /* ------------------------------------------------------------------ */
+/*  SnapshotCapture — captures a JPEG screenshot after model loads     */
+/* ------------------------------------------------------------------ */
+
+function SnapshotCapture({ onSnapshot }: { onSnapshot: (dataUrl: string) => void }) {
+  const gl = useThree((s) => s.gl);
+  const snapped = useRef(false);
+
+  useEffect(() => {
+    if (snapped.current) return;
+    // Wait a bit for the model to fully render, then capture
+    const timer = setTimeout(() => {
+      if (snapped.current) return;
+      snapped.current = true;
+      try {
+        gl.render(gl.info as never, gl.info as never); // force frame
+      } catch { /* ok */ }
+      const dataUrl = gl.domElement.toDataURL("image/jpeg", 0.7);
+      onSnapshot(dataUrl);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [gl, onSnapshot]);
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Model3DCanvas — the actual R3F canvas with controls                */
 /* ------------------------------------------------------------------ */
 
@@ -143,6 +169,7 @@ interface Model3DCanvasProps {
   hotspots?: Model3DHotspot[];
   onHotspotNavigate?: (targetChapter: string) => void;
   onHotspotPreviewClick?: (hotspot: PreviewHotspot) => void;
+  onSnapshot?: (dataUrl: string) => void;
 }
 
 export default function Model3DCanvas({
@@ -154,6 +181,7 @@ export default function Model3DCanvas({
   hotspots,
   onHotspotNavigate,
   onHotspotPreviewClick,
+  onSnapshot,
 }: Model3DCanvasProps) {
   const [isTouch, setIsTouch] = useState(false);
   const zoomRef = useRef<ZoomFns | null>(null);
@@ -181,7 +209,7 @@ export default function Model3DCanvas({
       <Canvas
         camera={{ position: defaultCamera, fov: 45 }}
         style={{ width: "100%", height: "100%", touchAction: "none" }}
-        gl={{ antialias: !isTouch, toneMapping: THREE.ACESFilmicToneMapping }}
+        gl={{ antialias: !isTouch, toneMapping: THREE.ACESFilmicToneMapping, preserveDrawingBuffer: true }}
         dpr={isTouch ? [1, 1.5] : [1, 2]}
       >
         {/* Lighting */}
@@ -226,6 +254,9 @@ export default function Model3DCanvas({
 
         {/* Bridge to expose zoom functions to HTML overlay buttons */}
         <ZoomBridge zoomRef={zoomRef} minDistance={minDist} maxDistance={maxDist} />
+
+        {/* Capture a screenshot after model loads for PiP thumbnail */}
+        {onSnapshot && <SnapshotCapture onSnapshot={onSnapshot} />}
       </Canvas>
 
       {/* Zoom +/- buttons — bottom right overlay */}

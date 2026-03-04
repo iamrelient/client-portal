@@ -111,16 +111,19 @@ export function PresentationCursor() {
 
   if (!enabled || !mounted) return null;
 
-  // Determine cursor size and style — white glass with edge refraction
-  let size = 16;
-  let border = "1px solid rgba(255,255,255,0.2)";
+  // Determine cursor size and style — frosted ring with glow
+  let size = 18;
+  let border = "1.5px solid rgba(255,255,255,0.45)";
+  let glow = "0 0 8px rgba(255,255,255,0.12)";
 
   if (overClickable) {
-    size = 32;
-    border = "1px solid rgba(255,255,255,0.35)";
+    size = 36;
+    border = "1.5px solid rgba(255,255,255,0.6)";
+    glow = "0 0 14px rgba(255,255,255,0.2)";
   } else if (overImage) {
-    size = 22;
-    border = "1px solid rgba(255,255,255,0.3)";
+    size = 24;
+    border = "1.5px solid rgba(255,255,255,0.5)";
+    glow = "0 0 10px rgba(255,255,255,0.15)";
   }
 
   // Radial mask: transparent center → opaque edge = refraction ring
@@ -146,11 +149,12 @@ export function PresentationCursor() {
           height: size,
           borderRadius: "50%",
           border,
+          boxShadow: glow,
           pointerEvents: "none",
           zIndex: 9999,
           opacity: scrolling ? 0 : 1,
           transition:
-            "width 0.25s ease, height 0.25s ease, border 0.25s ease, opacity 0.2s ease",
+            "width 0.25s ease, height 0.25s ease, border 0.25s ease, box-shadow 0.25s ease, opacity 0.2s ease",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

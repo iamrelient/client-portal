@@ -54,9 +54,10 @@ interface Section3DModelProps {
   section: SectionData;
   data: PresentationData;
   onNavigate?: (targetChapter: string) => void;
+  onSnapshot?: (dataUrl: string) => void;
 }
 
-export function Section3DModel({ section, data, onNavigate }: Section3DModelProps) {
+export function Section3DModel({ section, data, onNavigate, onSnapshot }: Section3DModelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [reduced, setReduced] = useState(false);
@@ -191,6 +192,7 @@ export function Section3DModel({ section, data, onNavigate }: Section3DModelProp
             hotspots={hotspots}
             onHotspotNavigate={handleHotspotNavigate}
             onHotspotPreviewClick={handlePreviewClick}
+            onSnapshot={onSnapshot}
           />
         </Suspense>
       )}

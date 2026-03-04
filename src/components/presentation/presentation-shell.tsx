@@ -85,6 +85,7 @@ export function PresentationShell({
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [walkthroughActive, setWalkthroughActive] = useState(false);
   const [fadeCutActive, setFadeCutActive] = useState(false);
+  const [model3DSnapshot, setModel3DSnapshot] = useState<string | null>(null);
 
   /* ---- Build segments from flat sections ---- */
   const segments = useMemo(
@@ -298,6 +299,7 @@ export function PresentationShell({
           segments={segments}
           activeSectionIndex={scrollData.activeSectionIndex}
           onNavigate={handleNavigate}
+          snapshotUrl={model3DSnapshot}
         />
       )}
 
@@ -385,6 +387,7 @@ function FullscreenSection({
           section={section}
           data={data}
           onNavigate={onChapterNavigate}
+          onSnapshot={setModel3DSnapshot}
         />
       );
 

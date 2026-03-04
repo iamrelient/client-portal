@@ -4,7 +4,7 @@ import { useMemo, useRef, useEffect, useState } from "react";
 import type { Segment } from "./use-scroll-progress";
 
 /* ------------------------------------------------------------------ */
-/*  Model3DPiP — floating "back to floor plan" card                    */
+/*  Model3DPiP — floating "back to floor plan" thumbnail               */
 /*  Appears when user scrolls past the 3D model into chapter strips    */
 /* ------------------------------------------------------------------ */
 
@@ -12,86 +12,17 @@ interface Model3DPiPProps {
   segments: Segment[];
   activeSectionIndex: number;
   onNavigate: (sectionIndex: number) => void;
-}
-
-/* ---- Floor plan icon (larger, more detailed) ---- */
-function FloorPlanIcon() {
-  return (
-    <svg
-      width="48"
-      height="48"
-      viewBox="0 0 48 48"
-      fill="none"
-      style={{ display: "block" }}
-    >
-      {/* Outer boundary */}
-      <rect
-        x="6"
-        y="6"
-        width="36"
-        height="36"
-        rx="3"
-        stroke="rgba(255,255,255,0.5)"
-        strokeWidth="1.5"
-      />
-      {/* Room dividers */}
-      <line
-        x1="24" y1="6" x2="24" y2="30"
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth="1"
-      />
-      <line
-        x1="6" y1="24" x2="24" y2="24"
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth="1"
-      />
-      <line
-        x1="24" y1="16" x2="42" y2="16"
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth="1"
-      />
-      <line
-        x1="6" y1="34" x2="42" y2="34"
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth="1"
-      />
-      {/* Door openings */}
-      <line
-        x1="14" y1="6" x2="20" y2="6"
-        stroke="#060608"
-        strokeWidth="2"
-      />
-      <line
-        x1="28" y1="34" x2="36" y2="34"
-        stroke="#060608"
-        strokeWidth="2"
-      />
-      {/* Location pin */}
-      <circle
-        cx="14"
-        cy="14"
-        r="3"
-        fill="none"
-        stroke="rgba(255,255,255,0.6)"
-        strokeWidth="1.2"
-      />
-      <circle
-        cx="14"
-        cy="14"
-        r="1.2"
-        fill="rgba(255,255,255,0.5)"
-      />
-    </svg>
-  );
+  snapshotUrl?: string | null;
 }
 
 export function Model3DPiP({
   segments,
   activeSectionIndex,
   onNavigate,
+  snapshotUrl,
 }: Model3DPiPProps) {
-  const hasAnimatedRef = useRef(false);
-  const [animationDone, setAnimationDone] = useState(false);
+  const prevShowRef = useRef(false);
+  const [flyIn, setFlyIn] = useState(false);
 
   /* ---- Find the 3D model segment ---- */
   const model3D = useMemo(() => {
@@ -128,24 +59,19 @@ export function Model3DPiP({
     return currentSegIndex > model3D.segmentIndex;
   }, [model3D, currentSegIndex]);
 
-  /* ---- Track first appearance for fly-in animation ---- */
+  /* ---- Trigger fly-in animation every time showPiP goes false→true ---- */
   useEffect(() => {
-    if (showPiP && !hasAnimatedRef.current) {
-      hasAnimatedRef.current = true;
-      // After the fly-in animation ends, switch to simpler transition mode
-      const timer = setTimeout(() => setAnimationDone(true), 700);
+    if (showPiP && !prevShowRef.current) {
+      setFlyIn(true);
+      const timer = setTimeout(() => setFlyIn(false), 650);
       return () => clearTimeout(timer);
     }
+    prevShowRef.current = showPiP;
   }, [showPiP]);
 
   if (!model3D) return null;
 
   const label = model3D.title || "Floor Plan";
-
-  // First appearance: use fly-in keyframe animation
-  // Subsequent toggles: use simpler opacity/transform transition
-  const isFirstAppearance = showPiP && !animationDone;
-  const isSubsequentShow = showPiP && animationDone;
 
   return (
     <>
@@ -153,50 +79,62 @@ export function Model3DPiP({
         data-clickable
         data-cursor-label="Floor Plan"
         onClick={() => onNavigate(model3D.sectionIndex)}
-        className={`m3d-pip-card ${isFirstAppearance ? "m3d-pip-fly-in" : ""}`}
+        className={`m3d-pip-card ${flyIn ? "m3d-pip-fly-in" : ""}`}
         style={{
           position: "fixed",
           zIndex: 45,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          background: "rgba(6,6,8,0.8)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          border: "1px solid rgba(255,255,255,0.1)",
+          overflow: "hidden",
           cursor: "pointer",
-          // Only apply transition-based show/hide after first animation
-          ...(animationDone
-            ? {
-                opacity: isSubsequentShow ? 1 : 0,
-                pointerEvents: isSubsequentShow ? "auto" as const : "none" as const,
-                transform: isSubsequentShow ? "translateY(0) scale(1)" : "translateY(12px) scale(0.95)",
-                transition: "opacity 0.35s ease, transform 0.35s ease",
-              }
-            : !isFirstAppearance
-            ? {
-                opacity: 0,
-                pointerEvents: "none" as const,
-              }
-            : {
-                pointerEvents: "auto" as const,
-              }),
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "scale(1.05)";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)";
-          e.currentTarget.style.background = "rgba(6,6,8,0.9)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = showPiP ? "translateY(0) scale(1)" : "";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-          e.currentTarget.style.background = "rgba(6,6,8,0.8)";
+          opacity: showPiP ? 1 : 0,
+          pointerEvents: showPiP ? "auto" : "none",
+          // When not animating, use simple transitions for hide/show
+          ...(!flyIn && {
+            transform: showPiP ? "translateY(0) scale(1)" : "translateY(12px) scale(0.95)",
+            transition: "opacity 0.35s ease, transform 0.35s ease",
+          }),
         }}
       >
-        <FloorPlanIcon />
-        <span className="m3d-pip-label">{label}</span>
+        {/* Thumbnail image from canvas snapshot */}
+        {snapshotUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={snapshotUrl}
+            alt={label}
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : (
+          /* Fallback: dark placeholder with icon */
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#0a0a0f",
+            }}
+          >
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <rect x="4" y="4" width="24" height="24" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="1.2" />
+              <line x1="16" y1="4" x2="16" y2="20" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+              <line x1="4" y1="16" x2="16" y2="16" stroke="rgba(255,255,255,0.2)" strokeWidth="0.8" />
+            </svg>
+          </div>
+        )}
+
+        {/* Label overlay at bottom */}
+        <div className="m3d-pip-label-bar">
+          <span className="m3d-pip-label">{label}</span>
+        </div>
+
+        {/* Hover overlay */}
+        <div className="m3d-pip-hover" />
       </div>
 
       <style>{`
@@ -204,28 +142,54 @@ export function Model3DPiP({
           bottom: 80px;
           left: 24px;
           width: 15vw;
-          min-width: 140px;
-          max-width: 220px;
-          aspect-ratio: 1 / 1;
-          border-radius: 16px;
-          transition: border-color 0.2s ease, background 0.2s ease;
+          min-width: 160px;
+          max-width: 240px;
+          aspect-ratio: 16 / 10;
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.15);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .m3d-pip-card:hover {
+          border-color: rgba(255,255,255,0.35);
+          transform: scale(1.04) !important;
+        }
+        .m3d-pip-card:hover .m3d-pip-hover {
+          opacity: 1;
+        }
+        .m3d-pip-hover {
+          position: absolute;
+          inset: 0;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.05);
+          opacity: 0;
+          transition: opacity 0.2s ease;
+          pointer-events: none;
+        }
+        .m3d-pip-label-bar {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 6px 10px;
+          background: linear-gradient(transparent, rgba(0,0,0,0.7));
+          border-radius: 0 0 12px 12px;
         }
         .m3d-pip-label {
-          font-size: 0.625rem;
+          font-size: 0.5625rem;
           font-weight: 300;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.55);
+          color: rgba(255,255,255,0.7);
           white-space: nowrap;
         }
 
-        /* Fly-in animation on first appearance */
+        /* Fly-in: every time PiP appears */
         .m3d-pip-fly-in {
           animation: m3dPipFlyIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
         @keyframes m3dPipFlyIn {
           from {
-            transform: translate(35vw, -35vh) scale(1.3);
+            transform: translate(35vw, -35vh) scale(1.2);
             opacity: 0;
           }
           to {
@@ -238,14 +202,16 @@ export function Model3DPiP({
           .m3d-pip-card {
             bottom: 16px;
             left: 12px;
-            width: 25vw;
-            min-width: 100px;
-            max-width: 140px;
-            border-radius: 12px;
-            gap: 4px;
+            width: 30vw;
+            min-width: 120px;
+            max-width: 160px;
+            border-radius: 10px;
+          }
+          .m3d-pip-label-bar {
+            padding: 4px 8px;
           }
           .m3d-pip-label {
-            font-size: 0.5625rem;
+            font-size: 0.5rem;
           }
         }
         @media (pointer: coarse) {
