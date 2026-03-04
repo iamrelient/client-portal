@@ -35,6 +35,18 @@ export async function PATCH(
       data.category = body.category;
     }
 
+    if ("fileGroupId" in body) {
+      data.fileGroupId = body.fileGroupId ?? null; // null to detach
+    }
+
+    if ("version" in body) {
+      data.version = Number(body.version) || 1;
+    }
+
+    if ("displayName" in body) {
+      data.displayName = body.displayName || null;
+    }
+
     await prisma.file.update({
       where: { id: params.id },
       data,

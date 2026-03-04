@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns, Star } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -621,6 +621,26 @@ export default function AdminProjectDetailPage() {
     setCompareTarget(fileId);
   }
 
+  async function handleDetachFromGroup(fileId: string) {
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileGroupId: null, version: 1 }),
+      });
+      if (res.ok) {
+        toast.success("File detached from version group");
+        setExpandedGroup(null);
+        setVersionHistory({});
+        loadProject();
+      } else {
+        toast.error("Failed to detach file");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+  }
+
   async function loadActivity() {
     if (activityData) {
       setShowActivity(!showActivity);
@@ -868,6 +888,13 @@ export default function AdminProjectDetailPage() {
                                       <Download className="h-3.5 w-3.5" />
                                       Download
                                     </a>
+                                    <button
+                                      onClick={() => handleDetachFromGroup(v.id)}
+                                      className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300"
+                                      title="Detach from version group"
+                                    >
+                                      <Unlink className="h-3.5 w-3.5" />
+                                    </button>
                                     <button
                                       onClick={() => setDeleteFileTarget(v.id)}
                                       disabled={deleting === v.id}
@@ -1120,10 +1147,26 @@ export default function AdminProjectDetailPage() {
                   </div>
 
                   {entry.targetFileGroupId && (
-                    <div className="mb-3 rounded-md bg-brand-500/10 px-3 py-2">
+                    <div className="mb-3 flex items-center justify-between rounded-md bg-brand-500/10 px-3 py-2">
                       <p className="text-xs font-medium text-brand-400">
                         New version — will be added to the existing file group
                       </p>
+                      <button
+                        onClick={() =>
+                          setUploadQueue((prev) =>
+                            prev
+                              ? prev.map((item, i) =>
+                                  i === idx
+                                    ? { ...item, targetFileGroupId: null, displayName: item.file.name, category: "OTHER" as FileCategory }
+                                    : item
+                                )
+                              : null
+                          )
+                        }
+                        className="text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap ml-3"
+                      >
+                        Upload as new file instead
+                      </button>
                     </div>
                   )}
 
