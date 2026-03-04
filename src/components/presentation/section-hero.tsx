@@ -31,7 +31,7 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       return;
     }
 
-    // Beat 1: background eases from #000 to #060608 (0–1s)
+    // Beat 1: background image fades in from black (0–1s)
     setBeat(1);
 
     const timers = [
@@ -58,6 +58,15 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
   const scrollVisible = hasLogo ? beat >= 5 : beat >= 4;
   const brandVisible = hasLogo ? beat >= 3 : beat >= 2;
 
+  // Resolve background image: explicit hero file → first image section fallback
+  const heroSection = data.sections.find((s) => s.type === "hero");
+  const bgFile =
+    heroSection?.file ||
+    data.sections.find((s) => s.type === "image" && s.file)?.file;
+  const bgUrl = bgFile
+    ? `/api/present/${data.accessToken}/asset/${bgFile.id}`
+    : null;
+
   return (
     <div
       style={{
@@ -67,14 +76,59 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
         justifyContent: "center",
         flexDirection: "column",
         position: "relative",
-        backgroundColor: beat >= 1 ? "#060608" : "#000000",
-        transition: reduced ? "none" : "background-color 1s ease",
+        backgroundColor: "#000000",
+        overflow: "hidden",
       }}
     >
+      {/* Background image with gradient overlay */}
+      {bgUrl && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={bgUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              opacity: beat >= 1 ? 1 : 0,
+              transition: reduced ? "none" : "opacity 1.5s ease",
+              pointerEvents: "none",
+            }}
+          />
+          {/* Dark gradient overlay for text legibility */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.7) 100%)",
+              pointerEvents: "none",
+            }}
+          />
+        </>
+      )}
+
+      {/* Solid fallback when no background image */}
+      {!bgUrl && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: beat >= 1 ? "#060608" : "#000000",
+            transition: reduced ? "none" : "background-color 1s ease",
+          }}
+        />
+      )}
+
       {/* Beat 2: Client logo */}
       {hasLogo && (
         <div
           style={{
+            position: "relative",
+            zIndex: 1,
             opacity: logoVisible ? 1 : 0,
             transform: logoVisible ? "scale(1)" : "scale(0.97)",
             transition: reduced
@@ -94,6 +148,8 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       {/* Beat 3: Title — each word staggers in */}
       <h1
         style={{
+          position: "relative",
+          zIndex: 1,
           fontSize: "clamp(2rem, 5vw, 4rem)",
           fontWeight: 300,
           letterSpacing: "0.1em",
@@ -124,11 +180,12 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       {/* Beat 4: Horizontal line extending from center */}
       <div
         style={{
+          position: "relative",
+          zIndex: 1,
           width: "30%",
           height: 1,
           marginTop: "2rem",
           marginBottom: "2rem",
-          position: "relative",
           overflow: "hidden",
         }}
       >
@@ -151,10 +208,12 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       {data.subtitle && (
         <p
           style={{
+            position: "relative",
+            zIndex: 1,
             fontSize: "clamp(0.875rem, 1.5vw, 1.25rem)",
             fontWeight: 300,
             letterSpacing: "0.02em",
-            color: "#b0b0b0",
+            color: "rgba(255,255,255,0.85)",
             textAlign: "center",
             padding: "0 clamp(1rem, 4vw, 2rem)",
             opacity: subtitleVisible ? 1 : 0,
@@ -172,6 +231,7 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       <div
         style={{
           position: "absolute",
+          zIndex: 1,
           bottom: "2.5rem",
           left: "50%",
           transform: "translateX(-50%)",
@@ -202,6 +262,7 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
       <div
         style={{
           position: "absolute",
+          zIndex: 1,
           bottom: "1.5rem",
           right: "1.5rem",
           opacity: brandVisible ? 0.18 : 0,

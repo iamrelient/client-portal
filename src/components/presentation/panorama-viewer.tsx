@@ -313,6 +313,11 @@ export const PanoramaViewer = forwardRef<
           });
         }
 
+        // Safety resize after first paint to handle any remaining layout settling
+        setTimeout(() => {
+          viewerRef.current?.resize();
+        }, 100);
+
         // Watch for container resize (window resize, orientation change, etc.)
         resizeObserver = new ResizeObserver(() => {
           viewerRef.current?.resize();
@@ -320,7 +325,10 @@ export const PanoramaViewer = forwardRef<
         resizeObserver.observe(containerRef.current!);
       };
 
-      requestAnimationFrame(initWhenReady);
+      // Double-rAF: first rAF queues work before next paint,
+      // second rAF runs after that paint has completed — ensures the
+      // container is fully painted so Pannellum captures correct dimensions.
+      requestAnimationFrame(() => requestAnimationFrame(initWhenReady));
     });
 
     return () => {
