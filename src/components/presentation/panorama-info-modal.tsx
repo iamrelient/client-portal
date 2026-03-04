@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { InfoContent } from "@/types/panorama";
 
@@ -33,6 +33,9 @@ export function PanoramaInfoModal({
 }: PanoramaInfoModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const startY = useRef<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Close on escape
   useEffect(() => {
@@ -320,5 +323,6 @@ export function PanoramaInfoModal({
     </div>
   );
 
+  if (!mounted) return null;
   return createPortal(modal, document.body);
 }

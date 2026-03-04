@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PreviewHotspot } from "@/types/model3d";
 
@@ -22,6 +22,12 @@ export function Model3DPreviewCard({
   onNavigate,
 }: Model3DPreviewCardProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  /* ---- SSR guard ---- */
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   /* ---- Escape key ---- */
   useEffect(() => {
@@ -289,5 +295,6 @@ export function Model3DPreviewCard({
     </div>
   );
 
+  if (!mounted) return null;
   return createPortal(modal, document.body);
 }

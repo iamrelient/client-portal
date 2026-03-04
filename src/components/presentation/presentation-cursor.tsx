@@ -14,8 +14,11 @@ export function PresentationCursor() {
   const [overImage, setOverImage] = useState(false);
   const [scrolling, setScrolling] = useState(false);
   const [enabled, setEnabled] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+
     // Desktop only, respect reduced motion
     const isTouch =
       "ontouchstart" in window || navigator.maxTouchPoints > 0;
@@ -106,7 +109,7 @@ export function PresentationCursor() {
       window.removeEventListener("scroll", handleScroll, { capture: true });
   }, [enabled]);
 
-  if (!enabled) return null;
+  if (!enabled || !mounted) return null;
 
   // Determine cursor size and style — white glass with edge refraction
   let size = 16;

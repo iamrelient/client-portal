@@ -23,9 +23,11 @@ export function ImageLightbox({
   );
   const backdropRef = useRef<HTMLDivElement>(null);
   const [entered, setEntered] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Fade in on mount
+  // SSR guard + fade in on mount
   useEffect(() => {
+    setMounted(true);
     requestAnimationFrame(() => setEntered(true));
   }, []);
 
@@ -280,5 +282,6 @@ export function ImageLightbox({
     </div>
   );
 
+  if (!mounted) return null;
   return createPortal(modal, document.body);
 }
