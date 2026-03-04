@@ -85,6 +85,7 @@ export function PresentationShell({
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [walkthroughActive, setWalkthroughActive] = useState(false);
   const [fadeCutActive, setFadeCutActive] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [model3DSnapshot, setModel3DSnapshot] = useState<string | null>(null);
 
   /* ---- Build segments from flat sections ---- */
