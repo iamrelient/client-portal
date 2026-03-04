@@ -10,6 +10,9 @@ import { SectionImage } from "./section-image";
 import { SectionVideo } from "./section-video";
 import { SectionText } from "./section-text";
 import { SectionPanorama } from "./section-panorama";
+import { Section3DModel } from "./section-3d-model";
+import { PresentationCursor } from "./presentation-cursor";
+import { Model3DPiP } from "./model-3d-pip";
 import {
   buildSegments,
   useScrollProgress,
@@ -24,6 +27,7 @@ export interface PresentationData {
   title: string | null;
   subtitle: string | null;
   clientLogo: string | null;
+  logoDisplay: string | null;
   clientAccentColor: string | null;
   watermarkEnabled: boolean;
   accessToken: string;
@@ -80,6 +84,7 @@ export function PresentationShell({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [walkthroughActive, setWalkthroughActive] = useState(false);
+  const [fadeCutActive, setFadeCutActive] = useState(false);
 
   /* ---- Build segments from flat sections ---- */
   const segments = useMemo(
@@ -140,7 +145,7 @@ export function PresentationShell({
 
   /* ---- Navigate to section by flat index (scroll-based) ---- */
   const handleNavigate = useCallback(
-    (targetSectionIndex: number) => {
+    (targetSectionIndex: number, behavior: ScrollBehavior = "smooth") => {
       const container = scrollContainerRef.current;
       if (!container) return;
 
@@ -174,24 +179,21 @@ export function PresentationShell({
       const segment = segments[targetSegIdx];
 
       if (segment.kind === "fullscreen") {
-        segmentEl.scrollIntoView({ behavior: "smooth" });
+        segmentEl.scrollIntoView({ behavior });
       } else {
         // Chapter strip — compute scroll offset for the target item
         const itemIdx = segment.sections.findIndex(
           (s) => s.sectionIndex === targetSectionIndex
         );
         if (itemIdx === -1) {
-          segmentEl.scrollIntoView({ behavior: "smooth" });
+          segmentEl.scrollIntoView({ behavior });
           return;
         }
 
         // Scroll to segment top + proportional offset within the strip
-        const totalItems =
-          segment.sections.length + (segment.divider ? 1 : 0);
+        const totalItems = segment.sections.length;
         const targetProgress =
-          totalItems > 1
-            ? (itemIdx + (segment.divider ? 1 : 0)) / (totalItems - 1)
-            : 0;
+          totalItems > 1 ? itemIdx / (totalItems - 1) : 0;
 
         const spacerHeight = segmentEl.getBoundingClientRect().height;
         const scrollable = spacerHeight - window.innerHeight;
@@ -199,18 +201,44 @@ export function PresentationShell({
 
         container.scrollTo({
           top: offsetTop + targetProgress * Math.max(0, scrollable),
-          behavior: "smooth",
+          behavior,
         });
       }
     },
     [segments]
   );
 
+  /* ---- Chapter-name navigation with fade-cut (for 3D model hotspots) ---- */
+  const handleChapterNavigate = useCallback(
+    (targetChapter: string) => {
+      if (fadeCutActive) return;
+
+      const targetIndex = data.sections.findIndex(
+        (s) => s.chapter === targetChapter
+      );
+      if (targetIndex === -1) return;
+
+      // Phase 1: Fade to black
+      setFadeCutActive(true);
+
+      // Phase 2: After fade-in completes, jump-scroll while hidden
+      setTimeout(() => {
+        handleNavigate(targetIndex, "auto");
+
+        // Phase 3: Fade back in after a brief hold
+        requestAnimationFrame(() => {
+          setFadeCutActive(false);
+        });
+      }, 350);
+    },
+    [data.sections, handleNavigate, fadeCutActive]
+  );
+
   /* ---- Render ---- */
   return (
     <div
       ref={scrollContainerRef}
-      className="fixed inset-0 overflow-y-auto overflow-x-hidden bg-neutral-50 select-none scrollbar-hide"
+      className="presentation-shell fixed inset-0 overflow-y-auto overflow-x-hidden bg-neutral-50 select-none scrollbar-hide"
       style={{ fontFamily: "'Inter Tight', 'Inter', sans-serif" }}
     >
       {segments.map((seg, i) => {
@@ -229,6 +257,7 @@ export function PresentationShell({
                 fontsLoaded={fontsLoaded}
                 onWalkthroughEnter={() => setWalkthroughActive(true)}
                 onWalkthroughExit={() => setWalkthroughActive(false)}
+                onChapterNavigate={handleChapterNavigate}
               />
             </div>
           );
@@ -262,6 +291,32 @@ export function PresentationShell({
           onNavigate={handleNavigate}
         />
       )}
+
+      {/* PiP floor plan widget — hidden during walkthrough */}
+      {!walkthroughActive && (
+        <Model3DPiP
+          segments={segments}
+          activeSectionIndex={scrollData.activeSectionIndex}
+          onNavigate={handleNavigate}
+        />
+      )}
+
+      {/* Fade-cut transition overlay (3D model hotspot navigation) */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 999,
+          backgroundColor: "#060608",
+          opacity: fadeCutActive ? 1 : 0,
+          transition: "opacity 0.35s ease",
+          pointerEvents: fadeCutActive ? "auto" : "none",
+          willChange: fadeCutActive ? "opacity" : "auto",
+        }}
+      />
+
+      {/* Custom cursor — desktop only */}
+      <PresentationCursor />
     </div>
   );
 }
@@ -277,6 +332,7 @@ interface FullscreenSectionProps {
   fontsLoaded: boolean;
   onWalkthroughEnter: () => void;
   onWalkthroughExit: () => void;
+  onChapterNavigate: (targetChapter: string) => void;
 }
 
 function FullscreenSection({
@@ -286,6 +342,7 @@ function FullscreenSection({
   fontsLoaded,
   onWalkthroughEnter,
   onWalkthroughExit,
+  onChapterNavigate,
 }: FullscreenSectionProps) {
   switch (section.type) {
     case "hero":
@@ -319,6 +376,15 @@ function FullscreenSection({
           data={data}
           onWalkthroughEnter={onWalkthroughEnter}
           onWalkthroughExit={onWalkthroughExit}
+        />
+      );
+
+    case "3d-model":
+      return (
+        <Section3DModel
+          section={section}
+          data={data}
+          onNavigate={onChapterNavigate}
         />
       );
 

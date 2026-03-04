@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { LogoShelf } from "@/components/presentation/logo-shelf";
 
 export default function PasswordGatePage() {
   const params = useParams<{ token: string }>();
@@ -13,6 +14,7 @@ export default function PasswordGatePage() {
   const [shaking, setShaking] = useState(false);
   const [title, setTitle] = useState<string | null>(null);
   const [clientLogo, setClientLogo] = useState<string | null>(null);
+  const [logoDisplay, setLogoDisplay] = useState<string | null>(null);
   const [accentColor] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [reduced, setReduced] = useState(false);
@@ -33,6 +35,7 @@ export default function PasswordGatePage() {
         if (data.error === "password_required") {
           setTitle(data.title || null);
           setClientLogo(data.clientLogo || null);
+          setLogoDisplay(data.logoDisplay || null);
         }
         // Also try to get accent color from a separate check
         // The password_required response includes limited data
@@ -119,30 +122,11 @@ export default function PasswordGatePage() {
         {/* Client logo */}
         {clientLogo && (
           <div style={{ marginBottom: "2rem" }}>
-            <div
-              style={{
-                background: "rgba(255,255,255,0.12)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                padding: "1rem 1.5rem",
-                borderRadius: "4px",
-                display: "inline-block",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/present/${params.token}/asset/${clientLogo}`}
-                alt=""
-                draggable={false}
-                style={{
-                  height: "clamp(36px, 5vw, 60px)",
-                  width: "auto",
-                  opacity: 0.8,
-                  pointerEvents: "none",
-                  filter: "brightness(1.15) drop-shadow(0 0 2px rgba(255,255,255,0.15))",
-                }}
-              />
-            </div>
+            <LogoShelf
+              src={`/api/present/${params.token}/asset/${clientLogo}`}
+              mode={(logoDisplay as "auto" | "white" | "light-bg") || "auto"}
+              height="clamp(36px, 5vw, 60px)"
+            />
           </div>
         )}
 

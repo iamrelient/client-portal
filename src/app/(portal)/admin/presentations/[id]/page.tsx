@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { PanoramaEditor } from "@/components/admin/panorama-editor";
 import type { PanoramaMetadata } from "@/types/panorama";
+import { Model3DEditor } from "@/components/admin/model-3d-editor";
+import type { Model3DMetadata } from "@/types/model3d";
+import { canPreview3D } from "@/lib/model-utils";
 
 interface FileOption {
   id: string;
@@ -45,6 +48,7 @@ interface PresentationDetail {
   title: string | null;
   subtitle: string | null;
   clientLogo: string | null;
+  logoDisplay: string | null;
   clientAccentColor: string | null;
   password: string | null;
   expiresAt: string | null;
@@ -61,6 +65,7 @@ const SECTION_TYPES = [
   { value: "video", label: "Video" },
   { value: "panorama", label: "360° Panorama" },
   { value: "text", label: "Text" },
+  { value: "3d-model", label: "3D Model" },
   { value: "divider", label: "Divider" },
 ];
 
@@ -93,6 +98,7 @@ export default function EditPresentationPage() {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [clientLogo, setClientLogo] = useState("");
+  const [logoDisplay, setLogoDisplay] = useState("auto");
   const [accentColor, setAccentColor] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
@@ -106,6 +112,9 @@ export default function EditPresentationPage() {
   // Panorama editor
   const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
 
+  // 3D Model editor
+  const [expandedModel3DId, setExpandedModel3DId] = useState<string | null>(null);
+
   // Add section
   const [addingType, setAddingType] = useState("");
   const [addingSectionLoading, setAddingSectionLoading] = useState(false);
@@ -118,6 +127,7 @@ export default function EditPresentationPage() {
         setTitle(data.title || "");
         setSubtitle(data.subtitle || "");
         setClientLogo(data.clientLogo || "");
+        setLogoDisplay(data.logoDisplay || "auto");
         setAccentColor(data.clientAccentColor || "");
         setExpiresAt(
           data.expiresAt
@@ -208,6 +218,7 @@ export default function EditPresentationPage() {
         title: title || null,
         subtitle: subtitle || null,
         clientLogo: clientLogo || null,
+        logoDisplay: logoDisplay || null,
         clientAccentColor: accentColor || null,
         expiresAt: expiresAt || null,
         watermarkEnabled,
@@ -655,6 +666,74 @@ export default function EditPresentationPage() {
                           </select>
                         </div>
                       )}
+
+                      {section.type === "3d-model" && (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <div className="flex gap-1.5">
+                            <select
+                              value={section.fileId || ""}
+                              onChange={(e) =>
+                                handleUpdateSection(section.id, {
+                                  fileId: e.target.value || null,
+                                })
+                              }
+                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                            >
+                              <option value="">Select 3D file...</option>
+                              {projectFiles
+                                .filter((f) =>
+                                  canPreview3D(f.mimeType, f.originalName)
+                                )
+                                .map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.originalName}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={uploading}
+                              onClick={() =>
+                                triggerUpload(
+                                  ".glb,.gltf,.fbx,.obj",
+                                  (fileId) =>
+                                    handleUpdateSection(section.id, { fileId })
+                                )
+                              }
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Upload 3D model"
+                            >
+                              {uploading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            defaultValue={section.title || ""}
+                            placeholder="Section title (optional)"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                title: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            defaultValue={section.chapter || ""}
+                            placeholder="Chapter (e.g. Floor Plan)"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                chapter: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -675,6 +754,27 @@ export default function EditPresentationPage() {
                               : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-300"
                           }`}
                           title="Configure 360°"
+                        >
+                          <Settings2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+
+                      {/* Configure 3D model button */}
+                      {section.type === "3d-model" && section.fileId && (
+                        <button
+                          onClick={() =>
+                            setExpandedModel3DId(
+                              expandedModel3DId === section.id
+                                ? null
+                                : section.id
+                            )
+                          }
+                          className={`rounded-lg p-1.5 transition-colors ${
+                            expandedModel3DId === section.id
+                              ? "text-brand-400 bg-brand-500/10"
+                              : "text-slate-500 hover:bg-white/[0.05] hover:text-slate-300"
+                          }`}
+                          title="Configure 3D Model"
                         >
                           <Settings2 className="h-3.5 w-3.5" />
                         </button>
@@ -704,6 +804,25 @@ export default function EditPresentationPage() {
                         imageUrl={`/api/files/${section.fileId}/download?inline=true`}
                         metadata={
                           (section.metadata as PanoramaMetadata) || {}
+                        }
+                        allSections={sections}
+                        projectFiles={projectFiles}
+                        onSave={async (metadata) => {
+                          await handleUpdateSection(section.id, { metadata });
+                        }}
+                      />
+                    )}
+
+                  {/* 3D Model editor expansion */}
+                  {section.type === "3d-model" &&
+                    expandedModel3DId === section.id &&
+                    section.fileId &&
+                    section.file && (
+                      <Model3DEditor
+                        fileUrl={`/api/files/${section.fileId}/download?inline=true`}
+                        fileName={section.file.originalName}
+                        metadata={
+                          (section.metadata as Model3DMetadata) || {}
                         }
                         allSections={sections}
                         projectFiles={projectFiles}
@@ -817,6 +936,22 @@ export default function EditPresentationPage() {
                   </button>
                 </div>
               </div>
+              {clientLogo && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Logo Display
+                  </label>
+                  <select
+                    value={logoDisplay}
+                    onChange={(e) => setLogoDisplay(e.target.value)}
+                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="auto">Auto (frosted backdrop)</option>
+                    <option value="white">White version</option>
+                    <option value="light-bg">Light background</option>
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Accent Color

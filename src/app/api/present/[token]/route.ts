@@ -59,6 +59,7 @@ export async function GET(
             error: "password_required",
             title: presentation.title,
             clientLogo: presentation.clientLogo,
+            logoDisplay: presentation.logoDisplay,
           },
           { status: 401 }
         );

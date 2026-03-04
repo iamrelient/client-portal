@@ -52,6 +52,7 @@ export function buildSegments(sections: SectionData[]): Segment[] {
     switch (section.type) {
       case "hero":
       case "closing":
+      case "3d-model":
         flushChapter();
         segments.push({ kind: "fullscreen", section, sectionIndex: i });
         break;
@@ -79,65 +80,6 @@ export function buildSegments(sections: SectionData[]): Segment[] {
   flushChapter();
 
   return segments;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Collage size utilities                                              */
-/* ------------------------------------------------------------------ */
-
-export type CollageSizeKey = "large" | "small" | "tall" | "medium" | "wide";
-
-export const COLLAGE_SIZES: Record<
-  CollageSizeKey,
-  { width: string; height: string }
-> = {
-  large: { width: "55vw", height: "85vh" },
-  small: { width: "30vw", height: "55vh" },
-  tall: { width: "30vw", height: "85vh" },
-  medium: { width: "40vw", height: "70vh" },
-  wide: { width: "55vw", height: "55vh" },
-};
-
-const SIZE_PATTERN: CollageSizeKey[] = [
-  "large",
-  "small",
-  "tall",
-  "medium",
-  "wide",
-];
-
-export function getCollageSize(indexInChapter: number, total: number): CollageSizeKey {
-  if (total === 1) return "large";
-  if (total === 2) return indexInChapter === 0 ? "large" : "medium";
-  return SIZE_PATTERN[indexInChapter % SIZE_PATTERN.length];
-}
-
-const VERTICAL_OFFSETS = ["0px", "8vh", "-5vh", "3vh", "-8vh"];
-
-export function getVerticalOffset(indexInChapter: number): string {
-  return VERTICAL_OFFSETS[indexInChapter % VERTICAL_OFFSETS.length];
-}
-
-/* Numeric width in px for scroll math (approximate using 1vw = window.innerWidth/100) */
-export function getItemWidthPx(
-  section: SectionData,
-  indexInChapter: number,
-  totalImages: number
-): number {
-  const vw = typeof window !== "undefined" ? window.innerWidth / 100 : 10;
-
-  if (section.type === "video" || section.type === "panorama") {
-    return 100 * vw; // full viewport
-  }
-  if (section.type === "text") {
-    return 70 * vw;
-  }
-
-  // Image — use collage size
-  const size = getCollageSize(indexInChapter, totalImages);
-  const widthStr = COLLAGE_SIZES[size].width; // e.g. "55vw"
-  const numericVw = parseFloat(widthStr);
-  return numericVw * vw;
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,10 +170,10 @@ export function useScrollProgress(
               activeSectionIndex = 0;
             } else {
               // Calculate based on progress through the strip
-              const sectionCount = chapterSections.length + (segment.divider ? 1 : 0);
+              const sectionCount = chapterSections.length;
               const itemIndex = Math.min(
                 Math.floor(p * sectionCount),
-                chapterSections.length - 1
+                sectionCount - 1
               );
               activeSectionIndex = chapterSections[Math.max(0, itemIndex)].sectionIndex;
             }

@@ -47,6 +47,21 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         continue;
       }
 
+      if (s.type === "3d-model") {
+        // Flush any pending chapter
+        if (currentDot) {
+          currentDot = null;
+          currentChapterName = undefined;
+        }
+        result.push({
+          label: s.title || "Floor Plan",
+          navigateToIndex: i,
+          kind: "chapter",
+          sectionIndices: [i],
+        });
+        continue;
+      }
+
       if (s.type === "closing") {
         // Flush any pending chapter
         if (currentDot) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PresentationData } from "./presentation-shell";
+import { LogoShelf } from "./logo-shelf";
 
 interface SectionClosingProps {
   data: PresentationData;
@@ -71,31 +72,11 @@ export function SectionClosing({ data }: SectionClosingProps) {
         {/* Client logo */}
         {hasLogo && (
           <div style={{ marginBottom: "2rem", ...fade(0) }}>
-            <div
-              style={{
-                background: "rgba(255,255,255,0.12)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                padding: "1rem 1.5rem",
-                borderRadius: "4px",
-                display: "inline-block",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
-                alt=""
-                draggable={false}
-                style={{
-                  height: "clamp(32px, 5vw, 56px)",
-                  width: "auto",
-                  opacity: 0.8,
-                  pointerEvents: "none",
-                  WebkitUserDrag: "none",
-                  filter: "brightness(1.15) drop-shadow(0 0 2px rgba(255,255,255,0.15))",
-                } as React.CSSProperties}
-              />
-            </div>
+            <LogoShelf
+              src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
+              mode={(data.logoDisplay as "auto" | "white" | "light-bg") || "auto"}
+              height="clamp(32px, 5vw, 56px)"
+            />
           </div>
         )}
 
@@ -185,10 +166,25 @@ export function SectionClosing({ data }: SectionClosingProps) {
           Ray Renders
         </p>
 
+        {/* Favicon */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/favicon.png"
+          alt=""
+          draggable={false}
+          style={{
+            width: "clamp(24px, 3vw, 36px)",
+            height: "clamp(24px, 3vw, 36px)",
+            marginTop: "1.25rem",
+            opacity: 0.5,
+            ...fade(1000),
+          }}
+        />
+
         {/* Contact info */}
         <div
           style={{
-            marginTop: "1.5rem",
+            marginTop: "1.25rem",
             display: "flex",
             flexDirection: "column",
             gap: "0.25rem",
