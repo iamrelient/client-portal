@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment, useGLTF } from "@react-three/drei";
 import { useLoader } from "@react-three/fiber";
@@ -155,10 +155,7 @@ export default function Model3DCanvas({
   onHotspotNavigate,
   onHotspotPreviewClick,
 }: Model3DCanvasProps) {
-  const [hoverPaused, setHoverPaused] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
-  const handleHoverStart = useCallback(() => setHoverPaused(true), []);
-  const handleHoverEnd = useCallback(() => setHoverPaused(false), []);
   const zoomRef = useRef<ZoomFns | null>(null);
 
   // Detect touch device for performance tuning
@@ -208,8 +205,6 @@ export default function Model3DCanvas({
               hotspots={hotspots}
               onNavigate={onHotspotNavigate}
               onPreviewClick={onHotspotPreviewClick}
-              onHoverStart={handleHoverStart}
-              onHoverEnd={handleHoverEnd}
             />
           )}
         </AutoScale>
@@ -219,7 +214,7 @@ export default function Model3DCanvas({
           makeDefault
           enableDamping
           dampingFactor={isTouch ? 0.12 : 0.08}
-          autoRotate={autoRotateSpeed > 0 && !hoverPaused}
+          autoRotate={autoRotateSpeed > 0}
           autoRotateSpeed={autoRotateSpeed}
           minDistance={minDist}
           maxDistance={maxDist}

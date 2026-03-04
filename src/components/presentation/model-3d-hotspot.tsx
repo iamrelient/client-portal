@@ -15,8 +15,6 @@ interface Model3DHotspotsProps {
   hotspots: Model3DHotspot[];
   onNavigate?: (targetChapter: string) => void;
   onPreviewClick?: (hotspot: PreviewHotspot) => void;
-  onHoverStart?: () => void;
-  onHoverEnd?: () => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -95,11 +93,12 @@ const HOTSPOT_STYLES = `
   justify-content: center;
   animation: model3d-nav-bob 2s ease-in-out infinite;
   filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 .model3d-hs-nav:hover .model3d-hs-nav-icon {
   border-color: rgba(255,255,255,0.8);
   background: rgba(255,255,255,0.15);
+  transform: scale(1.15);
 }
 .model3d-hs-nav-label {
   white-space: nowrap;
@@ -145,11 +144,12 @@ const HOTSPOT_STYLES = `
   justify-content: center;
   animation: model3d-preview-pulse 2s ease-in-out infinite;
   filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 .model3d-hs-preview:hover .model3d-hs-preview-icon {
   border-color: rgba(255,255,255,0.8);
   background: rgba(255,255,255,0.18);
+  transform: scale(1.15);
 }
 .model3d-hs-preview-label {
   white-space: nowrap;
@@ -191,14 +191,10 @@ function HotspotMarker({
   hotspot,
   onNavigate,
   onPreviewClick,
-  onHoverStart,
-  onHoverEnd,
 }: {
   hotspot: Model3DHotspot;
   onNavigate?: (targetChapter: string) => void;
   onPreviewClick?: (hotspot: PreviewHotspot) => void;
-  onHoverStart?: () => void;
-  onHoverEnd?: () => void;
 }) {
   const isNav = isNavigateHotspot(hotspot);
   const className = isNav ? "model3d-hs-nav" : "model3d-hs-preview";
@@ -227,8 +223,6 @@ function HotspotMarker({
         data-cursor-label={hotspot.label}
         data-clickable
         onClick={handleClick}
-        onMouseEnter={onHoverStart}
-        onMouseLeave={onHoverEnd}
       >
         <div className={iconClass}>
           {isNav ? <ArrowIcon /> : <EyeIcon />}
@@ -247,8 +241,6 @@ export function Model3DHotspots({
   hotspots,
   onNavigate,
   onPreviewClick,
-  onHoverStart,
-  onHoverEnd,
 }: Model3DHotspotsProps) {
   if (!hotspots.length) return null;
 
@@ -265,8 +257,6 @@ export function Model3DHotspots({
           hotspot={hs}
           onNavigate={onNavigate}
           onPreviewClick={onPreviewClick}
-          onHoverStart={onHoverStart}
-          onHoverEnd={onHoverEnd}
         />
       ))}
     </>

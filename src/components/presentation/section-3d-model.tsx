@@ -220,7 +220,7 @@ export function Section3DModel({ section, data, onNavigate }: Section3DModelProp
         >
           {isTouch
             ? "Drag to rotate \u00B7 Pinch to zoom"
-            : "Drag to orbit \u00B7 Scroll to zoom"}
+            : "Drag to orbit \u00B7 Use +/\u2013 to zoom"}
         </p>
       </div>
 
