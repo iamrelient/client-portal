@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns, Star } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -75,6 +75,68 @@ function canPreview(mimeType: string, fileName: string) {
     canPreview3D(mimeType, fileName)
   );
 }
+
+function isImage(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+/** Renders first page of a PDF as a canvas thumbnail */
+function PdfThumbnail({ fileId, alt }: { fileId: string; alt: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const render = useCallback(async () => {
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const pdf = await pdfjsLib.getDocument(`/api/files/${fileId}/download?inline=true`).promise;
+      const page = await pdf.getPage(1);
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const targetWidth = 576;
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const scale = targetWidth / unscaledViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      setLoaded(true);
+    } catch {
+      // PDF failed to render — fallback stays visible
+    }
+  }, [fileId]);
+
+  useEffect(() => {
+    render();
+  }, [render]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-label={alt}
+      className={`h-full w-full object-cover transition-opacity duration-300 ${
+        loaded ? "opacity-100" : "opacity-0"
+      }`}
+      style={{ display: "block" }}
+    />
+  );
+}
+
+const CATEGORY_ACCENT: Record<FileCategory, string> = {
+  RENDER: "from-brand-500/80 to-brand-600/80",
+  DRAWING: "from-amber-500/80 to-amber-600/80",
+  CAD_DRAWING: "from-violet-500/80 to-violet-600/80",
+  SUPPORTING: "from-cyan-500/80 to-cyan-600/80",
+  OTHER: "from-slate-500/80 to-slate-600/80",
+};
 
 /** Group files so only the latest version of each name shows in the main table */
 function getLatestFiles(files: ProjectFile[]) {
@@ -599,6 +661,7 @@ export default function AdminProjectDetailPage() {
   }
 
   const categorized = groupByCategory(project.files);
+  const featuredFiles = project.files.filter((f) => f.isCurrent);
 
   /** Render a file table for a given category section */
   function renderCategorySection(category: FileCategory) {
@@ -840,21 +903,128 @@ export default function AdminProjectDetailPage() {
         <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
       </div>
 
-      {/* Download All */}
-      {project.files.some((f) => f.isCurrent) && (
-        <div className="mb-6">
-          <button
-            onClick={handleDownloadAll}
-            disabled={downloadingZip}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
-          >
-            {downloadingZip ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Archive className="h-4 w-4" />
-            )}
-            Download All Files (.zip)
-          </button>
+      {/* Featured Deliverables */}
+      {featuredFiles.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Star className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-slate-100">
+                Featured Deliverables
+              </h2>
+              <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
+                {featuredFiles.length}
+              </span>
+            </div>
+            <button
+              onClick={handleDownloadAll}
+              disabled={downloadingZip}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
+            >
+              {downloadingZip ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Archive className="h-4 w-4" />
+              )}
+              Download All (.zip)
+            </button>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+            {featuredFiles.map((file) => {
+              const FileIcon = getFileIcon(file.mimeType, file.originalName);
+              const fileName = file.displayName || file.originalName;
+              const previewable = canPreview(file.mimeType, file.originalName);
+              const accent = CATEGORY_ACCENT[file.category] || CATEGORY_ACCENT.OTHER;
+
+              return (
+                <div
+                  key={file.id}
+                  onClick={() => previewable ? setPreviewFile(file) : undefined}
+                  className={`group relative w-72 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 ${
+                    previewable ? "cursor-pointer" : ""
+                  }`}
+                >
+                  {isImage(file.mimeType) || file.mimeType === "application/pdf" ? (
+                    /* ── Visual Card (Image or PDF thumbnail) ── */
+                    <div className="relative aspect-[4/3]">
+                      {isImage(file.mimeType) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/files/${file.id}/download?inline=true`}
+                          alt={fileName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <>
+                          <div className="absolute inset-0 bg-white">
+                            <PdfThumbnail fileId={file.id} alt={fileName} />
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/[0.03]">
+                            <FileIcon className="h-12 w-12 text-slate-600" />
+                          </div>
+                        </>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      <div className="absolute left-3 top-3">
+                        <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
+                          {CATEGORY_LABELS[file.category]}
+                        </span>
+                      </div>
+                      <div className="absolute inset-x-0 bottom-0 p-4">
+                        <p className="truncate text-sm font-medium text-white">{fileName}</p>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-xs text-white/60">{formatSize(file.size)}</span>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-white/[0.15] px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm transition-colors group-hover:bg-white/[0.25]">
+                            <Eye className="h-3 w-3" />
+                            View
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Document Card (CAD, etc.) ── */
+                    <div className="relative aspect-[4/3] flex flex-col">
+                      <div className={`h-1.5 w-full bg-gradient-to-r ${accent}`} />
+                      <div className="absolute left-3 top-4">
+                        <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
+                          {CATEGORY_LABELS[file.category]}
+                        </span>
+                      </div>
+                      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
+                        <div className="rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/[0.08]">
+                          <FileIcon className="h-10 w-10 text-slate-300" />
+                        </div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                          {getFileLabel(file.mimeType, file.originalName)}
+                        </span>
+                      </div>
+                      <div className="border-t border-white/[0.06] px-4 py-3">
+                        <p className="truncate text-sm font-medium text-slate-200">{fileName}</p>
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-xs text-slate-500">{formatSize(file.size)}</span>
+                          {previewable ? (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors group-hover:bg-white/[0.1]">
+                              <Eye className="h-3 w-3" />
+                              View
+                            </span>
+                          ) : (
+                            <a
+                              href={`/api/files/${file.id}/download`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.1]"
+                            >
+                              <Download className="h-3 w-3" />
+                              Download
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
