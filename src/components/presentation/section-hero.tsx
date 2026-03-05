@@ -13,11 +13,33 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
   const [beat, setBeat] = useState(0);
   const started = useRef(false);
   const prefersReduced = useRef(false);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [parallaxY, setParallaxY] = useState(0);
 
   useEffect(() => {
     prefersReduced.current = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
+  }, []);
+
+  // Parallax scroll effect
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || prefersReduced.current) return;
+
+    const scrollContainer = el.closest(".presentation-shell") as HTMLElement;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const scrollTop = scrollContainer.scrollTop;
+      // Only compute parallax while hero is in view
+      if (scrollTop < window.innerHeight * 1.5) {
+        setParallaxY(scrollTop * 0.35);
+      }
+    };
+
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, []);
 
   // Start the opening sequence once fonts are loaded
@@ -69,6 +91,7 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
 
   return (
     <div
+      ref={heroRef}
       style={{
         height: "100%",
         display: "flex",
@@ -80,7 +103,7 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
         overflow: "hidden",
       }}
     >
-      {/* Background image with gradient overlay */}
+      {/* Background image with parallax + gradient overlay */}
       {bgUrl && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -89,13 +112,19 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
             alt=""
             style={{
               position: "absolute",
-              inset: 0,
+              inset: "-15% 0",
               width: "100%",
-              height: "100%",
+              height: "130%",
               objectFit: "cover",
               opacity: beat >= 1 ? 1 : 0,
-              transition: reduced ? "none" : "opacity 1.5s ease",
+              transform: reduced
+                ? "none"
+                : `translateY(${parallaxY}px) scale(1.05)`,
+              transition: reduced
+                ? "none"
+                : "opacity 1.5s ease",
               pointerEvents: "none",
+              willChange: "transform",
             }}
           />
           {/* Dark gradient overlay for text legibility */}

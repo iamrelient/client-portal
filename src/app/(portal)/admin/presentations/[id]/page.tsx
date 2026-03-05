@@ -503,6 +503,52 @@ export default function EditPresentationPage() {
                         )}
                       </div>
 
+                      {/* Hero background image picker */}
+                      {section.type === "hero" && (
+                        <div className="mt-2">
+                          <div className="flex gap-1.5">
+                            <select
+                              value={section.fileId || ""}
+                              onChange={(e) =>
+                                handleUpdateSection(section.id, {
+                                  fileId: e.target.value || null,
+                                })
+                              }
+                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                            >
+                              <option value="">First image (default)</option>
+                              {projectFiles
+                                .filter((f) => f.mimeType.startsWith("image/"))
+                                .map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.originalName}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={uploading}
+                              onClick={() =>
+                                triggerUpload("image/*", (fileId) =>
+                                  handleUpdateSection(section.id, { fileId })
+                                )
+                              }
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Upload hero image"
+                            >
+                              {uploading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Upload className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Background image for the hero slide
+                          </p>
+                        </div>
+                      )}
+
                       {/* Editable fields per type */}
                       {(section.type === "image" ||
                         section.type === "video" ||
