@@ -101,7 +101,7 @@ export async function createFolder(
   const parentClause = parentId ? `and '${parentId}' in parents` : `and 'root' in parents`;
   const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' ${parentClause} and trashed=false`;
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
@@ -124,7 +124,7 @@ export async function createFolder(
   }
 
   const res = await fetch(
-    "https://www.googleapis.com/drive/v3/files",
+    "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
     {
       method: "POST",
       headers: {
@@ -174,7 +174,7 @@ export async function uploadFileToFolder(
   const body = Buffer.concat([prefix, mediaHeader, buffer, suffix]);
 
   const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size",
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size&supportsAllDrives=true",
     {
       method: "POST",
       headers: {
@@ -187,6 +187,9 @@ export async function uploadFileToFolder(
 
   if (!res.ok) {
     const err = await res.text();
+    if (err.includes("storageQuotaExceeded")) {
+      throw new Error("Google Drive storage quota exceeded. The service account has run out of space. Please use a Shared Drive folder so storage counts against your organization's quota.");
+    }
     throw new Error(`Failed to upload file: ${err}`);
   }
 
@@ -196,7 +199,8 @@ export async function uploadFileToFolder(
 export async function createResumableUploadSession(
   folderId: string,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  origin?: string
 ): Promise<string> {
   const accessToken = await getValidAccessToken();
 
@@ -205,18 +209,24 @@ export async function createResumableUploadSession(
     parents: [folderId],
   };
 
-  const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Type": mimeType,
-      },
-      body: JSON.stringify(metadata),
-    }
-  );
+  // Include origin param so Google returns CORS headers for browser-based PUT
+  const url = new URL("https://www.googleapis.com/upload/drive/v3/files");
+  url.searchParams.set("uploadType", "resumable");
+  url.searchParams.set("fields", "id,name,size");
+  url.searchParams.set("supportsAllDrives", "true");
+  if (origin) {
+    url.searchParams.set("origin", origin);
+  }
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": mimeType,
+    },
+    body: JSON.stringify(metadata),
+  });
 
   if (!res.ok) {
     const err = await res.text();
@@ -237,7 +247,7 @@ export async function downloadFile(
   const accessToken = await getValidAccessToken();
 
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,
+    `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media&supportsAllDrives=true`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     }
@@ -258,7 +268,7 @@ export async function deleteFile(driveFileId: string): Promise<void> {
   const accessToken = await getValidAccessToken();
 
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${driveFileId}`,
+    `https://www.googleapis.com/drive/v3/files/${driveFileId}?supportsAllDrives=true`,
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -296,6 +306,8 @@ export async function listFilesInFolder(
       q: `'${folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`,
       fields: "nextPageToken,files(id,name,mimeType,size,createdTime)",
       pageSize: "1000",
+      supportsAllDrives: "true",
+      includeItemsFromAllDrives: "true",
     });
     if (pageToken) {
       params.set("pageToken", pageToken);
