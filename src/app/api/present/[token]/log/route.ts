@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -6,6 +8,12 @@ export async function POST(
   { params }: { params: { token: string } }
 ) {
   try {
+    // Skip logging for admin users
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role === "ADMIN") {
+      return NextResponse.json({ success: true });
+    }
+
     const presentation = await prisma.presentation.findUnique({
       where: { accessToken: params.token },
     });

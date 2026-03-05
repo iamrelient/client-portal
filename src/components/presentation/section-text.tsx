@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { PresentationData } from "./presentation-shell";
+import { useEffect, useRef, useState, useMemo } from "react";
+import type { PresentationData, SectionData } from "./presentation-shell";
 
 interface SectionTextProps {
-  section: {
-    title: string | null;
-    description: string | null;
-  };
+  section: SectionData;
   data: PresentationData;
 }
 
@@ -41,6 +38,21 @@ export function SectionText({ section, data }: SectionTextProps) {
 
   const accentColor = data.clientAccentColor || null;
 
+  // Find the next image section after this text section
+  const nextImageFile = useMemo(() => {
+    const sorted = [...data.sections].sort((a, b) => a.order - b.order);
+    const thisIdx = sorted.findIndex((s) => s.id === section.id);
+    if (thisIdx === -1) return null;
+    const next = sorted.slice(thisIdx + 1).find(
+      (s) => s.type === "image" && s.file
+    );
+    return next?.file ?? null;
+  }, [data.sections, section.id]);
+
+  const bgUrl = nextImageFile
+    ? `/api/present/${data.accessToken}/asset/${nextImageFile.id}`
+    : null;
+
   // Split description into lines for staggered animation
   const lines = section.description
     ? section.description.split("\n").filter((l) => l.trim())
@@ -56,14 +68,37 @@ export function SectionText({ section, data }: SectionTextProps) {
         justifyContent: "center",
         backgroundColor: "#060608",
         padding: "0 clamp(1rem, 4vw, 2rem)",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {/* Blurred preview of next image */}
+      {bgUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={bgUrl}
+          alt=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            transform: "scale(1.1)",
+            filter: "blur(40px) brightness(0.5)",
+            opacity: 0.6,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
       <div
         style={{
           maxWidth: 700,
           width: "100%",
           position: "relative",
           paddingLeft: accentColor ? "1.5rem" : 0,
+          zIndex: 1,
         }}
       >
         {/* Accent line on the left */}
@@ -93,7 +128,7 @@ export function SectionText({ section, data }: SectionTextProps) {
               color: "rgba(255,255,255,0.9)",
               marginBottom: "1.5rem",
               opacity: visible ? 1 : 0,
-              transform: visible ? "translateY(0)" : "translateY(15px)",
+              transform: visible ? "translateX(0)" : "translateX(2rem)",
               transition: reduced
                 ? "none"
                 : "opacity 0.8s cubic-bezier(0.25,0.1,0.25,1), transform 0.8s cubic-bezier(0.25,0.1,0.25,1)",
@@ -116,7 +151,7 @@ export function SectionText({ section, data }: SectionTextProps) {
                   lineHeight: 1.7,
                   marginBottom: "0.75em",
                   opacity: visible ? 1 : 0,
-                  transform: visible ? "translateY(0)" : "translateY(15px)",
+                  transform: visible ? "translateX(0)" : "translateX(2rem)",
                   transition: reduced
                     ? "none"
                     : `opacity 0.8s cubic-bezier(0.25,0.1,0.25,1) ${(i + 1) * 120}ms, transform 0.8s cubic-bezier(0.25,0.1,0.25,1) ${(i + 1) * 120}ms`,
@@ -137,7 +172,7 @@ export function SectionText({ section, data }: SectionTextProps) {
               color: "#b0b0b0",
               lineHeight: 1.7,
               opacity: visible ? 1 : 0,
-              transform: visible ? "translateY(0)" : "translateY(15px)",
+              transform: visible ? "translateX(0)" : "translateX(2rem)",
               transition: reduced
                 ? "none"
                 : "opacity 0.8s cubic-bezier(0.25,0.1,0.25,1) 120ms, transform 0.8s cubic-bezier(0.25,0.1,0.25,1) 120ms",

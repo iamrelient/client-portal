@@ -15,15 +15,11 @@ type LoadState =
   | { status: "error"; error: string; code: string };
 
 function LoadingSplash({ visible }: { visible: boolean }) {
-  const [beat, setBeat] = useState(0);
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
-    const timers = [
-      setTimeout(() => setBeat(1), 100),   // Icon fades in
-      setTimeout(() => setBeat(2), 600),   // Line extends
-      setTimeout(() => setBeat(3), 1000),  // Text appears
-    ];
-    return () => timers.forEach(clearTimeout);
+    const timer = setTimeout(() => setStarted(true), 100);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -42,89 +38,44 @@ function LoadingSplash({ visible }: { visible: boolean }) {
         pointerEvents: visible ? "auto" : "none",
       }}
     >
-      {/* Icon */}
-      <RayRendersIcon
+      {/* Logo with fill effect */}
+      <div
         style={{
+          position: "relative",
           width: "clamp(48px, 8vw, 72px)",
           height: "clamp(48px, 8vw, 72px)",
-          color: "#fff",
-          opacity: beat >= 1 ? 0.9 : 0,
-          transform: beat >= 1 ? "scale(1)" : "scale(0.92)",
-          transition:
-            "opacity 0.8s cubic-bezier(0.25,0.1,0.25,1), transform 0.8s cubic-bezier(0.25,0.1,0.25,1)",
-        }}
-      />
-
-      {/* Extending line */}
-      <div
-        style={{
-          width: "clamp(60px, 10vw, 100px)",
-          height: 1,
-          marginTop: "1.5rem",
-          marginBottom: "1.5rem",
-          overflow: "hidden",
-          position: "relative",
         }}
       >
-        <div
+        {/* Ghost layer — dim outline */}
+        <RayRendersIcon
           style={{
             position: "absolute",
-            top: 0,
+            inset: 0,
+            width: "100%",
             height: "100%",
-            backgroundColor: "rgba(255,255,255,0.25)",
-            left: beat >= 2 ? "0%" : "50%",
-            right: beat >= 2 ? "0%" : "50%",
-            transition:
-              "left 0.6s cubic-bezier(0.16,1,0.3,1), right 0.6s cubic-bezier(0.16,1,0.3,1)",
+            color: "#fff",
+            opacity: started ? 0.12 : 0,
+            transition: "opacity 0.4s ease",
+          }}
+        />
+        {/* Fill layer — clips left to right */}
+        <RayRendersIcon
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            color: "#fff",
+            opacity: 0.9,
+            clipPath: started
+              ? "inset(0 0% 0 0)"
+              : "inset(0 100% 0 0)",
+            transition: "clip-path 2s cubic-bezier(0.25,0.1,0.25,1)",
           }}
         />
       </div>
 
-      {/* Loading indicator */}
-      <div
-        style={{
-          opacity: beat >= 3 ? 0.4 : 0,
-          transition: "opacity 0.6s ease",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}
-      >
-        <div
-          style={{
-            width: 4,
-            height: 4,
-            borderRadius: "50%",
-            backgroundColor: "#fff",
-            animation: "splash-pulse 1.4s ease-in-out infinite",
-          }}
-        />
-        <div
-          style={{
-            width: 4,
-            height: 4,
-            borderRadius: "50%",
-            backgroundColor: "#fff",
-            animation: "splash-pulse 1.4s ease-in-out 0.2s infinite",
-          }}
-        />
-        <div
-          style={{
-            width: 4,
-            height: 4,
-            borderRadius: "50%",
-            backgroundColor: "#fff",
-            animation: "splash-pulse 1.4s ease-in-out 0.4s infinite",
-          }}
-        />
-      </div>
-
-      <style>{`
-        @keyframes splash-pulse {
-          0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1.2); }
-        }
-      `}</style>
+      <style>{``}</style>
     </div>
   );
 }
