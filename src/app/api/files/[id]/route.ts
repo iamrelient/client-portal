@@ -39,7 +39,7 @@ export async function PATCH(
       }
     }
 
-    if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"].includes(body.category)) {
+    if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "DESIGN_INSPIRATION", "OTHER"].includes(body.category)) {
       data.category = body.category;
     }
 
