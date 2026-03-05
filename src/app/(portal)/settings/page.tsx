@@ -1,24 +1,17 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Loader2 } from "lucide-react";
-import { ConfirmModal } from "@/components/confirm-modal";
 import { useToast } from "@/components/toast";
 
 export default function SettingsPage() {
-  return (
-    <Suspense>
-      <SettingsContent />
-    </Suspense>
-  );
+  return <SettingsContent />;
 }
 
 function SettingsContent() {
   const { data: session, update: updateSession } = useSession();
-  const searchParams = useSearchParams();
   const toast = useToast();
   const isAdmin = session?.user?.role === "ADMIN";
 
@@ -27,8 +20,6 @@ function SettingsContent() {
     connected: boolean;
     email?: string;
   } | null>(null);
-  const [driveLoading, setDriveLoading] = useState(false);
-  const [showDisconnect, setShowDisconnect] = useState(false);
 
   // Profile state
   const [name, setName] = useState("");
@@ -63,33 +54,6 @@ function SettingsContent() {
         .catch(() => setDriveStatus({ connected: false }));
     }
   }, [isAdmin]);
-
-  useEffect(() => {
-    const googleParam = searchParams.get("google");
-    if (googleParam === "connected") {
-      toast.success("Google Drive connected successfully!");
-      setDriveStatus(null);
-      fetch("/api/google/status")
-        .then((res) => res.json())
-        .then(setDriveStatus)
-        .catch(() => {});
-    } else if (googleParam === "error") {
-      toast.error("Failed to connect Google Drive. Please try again.");
-    }
-  }, [searchParams]);
-
-  async function handleDisconnect() {
-    setDriveLoading(true);
-    try {
-      await fetch("/api/google/disconnect", { method: "POST" });
-      setDriveStatus({ connected: false });
-      toast.info("Google Drive disconnected.");
-    } catch {
-      toast.error("Failed to disconnect.");
-    }
-    setDriveLoading(false);
-    setShowDisconnect(false);
-  }
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -171,29 +135,19 @@ function SettingsContent() {
                 Checking connection...
               </div>
             ) : driveStatus.connected ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
-                  <span className="text-sm text-slate-300">
-                    Connected as <strong>{driveStatus.email}</strong>
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowDisconnect(true)}
-                  disabled={driveLoading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
-                >
-                  {driveLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Disconnect
-                </button>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-sm text-slate-300">
+                  Connected via service account ({driveStatus.email})
+                </span>
               </div>
             ) : (
-              <a
-                href="/api/google/authorize"
-                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
-              >
-                Connect Google Drive
-              </a>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-sm text-slate-400">
+                  Not configured — set GOOGLE_SERVICE_ACCOUNT_KEY in environment variables.
+                </span>
+              </div>
             )}
           </div>
         )}
@@ -349,17 +303,6 @@ function SettingsContent() {
           </div>
         )}
       </div>
-
-      <ConfirmModal
-        open={showDisconnect}
-        title="Disconnect Google Drive"
-        message="Existing files will remain in Drive but new uploads won't work until reconnected."
-        confirmLabel="Disconnect"
-        variant="danger"
-        loading={driveLoading}
-        onConfirm={handleDisconnect}
-        onCancel={() => setShowDisconnect(false)}
-      />
 
       {showDeleteAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

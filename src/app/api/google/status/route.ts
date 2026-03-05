@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -10,13 +9,14 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const token = await prisma.googleToken.findUnique({
-    where: { id: "singleton" },
-    select: { email: true },
-  });
-
-  if (token) {
-    return NextResponse.json({ connected: true, email: token.email });
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (raw) {
+    try {
+      const key = JSON.parse(raw);
+      return NextResponse.json({ connected: true, email: key.client_email });
+    } catch {
+      return NextResponse.json({ connected: false });
+    }
   }
 
   return NextResponse.json({ connected: false });

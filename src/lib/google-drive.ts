@@ -1,75 +1,95 @@
-import { prisma } from "./prisma";
+import crypto from "crypto";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
+// ---------- Service Account Auth ----------
 
-const ROOT_FOLDER_NAME = "Ray Renders Portal";
-
-// ---------- Token management ----------
-
-export async function getValidAccessToken(): Promise<string> {
-  const token = await prisma.googleToken.findUnique({
-    where: { id: "singleton" },
-  });
-
-  if (!token) {
-    throw new Error("Google Drive not connected");
-  }
-
-  // Refresh if expiring within 5 minutes
-  if (token.expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
-    return refreshAccessToken(token.refreshToken);
-  }
-
-  return token.accessToken;
+interface ServiceAccountKey {
+  client_email: string;
+  private_key: string;
+  token_uri: string;
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<string> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+let cachedToken: { accessToken: string; expiresAt: number } | null = null;
+
+function getServiceAccountKey(): ServiceAccountKey {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!raw) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY is not set");
+  }
+  return JSON.parse(raw);
+}
+
+function base64url(input: Buffer): string {
+  return input.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function createSignedJWT(key: ServiceAccountKey): string {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: key.client_email,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: key.token_uri,
+    iat: now,
+    exp: now + 3600,
+  };
+
+  const segments = [
+    base64url(Buffer.from(JSON.stringify(header))),
+    base64url(Buffer.from(JSON.stringify(payload))),
+  ];
+
+  const signingInput = segments.join(".");
+  const signature = crypto.sign("RSA-SHA256", Buffer.from(signingInput), key.private_key);
+  segments.push(base64url(signature));
+
+  return segments.join(".");
+}
+
+export async function getValidAccessToken(): Promise<string> {
+  // Return cached token if still valid (refresh at 55 min)
+  if (cachedToken && cachedToken.expiresAt - Date.now() > 5 * 60 * 1000) {
+    return cachedToken.accessToken;
+  }
+
+  const key = getServiceAccountKey();
+  const jwt = createSignedJWT(key);
+
+  const res = await fetch(key.token_uri, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
     }),
   });
 
   if (!res.ok) {
     const err = await res.text();
-
-    // If the refresh token is revoked/expired (e.g. Google project in "Testing" mode),
-    // delete the stored token so the UI shows "disconnected" instead of silently failing.
-    if (err.includes("invalid_grant") || err.includes("Token has been expired or revoked")) {
-      console.error("Google refresh token revoked — clearing stored credentials");
-      await prisma.googleToken.delete({ where: { id: "singleton" } }).catch(() => {});
-    }
-
-    throw new Error(`Failed to refresh token: ${err}`);
+    throw new Error(`Failed to get service account token: ${err}`);
   }
 
   const data = await res.json();
-
-  await prisma.googleToken.update({
-    where: { id: "singleton" },
-    data: {
-      accessToken: data.access_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    },
-  });
+  cachedToken = {
+    accessToken: data.access_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  };
 
   return data.access_token;
 }
 
-export async function isGoogleDriveConnected(): Promise<boolean> {
-  const token = await prisma.googleToken.findUnique({
-    where: { id: "singleton" },
-  });
-  return !!token;
+export function isGoogleDriveConnected(): boolean {
+  return !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 }
 
 // ---------- Folder operations ----------
+
+export async function findOrCreateRootFolder(): Promise<string> {
+  const folderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+  if (!folderId) {
+    throw new Error("GOOGLE_DRIVE_ROOT_FOLDER_ID is not set");
+  }
+  return folderId;
+}
 
 export async function createFolder(
   name: string,
@@ -122,31 +142,6 @@ export async function createFolder(
 
   const data = await res.json();
   return data.id;
-}
-
-export async function findOrCreateRootFolder(): Promise<string> {
-  const accessToken = await getValidAccessToken();
-
-  // Search for existing root folder
-  const query = `name='${ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-
-  if (!res.ok) {
-    throw new Error("Failed to search for root folder");
-  }
-
-  const data = await res.json();
-  if (data.files && data.files.length > 0) {
-    return data.files[0].id;
-  }
-
-  // Create it
-  return createFolder(ROOT_FOLDER_NAME);
 }
 
 // ---------- File operations ----------
