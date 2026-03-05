@@ -103,13 +103,9 @@ export async function POST(
       }
     }
 
-    // DELETED FILES: in DB with driveFileId but not in Drive
-    for (const dbFile of dbFiles) {
-      if (dbFile.driveFileId && !driveFileMap.has(dbFile.driveFileId)) {
-        await prisma.file.delete({ where: { id: dbFile.id } });
-        changed = true;
-      }
-    }
+    // NOTE: We intentionally do NOT delete DB records for files missing from Drive.
+    // Files may exist in a different Drive folder (e.g. after migration) but are still
+    // accessible by their driveFileId. Only sync additions and renames.
 
     // RENAMED FILES: driveFileId matches but name differs
     for (const dbFile of dbFiles) {
