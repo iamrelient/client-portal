@@ -17,6 +17,7 @@ enum FileCategory {
   DRAWING
   CAD_DRAWING
   SUPPORTING
+  DESIGN_INSPIRATION
   OTHER
 }
 

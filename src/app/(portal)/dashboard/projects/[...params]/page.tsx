@@ -12,15 +12,17 @@ import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { canPreview3D } from "@/lib/model-utils";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
+import { DownloadOptionsModal } from "@/components/download-options-modal";
 
-type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "OTHER";
+type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
-const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"];
+const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "DESIGN_INSPIRATION", "OTHER"];
 const CATEGORY_LABELS: Record<FileCategory, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
   CAD_DRAWING: "CAD Drawings",
   SUPPORTING: "Owner Provided",
+  DESIGN_INSPIRATION: "Design Inspirations",
   OTHER: "Others",
 };
 
@@ -122,6 +124,7 @@ const CATEGORY_ACCENT: Record<FileCategory, string> = {
   DRAWING: "from-amber-500/80 to-amber-600/80",
   CAD_DRAWING: "from-violet-500/80 to-violet-600/80",
   SUPPORTING: "from-cyan-500/80 to-cyan-600/80",
+  DESIGN_INSPIRATION: "from-pink-500/80 to-pink-600/80",
   OTHER: "from-slate-500/80 to-slate-600/80",
 };
 
@@ -163,6 +166,7 @@ function groupByCategory(files: ProjectFile[]) {
     DRAWING: [],
     CAD_DRAWING: [],
     SUPPORTING: [],
+    DESIGN_INSPIRATION: [],
     OTHER: [],
   };
 
@@ -185,6 +189,7 @@ export default function ClientProjectDetailPage() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
 
   function loadProject() {
@@ -248,10 +253,19 @@ export default function ClientProjectDetailPage() {
     }
   }
 
-  async function handleDownloadAll() {
+  async function handleDownloadAll(categories?: FileCategory[], includeOldVersions?: boolean) {
+    setShowDownloadModal(false);
     setDownloadingZip(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/download-all`);
+      const params = new URLSearchParams();
+      if (categories && categories.length > 0) {
+        params.set("categories", categories.join(","));
+      }
+      if (includeOldVersions) {
+        params.set("includeOldVersions", "true");
+      }
+      const qs = params.toString();
+      const res = await fetch(`/api/projects/${projectId}/download-all${qs ? `?${qs}` : ""}`);
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -329,13 +343,20 @@ export default function ClientProjectDetailPage() {
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[40%]" />
+                <col className="w-[12%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                  <th className="px-6 py-3 font-medium text-slate-400">File</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Size</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Type</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Date</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">File</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Size</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Type</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Date</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06]">
@@ -396,17 +417,17 @@ export default function ClientProjectDetailPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-400">{formatSize(latest.size)}</td>
-                        <td className="px-6 py-4 text-slate-400">
+                        <td className="px-4 py-4 text-slate-400 truncate">{formatSize(latest.size)}</td>
+                        <td className="px-4 py-4 text-slate-400">
                           <span className="inline-flex items-center gap-1.5">
-                            <FileIcon className="h-4 w-4 text-slate-400" />
-                            {getFileLabel(latest.mimeType, latest.originalName)}
+                            <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                            <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-400">
+                        <td className="px-4 py-4 text-slate-400 truncate">
                           {formatRelativeDate(latest.createdAt)}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <a
                             href={`/api/files/${latest.id}/download`}
                             onClick={(e) => e.stopPropagation()}
@@ -503,7 +524,7 @@ export default function ClientProjectDetailPage() {
               </span>
             </div>
             <button
-              onClick={handleDownloadAll}
+              onClick={() => setShowDownloadModal(true)}
               disabled={downloadingZip}
               className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
             >
@@ -669,6 +690,24 @@ export default function ClientProjectDetailPage() {
           onClose={() => setPreviewFile(null)}
           files={project.files}
           onNavigate={(f) => setPreviewFile(f as ProjectFile)}
+        />
+      )}
+
+      {/* Download options modal */}
+      {showDownloadModal && project && (
+        <DownloadOptionsModal
+          categories={CATEGORY_ORDER.map((cat) => {
+            const allFiles = project.files.filter((f) => f.category === cat);
+            const currentFiles = allFiles.filter((f) => f.isCurrent);
+            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            return {
+              category: cat,
+              count: currentFiles.length,
+              hasOldVersions: oldFiles.length > 0,
+            };
+          })}
+          onDownload={handleDownloadAll}
+          onClose={() => setShowDownloadModal(false)}
         />
       )}
 

@@ -25,6 +25,9 @@ export async function GET(
     where: { id: params.id },
     include: {
       files: {
+        where: {
+          presentationSections: { none: {} },
+        },
         select: {
           id: true,
           originalName: true,

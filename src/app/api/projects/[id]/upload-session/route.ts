@@ -40,10 +40,14 @@ export async function POST(
       );
     }
 
+    // Pass browser origin so Google enables CORS on the upload URI
+    const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/[^/]*$/, "") || undefined;
+
     const uploadUri = await createResumableUploadSession(
       project.driveFolderId,
       fileName,
-      mimeType
+      mimeType,
+      origin
     );
 
     return NextResponse.json({ uploadUri });

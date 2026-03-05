@@ -16,15 +16,17 @@ import { canPreview3D } from "@/lib/model-utils";
 import { compressImage } from "@/lib/compress-image";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
+import { DownloadOptionsModal } from "@/components/download-options-modal";
 
-type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "OTHER";
+type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
-const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "OTHER"];
+const CATEGORY_ORDER: FileCategory[] = ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "DESIGN_INSPIRATION", "OTHER"];
 const CATEGORY_LABELS: Record<FileCategory, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",
   CAD_DRAWING: "CAD Drawings",
   SUPPORTING: "Owner Provided",
+  DESIGN_INSPIRATION: "Design Inspirations",
   OTHER: "Others",
 };
 
@@ -135,6 +137,7 @@ const CATEGORY_ACCENT: Record<FileCategory, string> = {
   DRAWING: "from-amber-500/80 to-amber-600/80",
   CAD_DRAWING: "from-violet-500/80 to-violet-600/80",
   SUPPORTING: "from-cyan-500/80 to-cyan-600/80",
+  DESIGN_INSPIRATION: "from-pink-500/80 to-pink-600/80",
   OTHER: "from-slate-500/80 to-slate-600/80",
 };
 
@@ -176,6 +179,7 @@ function groupByCategory(files: ProjectFile[]) {
     DRAWING: [],
     CAD_DRAWING: [],
     SUPPORTING: [],
+    DESIGN_INSPIRATION: [],
     OTHER: [],
   };
 
@@ -207,6 +211,7 @@ export default function AdminProjectDetailPage() {
   const [updatingCategory, setUpdatingCategory] = useState<string | null>(null);
 
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
@@ -357,30 +362,24 @@ export default function AdminProjectDetailPage() {
     }]);
   }
 
-  // Upload a single file entry to Drive and register it
+  // Upload a single file entry — sends file through our server to Google Drive
   async function uploadSingleFile(entry: UploadFileEntry): Promise<boolean> {
     const { file, category, displayName, targetFileGroupId } = entry;
 
-    const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-      }),
-    });
-
-    if (!sessionRes.ok) {
-      const data = await sessionRes.json().catch(() => ({}));
-      toast.error(`${file.name}: ${(data as { error?: string }).error || "Failed to start upload"}`);
-      return false;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("category", category);
+    if (displayName && displayName !== file.name) {
+      formData.append("displayName", displayName);
+    }
+    if (targetFileGroupId) {
+      formData.append("targetFileGroupId", targetFileGroupId);
     }
 
-    const { uploadUri } = await sessionRes.json();
-
-    // Upload file directly to Google Drive
-    const driveResult = await new Promise<{ id?: string; name?: string; size?: string }>((resolve) => {
+    // Use XHR for upload progress tracking
+    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
       const xhr = new XMLHttpRequest();
+      xhr.timeout = 120000; // 2 minute timeout for large files
 
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
@@ -390,46 +389,26 @@ export default function AdminProjectDetailPage() {
 
       xhr.addEventListener("load", () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText));
-          } catch {
-            // Google may return empty/non-JSON on success — resolve empty
-            resolve({});
-          }
+          resolve({ ok: true });
         } else {
-          // Even on non-2xx, try to parse — sometimes Drive returns 200 with odd status
           try {
-            resolve(JSON.parse(xhr.responseText));
+            const data = JSON.parse(xhr.responseText);
+            resolve({ ok: false, error: data.error });
           } catch {
-            resolve({});
+            resolve({ ok: false, error: `Upload failed (${xhr.status})` });
           }
         }
       });
 
-      xhr.addEventListener("error", () => resolve({}));
+      xhr.addEventListener("error", () => resolve({ ok: false, error: "Network error" }));
+      xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
 
-      xhr.open("PUT", uploadUri);
-      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-      xhr.send(file);
+      xhr.open("POST", `/api/projects/${projectId}/upload`);
+      xhr.send(formData);
     });
 
-    const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        driveFileId: driveResult.id || null,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        size: Number(driveResult.size) || file.size,
-        category,
-        displayName: displayName !== file.name ? displayName : null,
-        targetFileGroupId,
-      }),
-    });
-
-    if (!completeRes.ok) {
-      const data = await completeRes.json().catch(() => ({}));
-      toast.error(`${file.name}: ${(data as { error?: string }).error || "Failed to register file"}`);
+    if (!result.ok) {
+      toast.error(`${file.name}: ${result.error || "Failed to upload"}`);
       return false;
     }
 
@@ -586,10 +565,19 @@ export default function AdminProjectDetailPage() {
     }
   }
 
-  async function handleDownloadAll() {
+  async function handleDownloadAll(categories?: FileCategory[], includeOldVersions?: boolean) {
+    setShowDownloadModal(false);
     setDownloadingZip(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/download-all`);
+      const params = new URLSearchParams();
+      if (categories && categories.length > 0) {
+        params.set("categories", categories.join(","));
+      }
+      if (includeOldVersions) {
+        params.set("includeOldVersions", "true");
+      }
+      const qs = params.toString();
+      const res = await fetch(`/api/projects/${projectId}/download-all${qs ? `?${qs}` : ""}`);
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -706,17 +694,26 @@ export default function AdminProjectDetailPage() {
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[3%]" />
+                <col className="w-[35%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+                <col className="w-[16%]" />
+                <col className="w-[12%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                  <th className="w-10 px-3 py-3 font-medium text-slate-400">
+                  <th className="px-3 py-3 font-medium text-slate-400">
                     <span className="sr-only">Current</span>
                   </th>
-                  <th className="px-6 py-3 font-medium text-slate-400">File</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Size</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Type</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Category</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Date</th>
-                  <th className="px-6 py-3 font-medium text-slate-400">Actions</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">File</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Size</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Type</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Category</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Date</th>
+                  <th className="px-4 py-3 font-medium text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06]">
@@ -766,12 +763,21 @@ export default function AdminProjectDetailPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <a
-                              href={`/api/files/${latest.id}/download`}
-                              className="font-medium text-brand-400 hover:text-brand-300"
-                            >
-                              {fileName}
-                            </a>
+                            {canPreview(latest.mimeType, latest.originalName) ? (
+                              <button
+                                onClick={() => setPreviewFile(latest)}
+                                className="font-medium text-brand-400 hover:text-brand-300 text-left"
+                              >
+                                {fileName}
+                              </button>
+                            ) : (
+                              <a
+                                href={`/api/files/${latest.id}/download`}
+                                className="font-medium text-brand-400 hover:text-brand-300"
+                              >
+                                {fileName}
+                              </a>
+                            )}
                             {latest.isCurrent && (
                               <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                                 Current
@@ -806,32 +812,40 @@ export default function AdminProjectDetailPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-400">{formatSize(latest.size)}</td>
-                        <td className="px-6 py-4 text-slate-400">
+                        <td className="px-4 py-4 text-slate-400 truncate">{formatSize(latest.size)}</td>
+                        <td className="px-4 py-4 text-slate-400">
                           <span className="inline-flex items-center gap-1.5">
-                            <FileIcon className="h-4 w-4 text-slate-400" />
-                            {getFileLabel(latest.mimeType, latest.originalName)}
+                            <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                            <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
                           </span>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <select
                             value={latest.category}
                             disabled={updatingCategory === latest.id}
                             onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
-                            className="rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                            className="w-full rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
                           >
                             <option value="RENDER">Renders</option>
                             <option value="DRAWING">Drawings</option>
                             <option value="CAD_DRAWING">CAD Drawings</option>
                             <option value="SUPPORTING">Supporting Docs</option>
+                            <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                             <option value="OTHER">Others</option>
                           </select>
                         </td>
-                        <td className="px-6 py-4 text-slate-400">
+                        <td className="px-4 py-4 text-slate-400 truncate">
                           {formatRelativeDate(latest.createdAt)}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={`/api/files/${latest.id}/download`}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-slate-400 hover:bg-white/[0.06] hover:text-slate-100 transition-colors"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download
+                            </a>
                             <button
                               onClick={() => setDeleteFileTarget(latest.id)}
                               disabled={deleting === latest.id}
@@ -955,7 +969,7 @@ export default function AdminProjectDetailPage() {
               </span>
             </div>
             <button
-              onClick={handleDownloadAll}
+              onClick={() => setShowDownloadModal(true)}
               disabled={downloadingZip}
               className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-3.5 py-2 text-sm font-medium text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
             >
@@ -1123,6 +1137,7 @@ export default function AdminProjectDetailPage() {
                   <option value="DRAWING">Drawings</option>
                   <option value="CAD_DRAWING">CAD Drawings</option>
                   <option value="SUPPORTING">Supporting Docs</option>
+                  <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                   <option value="OTHER">Others</option>
                 </select>
               </div>
@@ -1190,6 +1205,7 @@ export default function AdminProjectDetailPage() {
                         <option value="DRAWING">Drawings</option>
                         <option value="CAD_DRAWING">CAD Drawings</option>
                         <option value="SUPPORTING">Supporting Docs</option>
+                        <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                         <option value="OTHER">Others</option>
                       </select>
                     </div>
@@ -1424,6 +1440,24 @@ export default function AdminProjectDetailPage() {
           Delete Project
         </button>
       </div>
+
+      {/* Download options modal */}
+      {showDownloadModal && project && (
+        <DownloadOptionsModal
+          categories={CATEGORY_ORDER.map((cat) => {
+            const allFiles = project.files.filter((f) => f.category === cat);
+            const currentFiles = allFiles.filter((f) => f.isCurrent);
+            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            return {
+              category: cat,
+              count: currentFiles.length,
+              hasOldVersions: oldFiles.length > 0,
+            };
+          })}
+          onDownload={handleDownloadAll}
+          onClose={() => setShowDownloadModal(false)}
+        />
+      )}
 
       {/* Confirm delete file */}
       <ConfirmModal
