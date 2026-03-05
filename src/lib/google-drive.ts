@@ -264,6 +264,30 @@ export async function downloadFile(
   };
 }
 
+export async function moveFile(
+  fileId: string,
+  oldParentId: string,
+  newParentId: string
+): Promise<void> {
+  const accessToken = await getValidAccessToken();
+
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&supportsAllDrives=true`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to move file: ${err}`);
+  }
+}
+
 export async function deleteFile(driveFileId: string): Promise<void> {
   const accessToken = await getValidAccessToken();
 
