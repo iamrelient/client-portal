@@ -78,6 +78,10 @@ function canPreview(mimeType: string, fileName: string) {
   );
 }
 
+function isUrlShortcut(fileName: string) {
+  return fileName.toLowerCase().endsWith(".url");
+}
+
 function isImage(mimeType: string) {
   return mimeType.startsWith("image/");
 }
@@ -763,7 +767,16 @@ export default function AdminProjectDetailPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            {canPreview(latest.mimeType, latest.originalName) ? (
+                            {isUrlShortcut(latest.originalName) ? (
+                              <a
+                                href={`/api/files/${latest.id}/download`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-brand-400 hover:text-brand-300"
+                              >
+                                {fileName}
+                              </a>
+                            ) : canPreview(latest.mimeType, latest.originalName) ? (
                               <button
                                 onClick={() => setPreviewFile(latest)}
                                 className="font-medium text-brand-400 hover:text-brand-300 text-left"
@@ -841,10 +854,12 @@ export default function AdminProjectDetailPage() {
                           <div className="flex items-center gap-1">
                             <a
                               href={`/api/files/${latest.id}/download`}
+                              target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}
+                              rel={isUrlShortcut(latest.originalName) ? "noopener noreferrer" : undefined}
                               className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-slate-400 hover:bg-white/[0.06] hover:text-slate-100 transition-colors"
                             >
                               <Download className="h-4 w-4" />
-                              Download
+                              {isUrlShortcut(latest.originalName) ? "Open Link" : "Download"}
                             </a>
                             <button
                               onClick={() => setDeleteFileTarget(latest.id)}

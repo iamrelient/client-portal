@@ -44,6 +44,25 @@ export async function GET(
     // path stores the Drive file ID
     const { stream } = await downloadFile(file.path);
 
+    // Handle .url shortcut files — parse the URL and redirect
+    if (file.originalName.toLowerCase().endsWith(".url")) {
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let done = false;
+      while (!done) {
+        const result = await reader.read();
+        if (result.value) chunks.push(result.value);
+        done = result.done;
+      }
+      const text = new TextDecoder().decode(Buffer.concat(chunks));
+      const urlMatch = text.match(/URL=(.+)/i);
+      if (urlMatch) {
+        const targetUrl = urlMatch[1].trim();
+        return NextResponse.redirect(targetUrl);
+      }
+      // If we can't parse it, fall through to download as-is
+    }
+
     // Support inline viewing via ?inline=true query param
     const url = new URL(req.url);
     const inline = url.searchParams.get("inline") === "true";

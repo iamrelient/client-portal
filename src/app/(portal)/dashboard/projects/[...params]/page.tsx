@@ -64,6 +64,10 @@ function canPreview(mimeType: string, fileName: string) {
   );
 }
 
+function isUrlShortcut(fileName: string) {
+  return fileName.toLowerCase().endsWith(".url");
+}
+
 function isImage(mimeType: string) {
   return mimeType.startsWith("image/");
 }
@@ -369,9 +373,15 @@ export default function ClientProjectDetailPage() {
                     <>
                       <tr
                         key={latest.id}
-                        onClick={() => previewable && setPreviewFile(latest)}
+                        onClick={() => {
+                          if (isUrlShortcut(latest.originalName)) {
+                            window.open(`/api/files/${latest.id}/download`, "_blank");
+                          } else if (previewable) {
+                            setPreviewFile(latest);
+                          }
+                        }}
                         className={`transition-colors ${
-                          previewable ? "cursor-pointer" : ""
+                          previewable || isUrlShortcut(latest.originalName) ? "cursor-pointer" : ""
                         } ${
                           latest.isCurrent
                             ? "bg-green-500/[0.06] hover:bg-green-500/10"
@@ -430,11 +440,13 @@ export default function ClientProjectDetailPage() {
                         <td className="px-4 py-4">
                           <a
                             href={`/api/files/${latest.id}/download`}
+                            target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}
+                            rel={isUrlShortcut(latest.originalName) ? "noopener noreferrer" : undefined}
                             onClick={(e) => e.stopPropagation()}
                             className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-100"
                           >
                             <Download className="h-4 w-4" />
-                            Download
+                            {isUrlShortcut(latest.originalName) ? "Open Link" : "Download"}
                           </a>
                         </td>
                       </tr>
