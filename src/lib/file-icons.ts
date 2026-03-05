@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   FileCode,
   Box,
+  Globe,
   File,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const extIconMap: Record<string, [LucideIcon, string]> = {
   ".gltf": [Box, "3D Model"],
   ".fbx": [Box, "3D Model"],
   ".obj": [Box, "3D Model"],
+  ".url": [Globe, "Website"],
 };
 
 function getExtension(fileName: string): string {

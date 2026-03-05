@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Loader2, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -220,6 +220,11 @@ export default function AdminProjectDetailPage() {
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
 
+  // Add URL state
+  const [urlInput, setUrlInput] = useState("");
+  const [urlCategory, setUrlCategory] = useState<FileCategory>("DESIGN_INSPIRATION");
+  const [addingUrl, setAddingUrl] = useState(false);
+
   // Drag-drop state
   const [dragOverFileId, setDragOverFileId] = useState<string | null>(null);
 
@@ -364,6 +369,55 @@ export default function AdminProjectDetailPage() {
       displayName: targetFile.displayName || targetFile.originalName,
       targetFileGroupId: groupId,
     }]);
+  }
+
+  // Add a URL as a .url shortcut file
+  async function handleAddUrl() {
+    if (!urlInput.trim() || addingUrl) return;
+
+    let url = urlInput.trim();
+    // Add https:// if no protocol
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+
+    setAddingUrl(true);
+    try {
+      // Create a .url file content
+      const content = `[InternetShortcut]\nURL=${url}\n`;
+      // Extract a display name from the URL
+      let displayName = url;
+      try {
+        const parsed = new URL(url);
+        displayName = parsed.hostname.replace(/^www\./, "");
+      } catch { /* use raw url */ }
+
+      const fileName = `${displayName}.url`;
+      const blob = new Blob([content], { type: "application/internet-shortcut" });
+      const file = new File([blob], fileName, { type: "application/internet-shortcut" });
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("category", urlCategory);
+      formData.append("displayName", displayName);
+
+      const res = await fetch(`/api/projects/${projectId}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Upload failed" }));
+        toast.error(data.error || "Failed to add URL");
+      } else {
+        toast.success("URL added");
+        setUrlInput("");
+        loadProject();
+      }
+    } catch (err) {
+      toast.error("Failed to add URL");
+      console.error(err);
+    } finally {
+      setAddingUrl(false);
+    }
   }
 
   // Upload a single file entry — sends file through our server to Google Drive
@@ -747,7 +801,9 @@ export default function AdminProjectDetailPage() {
                         onClick={(e) => {
                           const tag = (e.target as HTMLElement).closest("input, select, button, a");
                           if (tag) return;
-                          if (canPreview(latest.mimeType, latest.originalName)) {
+                          if (isUrlShortcut(latest.originalName)) {
+                            window.open(`/api/files/${latest.id}/download`, "_blank");
+                          } else if (canPreview(latest.mimeType, latest.originalName)) {
                             setPreviewFile(latest);
                           }
                         }}
@@ -1430,9 +1486,50 @@ export default function AdminProjectDetailPage() {
         </form>
       </div>
 
-      {/* Upload File */}
+      {/* Add URL + Upload File */}
       <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <h2 className="mb-4 text-sm font-medium text-slate-100">Upload File</h2>
+        {/* Add URL */}
+        <div className="mb-4">
+          <h2 className="mb-3 text-sm font-medium text-slate-100 flex items-center gap-2">
+            <Globe className="h-4 w-4 text-brand-400" />
+            Add URL
+          </h2>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddUrl(); }}
+              placeholder="Paste a URL (e.g. https://example.com)"
+              className="flex-1 rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            />
+            <select
+              value={urlCategory}
+              onChange={(e) => setUrlCategory(e.target.value as FileCategory)}
+              className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-2 text-sm text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              {CATEGORY_ORDER.map((cat) => (
+                <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleAddUrl}
+              disabled={!urlInput.trim() || addingUrl}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+            >
+              {addingUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="relative mb-4">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
+          <div className="relative flex justify-center"><span className="bg-[#12141f] px-3 text-xs text-slate-500">or upload files</span></div>
+        </div>
+
+        {/* Upload Files */}
         <DropZone
           onFiles={handleFilesSelected}
           uploading={uploading}
