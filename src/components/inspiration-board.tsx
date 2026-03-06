@@ -5,7 +5,6 @@ import {
   Plus,
   Globe,
   Trash2,
-  MessageCircle,
   ExternalLink,
   Eye,
   Pencil,
@@ -51,21 +50,6 @@ function isUrlShortcut(fileName: string) {
 
 function getDomain(fileName: string) {
   return fileName.replace(/\.url$/i, "");
-}
-
-function formatRelativeDate(dateStr: string) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function InspirationBoard({
@@ -225,8 +209,9 @@ export function InspirationBoard({
           const fileName = file.displayName || file.originalName;
           const uploaderBadge =
             file.uploadedBy.role === "ADMIN" ? "Studio" : "Client";
-          const showEdit = canEdit(file);
-          const showDelete = canDelete(file);
+          const hasEdit = canEdit(file);
+          const hasDelete = canDelete(file);
+          const hasActions = hasEdit || hasDelete || file.notes;
 
           return (
             <div
@@ -245,20 +230,7 @@ export function InspirationBoard({
                     className="h-full w-full object-cover"
                     loading="lazy"
                   />
-                  {/* Gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-
-                  {/* Bottom info (visible on hover) */}
-                  <div className="absolute inset-x-0 bottom-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-                    <p className="text-xs font-medium text-white truncate">
-                      {fileName}
-                    </p>
-                    <p className="text-[10px] text-white/60 mt-0.5">
-                      {formatRelativeDate(file.createdAt)}
-                    </p>
-                  </div>
-
-                  {/* View overlay */}
+                  {/* View overlay (center) */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
                       <Eye className="h-3.5 w-3.5" />
@@ -281,7 +253,7 @@ export function InspirationBoard({
                     </div>
                   </div>
 
-                  {/* Open link overlay */}
+                  {/* Open link overlay (center) */}
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.15] px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -320,7 +292,7 @@ export function InspirationBoard({
                 </>
               )}
 
-              {/* ── Uploader Badge (always visible) ── */}
+              {/* ── Uploader Badge (always visible, top-right) ── */}
               <div className="absolute top-2 right-2 z-10">
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shadow-sm backdrop-blur-sm ${
@@ -333,53 +305,53 @@ export function InspirationBoard({
                 </span>
               </div>
 
-              {/* ── Notes indicator ── */}
-              {file.notes && (
-                <div className="absolute top-2 left-2 z-10 group/note">
-                  <div className="rounded-full bg-black/50 p-1.5 backdrop-blur-sm">
-                    <MessageCircle className="h-3 w-3 text-white/80" />
-                  </div>
-                  {/* Notes tooltip */}
-                  <div className="absolute left-0 top-full mt-1 w-48 rounded-lg bg-[#1a1d2e] border border-white/[0.1] p-2.5 shadow-xl opacity-0 invisible group-hover/note:opacity-100 group-hover/note:visible transition-all duration-150 z-20">
-                    <p className="text-xs text-slate-300 leading-relaxed break-words">
-                      &ldquo;{file.notes}&rdquo;
-                    </p>
-                    <p className="text-[10px] text-slate-500 mt-1.5">
-                      &mdash; {file.uploadedBy.name}
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* ── Hover overlay: gradient + notes + action buttons ── */}
+              {hasActions && (
+                <>
+                  {/* Bottom gradient (hover only) */}
+                  <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-              {/* ── Action buttons (visible on hover) ── */}
-              <div className="absolute bottom-2 left-2 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                {/* Edit button */}
-                {showEdit && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenEdit(file);
-                    }}
-                    className="rounded-full bg-black/50 p-1.5 text-white/60 hover:bg-white/20 hover:text-white transition-all duration-150 backdrop-blur-sm"
-                    title="Edit"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                )}
-                {/* Delete button */}
-                {showDelete && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(file.id);
-                    }}
-                    className="rounded-full bg-black/50 p-1.5 text-white/60 hover:bg-red-500/80 hover:text-white transition-all duration-150 backdrop-blur-sm"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
+                  {/* Notes at bottom (hover only) */}
+                  {file.notes && (
+                    <div className="absolute inset-x-0 bottom-0 px-3 pb-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+                      <p className="text-[11px] text-white/90 leading-snug line-clamp-2 break-words">
+                        &ldquo;{file.notes}&rdquo;
+                      </p>
+                      <p className="text-[9px] text-white/50 mt-0.5">
+                        &mdash; {file.uploadedBy.name}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Edit button — bottom-left (hover only) */}
+                  {hasEdit && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(file);
+                      }}
+                      className="absolute bottom-2.5 left-2.5 z-20 rounded-full bg-black/60 p-2 text-white/70 opacity-0 group-hover:opacity-100 hover:bg-white/20 hover:text-white transition-all duration-150 backdrop-blur-sm"
+                      title="Edit"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {/* Delete button — bottom-right (hover only) */}
+                  {hasDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(file.id);
+                      }}
+                      className="absolute bottom-2.5 right-2.5 z-20 rounded-full bg-red-500/70 p-2 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all duration-150 backdrop-blur-sm"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           );
         })}
