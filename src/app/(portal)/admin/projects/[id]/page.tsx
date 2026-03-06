@@ -1195,7 +1195,9 @@ export default function AdminProjectDetailPage() {
           />
         </div>
       ) : (
-        CATEGORY_ORDER.map((cat) =>
+        CATEGORY_ORDER.filter(
+          (cat) => categorized[cat].length > 0
+        ).map((cat) =>
           cat === "DESIGN_INSPIRATION" ? (
             <InspirationBoard
               key={cat}

@@ -695,7 +695,7 @@ export default function ClientProjectDetailPage() {
             </div>
           )}
           {CATEGORY_ORDER.filter(
-            (cat) => categorized[cat].length > 0 || cat === "DESIGN_INSPIRATION"
+            (cat) => categorized[cat].length > 0
           ).map((cat) =>
             cat === "DESIGN_INSPIRATION" ? (
               <InspirationBoard
