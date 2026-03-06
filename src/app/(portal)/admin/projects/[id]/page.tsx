@@ -424,7 +424,7 @@ export default function AdminProjectDetailPage() {
       const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/octet-stream" }),
+        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/octet-stream", origin: window.location.origin }),
       });
 
       if (!sessionRes.ok) {
@@ -459,7 +459,10 @@ export default function AdminProjectDetailPage() {
           }
         });
 
-        xhr.addEventListener("error", () => resolve({ ok: false, error: "Network error during upload" }));
+        xhr.addEventListener("error", () => {
+          console.error("Upload XHR error", { status: xhr.status, response: xhr.responseText });
+          resolve({ ok: false, error: "Network error during upload" });
+        });
         xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
 
         xhr.open("PUT", uploadUri);

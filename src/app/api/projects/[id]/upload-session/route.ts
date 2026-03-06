@@ -31,7 +31,7 @@ export async function POST(
       );
     }
 
-    const { fileName, mimeType } = await req.json();
+    const { fileName, mimeType, origin: clientOrigin } = await req.json();
 
     if (!fileName || !mimeType) {
       return NextResponse.json(
@@ -40,8 +40,14 @@ export async function POST(
       );
     }
 
-    // Pass browser origin so Google enables CORS on the upload URI
-    const origin = req.headers.get("origin") || req.headers.get("referer")?.replace(/\/[^/]*$/, "") || undefined;
+    // Use client-provided origin (most reliable), fall back to headers
+    let origin = clientOrigin || req.headers.get("origin");
+    if (!origin) {
+      const referer = req.headers.get("referer");
+      if (referer) {
+        try { origin = new URL(referer).origin; } catch {}
+      }
+    }
 
     const uploadUri = await createResumableUploadSession(
       project.driveFolderId,
