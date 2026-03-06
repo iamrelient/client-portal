@@ -399,6 +399,7 @@ export default function AdminProjectDetailPage() {
         file,
         category: urlCategory,
         displayName,
+        targetFileGroupId: undefined,
       });
 
       if (ok) {
