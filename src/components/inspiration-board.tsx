@@ -21,6 +21,7 @@ interface InspirationFile {
   category: string;
   displayName: string | null;
   notes: string | null;
+  thumbnailUrl: string | null;
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
@@ -166,8 +167,13 @@ export function InspirationBoard({
           </div>
         </button>
 
-        {/* ── Inspiration Cards ── */}
-        {files.map(({ latest: file }) => {
+        {/* ── Inspiration Cards (images first, URLs last) ── */}
+        {[...files].sort((a, b) => {
+          const aIsUrl = isUrlShortcut(a.latest.originalName);
+          const bIsUrl = isUrlShortcut(b.latest.originalName);
+          if (aIsUrl !== bIsUrl) return aIsUrl ? 1 : -1;
+          return 0;
+        }).map(({ latest: file }) => {
           const isUrl = isUrlShortcut(file.originalName);
           const isImg = isImage(file.mimeType);
           const fileName = file.displayName || file.originalName;
@@ -215,17 +221,44 @@ export function InspirationBoard({
               ) : isUrl ? (
                 /* ── URL Bookmark Card ── */
                 <>
-                  <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
-                    <div className="rounded-2xl bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4 ring-1 ring-white/[0.08]">
-                      <Globe className="h-8 w-8 text-pink-400" />
+                  {file.thumbnailUrl ? (
+                    <>
+                      {/* Thumbnail background */}
+                      <img
+                        src={file.thumbnailUrl}
+                        alt={getDomain(file.originalName)}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          // Hide broken image, show fallback
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      {/* Always-visible gradient + domain label at bottom */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      <div className="absolute inset-x-0 bottom-0 p-3">
+                        <div className="flex items-center gap-1.5">
+                          <Globe className="h-3.5 w-3.5 text-pink-400 flex-shrink-0" />
+                          <p className="text-xs font-medium text-white truncate">
+                            {getDomain(file.originalName)}
+                          </p>
+                        </div>
+                        <p className="text-[10px] text-white/50 mt-0.5">Website</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
+                      <div className="rounded-2xl bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4 ring-1 ring-white/[0.08]">
+                        <Globe className="h-8 w-8 text-pink-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-slate-200 truncate max-w-full">
+                          {getDomain(file.originalName)}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500">Website</p>
+                      </div>
                     </div>
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-slate-200 truncate max-w-full">
-                        {getDomain(file.originalName)}
-                      </p>
-                      <p className="mt-1 text-[10px] text-slate-500">Website</p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Open link overlay */}
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

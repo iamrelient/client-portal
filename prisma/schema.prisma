@@ -74,6 +74,7 @@ model File {
   category        FileCategory @default(OTHER)
   displayName     String?
   notes           String?
+  thumbnailUrl    String?
   isCurrent       Boolean  @default(false)
   version         Int      @default(1)
   fileGroupId     String?

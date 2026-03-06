@@ -35,7 +35,7 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, displayName, notes } =
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, displayName, notes, thumbnailUrl } =
       await req.json();
 
     if (!fileName) {
@@ -114,6 +114,7 @@ export async function POST(
         category: "DESIGN_INSPIRATION",
         displayName: displayName || null,
         notes: notes || null,
+        thumbnailUrl: thumbnailUrl || null,
         version,
         fileGroupId,
       },

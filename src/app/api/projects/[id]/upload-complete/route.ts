@@ -26,7 +26,7 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes } = await req.json();
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes, thumbnailUrl } = await req.json();
 
     if (!fileName) {
       return NextResponse.json(
@@ -116,6 +116,7 @@ export async function POST(
         category: category || "OTHER",
         displayName: displayName || null,
         notes: notes || null,
+        thumbnailUrl: thumbnailUrl || null,
         version,
         fileGroupId,
       },

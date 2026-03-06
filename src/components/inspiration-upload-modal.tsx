@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { X, Upload, Globe, Loader2, Image as ImageIcon, Link } from "lucide-react";
 
 interface InspirationUploadModalProps {
@@ -31,7 +31,54 @@ export function InspirationUploadModal({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [ogThumbnail, setOgThumbnail] = useState<string | null>(null);
+  const [ogLoading, setOgLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const ogAbortRef = useRef<AbortController | null>(null);
+
+  // Fetch OG image when URL input changes (debounced)
+  useEffect(() => {
+    if (tab !== "url" || !urlInput.trim()) {
+      setOgThumbnail(null);
+      setOgLoading(false);
+      return;
+    }
+
+    let url = urlInput.trim();
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try { new URL(url); } catch { return; } // skip invalid URLs
+
+    setOgLoading(true);
+    const timer = setTimeout(async () => {
+      // Abort previous fetch
+      ogAbortRef.current?.abort();
+      const controller = new AbortController();
+      ogAbortRef.current = controller;
+
+      try {
+        const res = await fetch(`/api/og-image?url=${encodeURIComponent(url)}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!controller.signal.aborted) {
+            setOgThumbnail(data.thumbnailUrl || null);
+          }
+        }
+      } catch {
+        // aborted or network error — ignore
+      } finally {
+        if (!controller.signal.aborted) {
+          setOgLoading(false);
+        }
+      }
+    }, 600);
+
+    return () => {
+      clearTimeout(timer);
+      setOgLoading(false);
+    };
+  }, [urlInput, tab]);
 
   // Generate preview when file changes
   const handleFileSelect = useCallback((f: File) => {
@@ -192,6 +239,7 @@ export function InspirationUploadModal({
         category: "DESIGN_INSPIRATION",
         displayName: displayName !== fileToUpload.name ? displayName : null,
         notes: notes.trim() || null,
+        thumbnailUrl: ogThumbnail || null,
       }),
     });
 
@@ -206,6 +254,7 @@ export function InspirationUploadModal({
     setUrlInput("");
     setNotes("");
     setProgress(0);
+    setOgThumbnail(null);
     onSuccess();
     onClose();
   }
@@ -330,19 +379,38 @@ export function InspirationUploadModal({
                   </div>
                 </div>
                 {urlInput.trim() && (
-                  <div className="mt-2 flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2">
-                    <Globe className="h-4 w-4 text-pink-400 flex-shrink-0" />
-                    <span className="text-sm text-slate-300 truncate">
-                      {(() => {
-                        try {
-                          let url = urlInput.trim();
-                          if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-                          return new URL(url).hostname.replace(/^www\./, "");
-                        } catch {
-                          return urlInput.trim();
-                        }
-                      })()}
-                    </span>
+                  <div className="mt-2 rounded-lg bg-white/[0.04] overflow-hidden">
+                    {/* OG Image Preview */}
+                    {ogLoading ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+                        <span className="ml-2 text-xs text-slate-400">Fetching preview...</span>
+                      </div>
+                    ) : ogThumbnail ? (
+                      <div className="relative aspect-video bg-black/30">
+                        <img
+                          src={ogThumbnail}
+                          alt="Website preview"
+                          className="w-full h-full object-contain"
+                          onError={() => setOgThumbnail(null)}
+                        />
+                      </div>
+                    ) : null}
+                    {/* Domain label */}
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <Globe className="h-4 w-4 text-pink-400 flex-shrink-0" />
+                      <span className="text-sm text-slate-300 truncate">
+                        {(() => {
+                          try {
+                            let url = urlInput.trim();
+                            if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+                            return new URL(url).hostname.replace(/^www\./, "");
+                          } catch {
+                            return urlInput.trim();
+                          }
+                        })()}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

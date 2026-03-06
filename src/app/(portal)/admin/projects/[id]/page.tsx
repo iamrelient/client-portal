@@ -39,6 +39,7 @@ interface ProjectFile {
   category: FileCategory;
   displayName: string | null;
   notes: string | null;
+  thumbnailUrl: string | null;
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
