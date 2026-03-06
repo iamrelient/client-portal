@@ -13,6 +13,7 @@ import { canPreview3D } from "@/lib/model-utils";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
+import { InspirationBoard } from "@/components/inspiration-board";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -33,10 +34,12 @@ interface ProjectFile {
   mimeType: string;
   category: FileCategory;
   displayName: string | null;
+  notes: string | null;
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
   createdAt: string;
+  uploadedBy: { id: string; name: string; role: string };
 }
 
 interface ProjectDetail {
@@ -690,8 +693,21 @@ export default function ClientProjectDetailPage() {
               <div className="h-px flex-1 bg-white/[0.06]" />
             </div>
           )}
-          {CATEGORY_ORDER.filter((cat) => categorized[cat].length > 0).map((cat) =>
-            renderCategorySection(cat)
+          {CATEGORY_ORDER.filter(
+            (cat) => categorized[cat].length > 0 || cat === "DESIGN_INSPIRATION"
+          ).map((cat) =>
+            cat === "DESIGN_INSPIRATION" ? (
+              <InspirationBoard
+                key={cat}
+                files={categorized.DESIGN_INSPIRATION}
+                projectId={project.id}
+                userRole="USER"
+                onRefresh={loadProject}
+                onPreview={(f) => setPreviewFile(f as ProjectFile)}
+              />
+            ) : (
+              renderCategorySection(cat)
+            )
           )}
         </>
       )}

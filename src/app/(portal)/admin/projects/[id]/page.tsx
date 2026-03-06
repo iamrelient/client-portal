@@ -17,6 +17,7 @@ import { compressImage } from "@/lib/compress-image";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
+import { InspirationBoard } from "@/components/inspiration-board";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -37,10 +38,12 @@ interface ProjectFile {
   mimeType: string;
   category: FileCategory;
   displayName: string | null;
+  notes: string | null;
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
   createdAt: string;
+  uploadedBy: { id: string; name: string; role: string };
 }
 
 interface ProjectDetail {
@@ -1191,7 +1194,20 @@ export default function AdminProjectDetailPage() {
           />
         </div>
       ) : (
-        CATEGORY_ORDER.map((cat) => renderCategorySection(cat))
+        CATEGORY_ORDER.map((cat) =>
+          cat === "DESIGN_INSPIRATION" ? (
+            <InspirationBoard
+              key={cat}
+              files={categorized.DESIGN_INSPIRATION}
+              projectId={project.id}
+              userRole="ADMIN"
+              onRefresh={loadProject}
+              onPreview={(f) => setPreviewFile(f as ProjectFile)}
+            />
+          ) : (
+            renderCategorySection(cat)
+          )
+        )
       )}
 
       {previewFile && (

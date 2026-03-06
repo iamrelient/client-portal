@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEmailAuthorized } from "@/lib/auth-utils";
 import { listFilesInFolder } from "@/lib/google-drive";
 import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
@@ -12,21 +13,30 @@ export async function POST(
 ) {
   const session = await getServerSession(authOptions);
 
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const project = await prisma.project.findUnique({
       where: { id: params.id },
-      select: { id: true, name: true, driveFolderId: true },
+      select: { id: true, name: true, driveFolderId: true, authorizedEmails: true },
     });
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes } = await req.json();
+    // Allow ADMIN or any authorized user (client)
+    if (
+      session.user.role !== "ADMIN" &&
+      !isEmailAuthorized(session.user.email ?? "", project.authorizedEmails)
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, displayName, notes } =
+      await req.json();
 
     if (!fileName) {
       return NextResponse.json(
@@ -41,16 +51,17 @@ export async function POST(
 
     if (!driveFileId && project.driveFolderId) {
       const driveFiles = await listFilesInFolder(project.driveFolderId);
-      // Get existing DB driveFileIds so we can prefer the NEW file (not already in DB)
       const existingDriveIds = new Set(
-        (await prisma.file.findMany({
-          where: { projectId: params.id, driveFileId: { not: null } },
-          select: { driveFileId: true },
-        })).map((f) => f.driveFileId)
+        (
+          await prisma.file.findMany({
+            where: { projectId: params.id, driveFileId: { not: null } },
+            select: { driveFileId: true },
+          })
+        ).map((f) => f.driveFileId)
       );
       const nameMatches = driveFiles.filter((f) => f.name === fileName);
-      // Prefer a Drive file that isn't already registered in DB (i.e. the just-uploaded one)
-      const match = nameMatches.find((f) => !existingDriveIds.has(f.id)) || nameMatches[0];
+      const match =
+        nameMatches.find((f) => !existingDriveIds.has(f.id)) || nameMatches[0];
       if (match) {
         driveFileId = match.id;
         resolvedSize = resolvedSize || Number(match.size) || 0;
@@ -64,27 +75,14 @@ export async function POST(
       );
     }
 
-    // Version detection: use targetFileGroupId (drag-to-iterate) or fall back to name matching
-    let existingFiles;
-    if (targetFileGroupId) {
-      // First try matching by fileGroupId
-      existingFiles = await prisma.file.findMany({
-        where: { fileGroupId: targetFileGroupId },
-        orderBy: { version: "desc" },
-      });
-      // If no group found, the targetFileGroupId may be a file ID (first version with no group yet)
-      if (existingFiles.length === 0) {
-        const targetFile = await prisma.file.findUnique({ where: { id: targetFileGroupId } });
-        if (targetFile) {
-          existingFiles = [targetFile];
-        }
-      }
-    } else {
-      existingFiles = await prisma.file.findMany({
-        where: { projectId: params.id, originalName: { equals: fileName, mode: "insensitive" } },
-        orderBy: { version: "desc" },
-      });
-    }
+    // Version detection by name matching
+    const existingFiles = await prisma.file.findMany({
+      where: {
+        projectId: params.id,
+        originalName: { equals: fileName, mode: "insensitive" },
+      },
+      orderBy: { version: "desc" },
+    });
 
     let version = 1;
     let fileGroupId: string | null = null;
@@ -113,7 +111,7 @@ export async function POST(
         driveFileId,
         uploadedById: session.user.id,
         projectId: params.id,
-        category: category || "OTHER",
+        category: "DESIGN_INSPIRATION",
         displayName: displayName || null,
         notes: notes || null,
         version,
@@ -124,29 +122,27 @@ export async function POST(
     await prisma.activity.create({
       data: {
         type: "FILE_UPLOADED",
-        description: `Uploaded file "${fileName}" to project "${project.name}"`,
+        description: `Added inspiration "${displayName || fileName}" to project "${project.name}"`,
         userId: session.user.id,
       },
     });
 
-    // Send email notification for Design Inspiration uploads
-    if ((category || "OTHER") === "DESIGN_INSPIRATION") {
-      sendInspirationNotification({
-        projectName: project.name,
-        fileName: displayName || fileName,
-        uploaderName: session.user.name || session.user.email || "Unknown",
-        uploaderRole: session.user.role as "ADMIN" | "USER",
-        notes: notes || null,
-        projectId: params.id,
-      }).catch(() => {}); // fire-and-forget
-    }
+    // Send email notification (fire-and-forget)
+    sendInspirationNotification({
+      projectName: project.name,
+      fileName: displayName || fileName,
+      uploaderName: session.user.name || session.user.email || "Unknown",
+      uploaderRole: session.user.role as "ADMIN" | "USER",
+      notes: notes || null,
+      projectId: params.id,
+    }).catch(() => {});
 
     return NextResponse.json(
-      { message: "File registered", fileId: dbFile.id },
+      { message: "Inspiration added", fileId: dbFile.id },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Upload complete error:", error);
+    console.error("Inspiration upload error:", error);
     return NextResponse.json(
       { error: "Something went wrong" },
       { status: 500 }
