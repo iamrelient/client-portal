@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   Pencil,
+  MessageCircle,
   X,
   Loader2,
 } from "lucide-react";
@@ -304,6 +305,15 @@ export function InspirationBoard({
                   {uploaderBadge}
                 </span>
               </div>
+
+              {/* ── Persistent notes indicator (always visible, top-left) ── */}
+              {file.notes && (
+                <div className="absolute top-2 left-2 z-10">
+                  <div className="rounded-full bg-black/50 p-1.5 backdrop-blur-sm shadow-sm">
+                    <MessageCircle className="h-3 w-3 text-white/80" />
+                  </div>
+                </div>
+              )}
 
               {/* ── Hover overlay: gradient + notes + action buttons ── */}
               {hasActions && (
