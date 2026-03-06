@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
 import {
   createResumableUploadSession,
-  getDriveStorageQuota,
 } from "@/lib/google-drive";
 
 export const maxDuration = 15;
@@ -58,23 +57,11 @@ export async function POST(
       );
     }
 
-    // Check storage quota before starting
-    try {
-      const quota = await getDriveStorageQuota();
-      if (quota.remaining < fileSize) {
-        const remainingMB = (quota.remaining / (1024 * 1024)).toFixed(1);
-        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
-        return NextResponse.json(
-          {
-            error: `Not enough Google Drive storage. File is ${fileSizeMB} MB but only ${remainingMB} MB remaining. Please contact the administrator.`,
-          },
-          { status: 507 }
-        );
-      }
-    } catch (quotaErr) {
-      // Non-fatal: log but proceed (better to try and fail than block on quota check failure)
-      console.warn("Storage quota check failed:", quotaErr);
-    }
+    // NOTE: Quota check removed — the About API returns the service account's
+    // personal quota, which is 0 for Shared Drives. Files uploaded to a Shared
+    // Drive count against the Shared Drive's quota, not the service account's.
+    // If the Shared Drive is truly full, Google will reject the upload with a
+    // storageQuotaExceeded error which we surface in the chunk handler.
 
     // Create resumable session WITHOUT origin (server-side upload, no CORS needed)
     const uploadUri = await createResumableUploadSession(
