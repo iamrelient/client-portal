@@ -228,40 +228,45 @@ export function InspirationUploadModal({
     }
 
     if (!uploadResult?.ok) {
-      // All direct attempts failed — try server-side proxy as last resort
-      console.warn("Direct upload failed, trying server-side proxy…");
-      setError(null);
-      setProgress(0);
+      // All direct attempts failed — try server-side proxy for small files (< 4 MB)
+      const PROXY_SIZE_LIMIT = 4 * 1024 * 1024; // 4 MB (Vercel Hobby body limit)
 
-      const formData = new FormData();
-      formData.append("file", fileToUpload);
-      formData.append("fileName", fileToUpload.name);
-      formData.append("mimeType", fileToUpload.type || "application/octet-stream");
-      formData.append("category", "DESIGN_INSPIRATION");
-      if (displayName && displayName !== fileToUpload.name) formData.append("displayName", displayName);
-      if (notes.trim()) formData.append("notes", notes.trim());
-
-      const proxyRes = await fetch(`/api/projects/${projectId}/upload-proxy`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (proxyRes.ok) {
-        // Server-side proxy succeeded
-        setFile(null);
-        setPreview(null);
-        setUrlInput("");
-        setNotes("");
+      if (fileToUpload.size <= PROXY_SIZE_LIMIT) {
+        console.warn("Direct upload failed, trying server-side proxy…");
+        setError("Trying alternate upload method…");
         setProgress(0);
-        onSuccess();
-        onClose();
-        return;
+
+        const formData = new FormData();
+        formData.append("file", fileToUpload);
+        formData.append("fileName", fileToUpload.name);
+        formData.append("mimeType", fileToUpload.type || "application/octet-stream");
+        formData.append("category", "DESIGN_INSPIRATION");
+        if (displayName && displayName !== fileToUpload.name) formData.append("displayName", displayName);
+        if (notes.trim()) formData.append("notes", notes.trim());
+
+        const proxyRes = await fetch(`/api/projects/${projectId}/upload-proxy`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (proxyRes.ok) {
+          setFile(null);
+          setPreview(null);
+          setUrlInput("");
+          setNotes("");
+          setProgress(0);
+          onSuccess();
+          onClose();
+          return;
+        }
       }
 
-      // Proxy also failed — show the original error
-      const proxyData = await proxyRes.json().catch(() => null);
+      // Give a helpful error depending on file size
+      const sizeMB = (fileToUpload.size / (1024 * 1024)).toFixed(1);
       throw new Error(
-        proxyData?.error || lastError || "Upload failed after multiple attempts"
+        fileToUpload.size > PROXY_SIZE_LIMIT
+          ? `Upload failed after ${MAX_RETRIES + 1} attempts. The file (${sizeMB} MB) may be too large for an unstable connection — please check your network and try again.`
+          : lastError || "Upload failed after multiple attempts"
       );
     }
 
