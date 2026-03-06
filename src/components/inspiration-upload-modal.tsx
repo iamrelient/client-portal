@@ -132,34 +132,15 @@ export function InspirationUploadModal({
     }
   }
 
-  async function uploadFile(fileToUpload: File, displayName: string) {
-    // Step 1: Get upload session
-    const sessionRes = await fetch(sessionEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: fileToUpload.name,
-        mimeType: fileToUpload.type || "application/octet-stream",
-        origin: window.location.origin,
-      }),
-    });
-
-    if (!sessionRes.ok) {
-      const data = await sessionRes.json().catch(() => ({ error: "Failed to create upload session" }));
-      throw new Error(data.error);
-    }
-
-    const { uploadUri } = await sessionRes.json();
-
-    // Step 2: Upload directly to Google Drive via XHR
-    const uploadResult = await new Promise<{
-      ok: boolean;
-      driveFileId?: string;
-      size?: number;
-      error?: string;
-    }>((resolve) => {
+  /** XHR upload directly to Google Drive — returns result or throws */
+  function xhrUploadToDrive(
+    uploadUri: string,
+    fileToUpload: File
+  ): Promise<{ ok: boolean; driveFileId?: string; size?: number; error?: string }> {
+    return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
-      xhr.timeout = 300000;
+      // Scale timeout with file size: 60 s baseline + 10 s per MB
+      xhr.timeout = Math.max(300_000, 60_000 + fileToUpload.size / 100);
 
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable) {
@@ -184,15 +165,104 @@ export function InspirationUploadModal({
         console.error("Upload XHR error", { status: xhr.status, response: xhr.responseText });
         resolve({ ok: false, error: "Network error during upload" });
       });
-      xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
+      xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out — please try again with a stable connection" }));
 
       xhr.open("PUT", uploadUri);
       xhr.setRequestHeader("Content-Type", fileToUpload.type || "application/octet-stream");
       xhr.send(fileToUpload);
     });
+  }
 
-    if (!uploadResult.ok) {
-      throw new Error(uploadResult.error || "Upload failed");
+  async function uploadFile(fileToUpload: File, displayName: string) {
+    const MAX_RETRIES = 2;
+
+    // Step 1: Get upload session (fresh session per attempt to ensure CORS origin is current)
+    async function getUploadUri() {
+      const sessionRes = await fetch(sessionEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: fileToUpload.name,
+          mimeType: fileToUpload.type || "application/octet-stream",
+          origin: window.location.origin,
+        }),
+      });
+
+      if (!sessionRes.ok) {
+        const data = await sessionRes.json().catch(() => ({ error: "Failed to create upload session" }));
+        throw new Error(data.error);
+      }
+
+      const { uploadUri } = await sessionRes.json();
+      return uploadUri as string;
+    }
+
+    // Step 2: Upload directly to Google Drive with retries
+    let uploadResult: { ok: boolean; driveFileId?: string; size?: number; error?: string } | null = null;
+    let lastError = "";
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // Reset progress and wait before retrying
+        setProgress(0);
+        setError(`Retrying upload (attempt ${attempt + 1}/${MAX_RETRIES + 1})…`);
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+
+      try {
+        const uploadUri = await getUploadUri();
+        const result = await xhrUploadToDrive(uploadUri, fileToUpload);
+
+        if (result.ok) {
+          uploadResult = result;
+          setError(null);
+          break;
+        }
+
+        lastError = result.error || "Upload failed";
+        console.warn(`Upload attempt ${attempt + 1} failed:`, lastError);
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : "Upload failed";
+        console.warn(`Upload attempt ${attempt + 1} error:`, lastError);
+      }
+    }
+
+    if (!uploadResult?.ok) {
+      // All direct attempts failed — try server-side proxy as last resort
+      console.warn("Direct upload failed, trying server-side proxy…");
+      setError(null);
+      setProgress(0);
+
+      const formData = new FormData();
+      formData.append("file", fileToUpload);
+      formData.append("fileName", fileToUpload.name);
+      formData.append("mimeType", fileToUpload.type || "application/octet-stream");
+      formData.append("category", "DESIGN_INSPIRATION");
+      if (displayName && displayName !== fileToUpload.name) formData.append("displayName", displayName);
+      if (notes.trim()) formData.append("notes", notes.trim());
+
+      const proxyRes = await fetch(`/api/projects/${projectId}/upload-proxy`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (proxyRes.ok) {
+        // Server-side proxy succeeded
+        setFile(null);
+        setPreview(null);
+        setUrlInput("");
+        setNotes("");
+        setProgress(0);
+        onSuccess();
+        onClose();
+        return;
+      }
+
+      // Proxy also failed — show the original error
+      const proxyData = await proxyRes.json().catch(() => null);
+      throw new Error(
+        proxyData?.error || lastError || "Upload failed after multiple attempts"
+      );
     }
 
     // Step 3: Register in DB
