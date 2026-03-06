@@ -394,20 +394,14 @@ export default function AdminProjectDetailPage() {
       const blob = new Blob([content], { type: "application/internet-shortcut" });
       const file = new File([blob], fileName, { type: "application/internet-shortcut" });
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("category", urlCategory);
-      formData.append("displayName", displayName);
-
-      const res = await fetch(`/api/projects/${projectId}/upload`, {
-        method: "POST",
-        body: formData,
+      // Use the same 3-step upload flow as regular files
+      const ok = await uploadSingleFile({
+        file,
+        category: urlCategory,
+        displayName,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Upload failed" }));
-        toast.error(data.error || "Failed to add URL");
-      } else {
+      if (ok) {
         toast.success("URL added");
         setUrlInput("");
         loadProject();
@@ -420,57 +414,89 @@ export default function AdminProjectDetailPage() {
     }
   }
 
-  // Upload a single file entry — sends file through our server to Google Drive
+  // Upload a single file entry — uploads directly to Google Drive (bypasses Vercel body limit)
   async function uploadSingleFile(entry: UploadFileEntry): Promise<boolean> {
     const { file, category, displayName, targetFileGroupId } = entry;
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("category", category);
-    if (displayName && displayName !== file.name) {
-      formData.append("displayName", displayName);
-    }
-    if (targetFileGroupId) {
-      formData.append("targetFileGroupId", targetFileGroupId);
-    }
-
-    // Use XHR for upload progress tracking
-    const result = await new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.timeout = 120000; // 2 minute timeout for large files
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          setUploadProgress(Math.round((e.loaded / e.total) * 100));
-        }
+    try {
+      // Step 1: Get a resumable upload session from our server (small JSON, no body limit issue)
+      const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/octet-stream" }),
       });
 
-      xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve({ ok: true });
-        } else {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            resolve({ ok: false, error: data.error });
-          } catch {
-            resolve({ ok: false, error: `Upload failed (${xhr.status})` });
+      if (!sessionRes.ok) {
+        const data = await sessionRes.json().catch(() => ({ error: "Failed to create upload session" }));
+        toast.error(`${file.name}: ${data.error}`);
+        return false;
+      }
+
+      const { uploadUri } = await sessionRes.json();
+
+      // Step 2: Upload file directly to Google Drive via XHR (bypasses Vercel entirely)
+      const uploadResult = await new Promise<{ ok: boolean; driveFileId?: string; size?: number; error?: string }>((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.timeout = 300000; // 5 minute timeout for large files
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
           }
-        }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve({ ok: true, driveFileId: data.id, size: Number(data.size) || file.size });
+            } catch {
+              resolve({ ok: true, size: file.size });
+            }
+          } else {
+            resolve({ ok: false, error: `Google Drive upload failed (${xhr.status})` });
+          }
+        });
+
+        xhr.addEventListener("error", () => resolve({ ok: false, error: "Network error during upload" }));
+        xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
+
+        xhr.open("PUT", uploadUri);
+        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+        xhr.send(file);
       });
 
-      xhr.addEventListener("error", () => resolve({ ok: false, error: "Network error" }));
-      xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
+      if (!uploadResult.ok) {
+        toast.error(`${file.name}: ${uploadResult.error}`);
+        return false;
+      }
 
-      xhr.open("POST", `/api/projects/${projectId}/upload`);
-      xhr.send(formData);
-    });
+      // Step 3: Register the file in our database (small JSON request)
+      const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          driveFileId: uploadResult.driveFileId,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: uploadResult.size || file.size,
+          category,
+          displayName: displayName && displayName !== file.name ? displayName : null,
+          targetFileGroupId: targetFileGroupId || null,
+        }),
+      });
 
-    if (!result.ok) {
-      toast.error(`${file.name}: ${result.error || "Failed to upload"}`);
+      if (!completeRes.ok) {
+        const data = await completeRes.json().catch(() => ({ error: "Failed to register file" }));
+        toast.error(`${file.name}: ${data.error}`);
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      toast.error(`${file.name}: ${err instanceof Error ? err.message : "Upload failed"}`);
       return false;
     }
-
-    return true;
   }
 
   // Process all files in the upload queue in parallel batches
