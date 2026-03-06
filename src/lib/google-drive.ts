@@ -353,3 +353,97 @@ export async function listFilesInFolder(
 
   return allFiles;
 }
+
+// ---------- Storage quota ----------
+
+export async function getDriveStorageQuota(): Promise<{
+  limit: number;
+  usage: number;
+  remaining: number;
+}> {
+  const accessToken = await getValidAccessToken();
+
+  const res = await fetch(
+    "https://www.googleapis.com/drive/v3/about?fields=storageQuota",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to get storage quota: ${res.status}`);
+  }
+
+  const data = await res.json();
+  const quota = data.storageQuota;
+  const limit = Number(quota.limit) || 0;
+  const usage = Number(quota.usage) || 0;
+
+  return { limit, usage, remaining: limit - usage };
+}
+
+// ---------- Chunked resumable upload ----------
+
+export async function uploadChunkToResumableSession(
+  uploadUri: string,
+  chunk: Buffer,
+  rangeStart: number,
+  rangeEnd: number,
+  totalSize: number
+): Promise<{
+  complete: boolean;
+  bytesReceived?: number;
+  fileMetadata?: { id: string; name: string; size: number };
+}> {
+  const contentRange = `bytes ${rangeStart}-${rangeEnd}/${totalSize}`;
+
+  // Convert Buffer → ArrayBuffer for fetch body compatibility
+  const arrayBuffer = chunk.buffer.slice(
+    chunk.byteOffset,
+    chunk.byteOffset + chunk.byteLength
+  ) as ArrayBuffer;
+
+  const res = await fetch(uploadUri, {
+    method: "PUT",
+    headers: {
+      "Content-Length": String(chunk.length),
+      "Content-Range": contentRange,
+    },
+    body: new Blob([arrayBuffer]),
+  });
+
+  // 308 = Resume Incomplete — Google wants more chunks
+  if (res.status === 308) {
+    const rangeHeader = res.headers.get("Range");
+    let bytesReceived = rangeEnd + 1;
+    if (rangeHeader) {
+      const match = rangeHeader.match(/bytes=0-(\d+)/);
+      if (match) {
+        bytesReceived = parseInt(match[1], 10) + 1;
+      }
+    }
+    return { complete: false, bytesReceived };
+  }
+
+  // 200/201 = Upload complete
+  if (res.status >= 200 && res.status < 300) {
+    const data = await res.json();
+    return {
+      complete: true,
+      fileMetadata: {
+        id: data.id,
+        name: data.name,
+        size: Number(data.size) || totalSize,
+      },
+    };
+  }
+
+  // Error
+  const errText = await res.text();
+  if (errText.includes("storageQuotaExceeded")) {
+    throw new Error(
+      "Google Drive storage quota exceeded. Please contact the administrator."
+    );
+  }
+  throw new Error(`Chunk upload failed (${res.status}): ${errText}`);
+}

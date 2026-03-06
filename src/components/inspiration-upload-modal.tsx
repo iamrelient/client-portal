@@ -65,11 +65,6 @@ export function InspirationUploadModal({
     [uploading, handleFileSelect]
   );
 
-  const sessionEndpoint =
-    userRole === "ADMIN"
-      ? `/api/projects/${projectId}/upload-session`
-      : `/api/projects/${projectId}/inspiration-session`;
-
   const completeEndpoint =
     userRole === "ADMIN"
       ? `/api/projects/${projectId}/upload-complete`
@@ -132,153 +127,127 @@ export function InspirationUploadModal({
     }
   }
 
-  /** XHR upload directly to Google Drive — returns result or throws */
-  function xhrUploadToDrive(
-    uploadUri: string,
-    fileToUpload: File
-  ): Promise<{ ok: boolean; driveFileId?: string; size?: number; error?: string }> {
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      // Scale timeout with file size: 60 s baseline + 10 s per MB
-      xhr.timeout = Math.max(300_000, 60_000 + fileToUpload.size / 100);
-
-      xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      });
-
-      xhr.addEventListener("load", () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            resolve({ ok: true, driveFileId: data.id, size: Number(data.size) || fileToUpload.size });
-          } catch {
-            resolve({ ok: true, size: fileToUpload.size });
-          }
-        } else {
-          resolve({ ok: false, error: `Upload failed (${xhr.status})` });
-        }
-      });
-
-      xhr.addEventListener("error", () => {
-        console.error("Upload XHR error", { status: xhr.status, response: xhr.responseText });
-        resolve({ ok: false, error: "Network error during upload" });
-      });
-      xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out — please try again with a stable connection" }));
-
-      xhr.open("PUT", uploadUri);
-      xhr.setRequestHeader("Content-Type", fileToUpload.type || "application/octet-stream");
-      xhr.send(fileToUpload);
-    });
-  }
+  // Google requires chunks to be multiples of 256 KB (except the last chunk)
+  // 14 × 256 KB = 3,670,016 bytes (3.5 MB) — safely under Vercel Hobby's 4.5 MB body limit
+  const CHUNK_SIZE = 14 * 256 * 1024;
+  const MAX_CHUNK_RETRIES = 3;
 
   async function uploadFile(fileToUpload: File, displayName: string) {
-    const MAX_RETRIES = 2;
+    const totalSize = fileToUpload.size;
 
-    // Step 1: Get upload session (fresh session per attempt to ensure CORS origin is current)
-    async function getUploadUri() {
-      const sessionRes = await fetch(sessionEndpoint, {
+    // Step 1: Start upload session (server creates Google resumable session + checks quota)
+    setProgress(0);
+    setError(null);
+
+    const startRes = await fetch(
+      `/api/projects/${projectId}/upload-start`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: fileToUpload.name,
           mimeType: fileToUpload.type || "application/octet-stream",
-          origin: window.location.origin,
+          fileSize: totalSize,
         }),
-      });
-
-      if (!sessionRes.ok) {
-        const data = await sessionRes.json().catch(() => ({ error: "Failed to create upload session" }));
-        throw new Error(data.error);
       }
+    );
 
-      const { uploadUri } = await sessionRes.json();
-      return uploadUri as string;
+    if (!startRes.ok) {
+      const data = await startRes
+        .json()
+        .catch(() => ({ error: "Failed to start upload" }));
+      throw new Error(data.error);
     }
 
-    // Step 2: Upload directly to Google Drive with retries
-    let uploadResult: { ok: boolean; driveFileId?: string; size?: number; error?: string } | null = null;
-    let lastError = "";
+    const { uploadUri } = await startRes.json();
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        // Reset progress and wait before retrying
-        setProgress(0);
-        setError(`Retrying upload (attempt ${attempt + 1}/${MAX_RETRIES + 1})…`);
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
-      }
+    // Step 2: Upload in chunks through the server
+    let offset = 0;
+    let driveFileId: string | undefined;
+    let driveSize: number | undefined;
 
-      try {
-        const uploadUri = await getUploadUri();
-        const result = await xhrUploadToDrive(uploadUri, fileToUpload);
+    while (offset < totalSize) {
+      const chunkEnd = Math.min(offset + CHUNK_SIZE, totalSize);
+      const chunkBlob = fileToUpload.slice(offset, chunkEnd);
+      const rangeEnd = chunkEnd - 1; // inclusive byte index
 
-        if (result.ok) {
-          uploadResult = result;
-          setError(null);
+      let chunkSuccess = false;
+
+      for (let retry = 0; retry < MAX_CHUNK_RETRIES; retry++) {
+        try {
+          const formData = new FormData();
+          formData.append("chunk", chunkBlob, "chunk");
+          formData.append("uploadUri", uploadUri);
+          formData.append("rangeStart", String(offset));
+          formData.append("rangeEnd", String(rangeEnd));
+          formData.append("totalSize", String(totalSize));
+
+          const chunkRes = await fetch(
+            `/api/projects/${projectId}/upload-chunk`,
+            { method: "POST", body: formData }
+          );
+
+          if (!chunkRes.ok) {
+            const errData = await chunkRes
+              .json()
+              .catch(() => ({ error: "Chunk upload failed" }));
+            throw new Error(errData.error);
+          }
+
+          const result = await chunkRes.json();
+
+          if (result.complete) {
+            driveFileId = result.driveFileId;
+            driveSize = result.size;
+          }
+
+          // Update progress
+          const progressBytes = result.complete
+            ? totalSize
+            : result.bytesReceived || chunkEnd;
+          setProgress(Math.round((progressBytes / totalSize) * 100));
+
+          chunkSuccess = true;
           break;
+        } catch (err) {
+          console.warn(
+            `Chunk at offset ${offset} failed (attempt ${retry + 1}):`,
+            err
+          );
+          if (retry < MAX_CHUNK_RETRIES - 1) {
+            await new Promise((r) => setTimeout(r, 1000 * (retry + 1)));
+            setError(
+              `Retrying upload (attempt ${retry + 2}/${MAX_CHUNK_RETRIES})…`
+            );
+          } else {
+            throw err instanceof Error
+              ? err
+              : new Error("Upload failed after multiple attempts");
+          }
         }
-
-        lastError = result.error || "Upload failed";
-        console.warn(`Upload attempt ${attempt + 1} failed:`, lastError);
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : "Upload failed";
-        console.warn(`Upload attempt ${attempt + 1} error:`, lastError);
       }
+
+      if (!chunkSuccess) break;
+      offset = chunkEnd;
     }
 
-    if (!uploadResult?.ok) {
-      // All direct attempts failed — try server-side proxy for small files (< 4 MB)
-      const PROXY_SIZE_LIMIT = 4 * 1024 * 1024; // 4 MB (Vercel Hobby body limit)
-
-      if (fileToUpload.size <= PROXY_SIZE_LIMIT) {
-        console.warn("Direct upload failed, trying server-side proxy…");
-        setError("Trying alternate upload method…");
-        setProgress(0);
-
-        const formData = new FormData();
-        formData.append("file", fileToUpload);
-        formData.append("fileName", fileToUpload.name);
-        formData.append("mimeType", fileToUpload.type || "application/octet-stream");
-        formData.append("category", "DESIGN_INSPIRATION");
-        if (displayName && displayName !== fileToUpload.name) formData.append("displayName", displayName);
-        if (notes.trim()) formData.append("notes", notes.trim());
-
-        const proxyRes = await fetch(`/api/projects/${projectId}/upload-proxy`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (proxyRes.ok) {
-          setFile(null);
-          setPreview(null);
-          setUrlInput("");
-          setNotes("");
-          setProgress(0);
-          onSuccess();
-          onClose();
-          return;
-        }
-      }
-
-      // Give a helpful error depending on file size
-      const sizeMB = (fileToUpload.size / (1024 * 1024)).toFixed(1);
+    if (!driveFileId) {
       throw new Error(
-        fileToUpload.size > PROXY_SIZE_LIMIT
-          ? `Upload failed after ${MAX_RETRIES + 1} attempts. The file (${sizeMB} MB) may be too large for an unstable connection — please check your network and try again.`
-          : lastError || "Upload failed after multiple attempts"
+        "Upload completed but no file ID was returned from Google Drive"
       );
     }
 
-    // Step 3: Register in DB
+    setError(null);
+
+    // Step 3: Register in DB via existing endpoint
     const completeRes = await fetch(completeEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        driveFileId: uploadResult.driveFileId,
+        driveFileId,
         fileName: fileToUpload.name,
         mimeType: fileToUpload.type || "application/octet-stream",
-        size: uploadResult.size || fileToUpload.size,
+        size: driveSize || totalSize,
         category: "DESIGN_INSPIRATION",
         displayName: displayName !== fileToUpload.name ? displayName : null,
         notes: notes.trim() || null,
@@ -286,7 +255,9 @@ export function InspirationUploadModal({
     });
 
     if (!completeRes.ok) {
-      const data = await completeRes.json().catch(() => ({ error: "Failed to register file" }));
+      const data = await completeRes
+        .json()
+        .catch(() => ({ error: "Failed to register file" }));
       throw new Error(data.error);
     }
 
