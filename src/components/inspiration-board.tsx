@@ -8,6 +8,9 @@ import {
   MessageCircle,
   ExternalLink,
   Eye,
+  Pencil,
+  X,
+  Loader2,
 } from "lucide-react";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { InspirationUploadModal } from "./inspiration-upload-modal";
@@ -33,6 +36,7 @@ interface InspirationBoardProps {
   files: { latest: InspirationFile; versionCount: number }[];
   projectId: string;
   userRole: "ADMIN" | "USER";
+  userId: string;
   onRefresh: () => void;
   onPreview?: (file: InspirationFile) => void;
 }
@@ -68,6 +72,7 @@ export function InspirationBoard({
   files,
   projectId,
   userRole,
+  userId,
   onRefresh,
   onPreview,
 }: InspirationBoardProps) {
@@ -76,6 +81,18 @@ export function InspirationBoard({
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [editTarget, setEditTarget] = useState<InspirationFile | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const isAdmin = userRole === "ADMIN";
+
+  const canEdit = (file: InspirationFile) =>
+    isAdmin || file.uploadedBy.id === userId;
+
+  const canDelete = (file: InspirationFile) =>
+    isAdmin || file.uploadedBy.id === userId;
 
   const handleAddCardDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -100,6 +117,35 @@ export function InspirationBoard({
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
+    }
+  };
+
+  const handleOpenEdit = (file: InspirationFile) => {
+    setEditTarget(file);
+    setEditName(file.displayName || file.originalName);
+    setEditNotes(file.notes || "");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTarget) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/files/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: editName.trim() || null,
+          notes: editNotes.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        onRefresh();
+        setEditTarget(null);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -179,6 +225,8 @@ export function InspirationBoard({
           const fileName = file.displayName || file.originalName;
           const uploaderBadge =
             file.uploadedBy.role === "ADMIN" ? "Studio" : "Client";
+          const showEdit = canEdit(file);
+          const showDelete = canDelete(file);
 
           return (
             <div
@@ -297,25 +345,41 @@ export function InspirationBoard({
                       &ldquo;{file.notes}&rdquo;
                     </p>
                     <p className="text-[10px] text-slate-500 mt-1.5">
-                      — {file.uploadedBy.name}
+                      &mdash; {file.uploadedBy.name}
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* ── Delete button (admin or own uploads) ── */}
-              {userRole === "ADMIN" && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget(file.id);
-                  }}
-                  className="absolute top-2 left-2 z-10 rounded-full bg-black/50 p-1.5 text-white/60 opacity-0 group-hover:opacity-100 hover:bg-red-500/80 hover:text-white transition-all duration-150 backdrop-blur-sm"
-                  style={file.notes ? { left: "2rem" } : {}}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              )}
+              {/* ── Action buttons (visible on hover) ── */}
+              <div className="absolute bottom-2 left-2 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {/* Edit button */}
+                {showEdit && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEdit(file);
+                    }}
+                    className="rounded-full bg-black/50 p-1.5 text-white/60 hover:bg-white/20 hover:text-white transition-all duration-150 backdrop-blur-sm"
+                    title="Edit"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+                {/* Delete button */}
+                {showDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(file.id);
+                    }}
+                    className="rounded-full bg-black/50 p-1.5 text-white/60 hover:bg-red-500/80 hover:text-white transition-all duration-150 backdrop-blur-sm"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -333,6 +397,75 @@ export function InspirationBoard({
         onSuccess={onRefresh}
         initialFile={droppedFile}
       />
+
+      {/* Edit Modal */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-[#12141f] border border-white/[0.08] shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-2">
+              <h3 className="text-lg font-semibold text-slate-100">Edit Inspiration</h3>
+              <button
+                onClick={() => setEditTarget(null)}
+                disabled={saving}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 transition-colors disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {/* Display Name */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  disabled={saving}
+                  className="w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500 disabled:opacity-50"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Note <span className="text-slate-500">(optional)</span>
+                </label>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="What do you like about this?"
+                  disabled={saving}
+                  rows={3}
+                  className="w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-pink-500 focus:outline-none focus:ring-1 focus:ring-pink-500 resize-none disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button
+                onClick={() => setEditTarget(null)}
+                disabled={saving}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/[0.06] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-pink-500 to-pink-600 px-5 py-2.5 text-sm font-medium text-white hover:from-pink-600 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation */}
       <ConfirmModal

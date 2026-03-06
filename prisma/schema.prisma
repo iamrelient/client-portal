@@ -124,6 +124,7 @@ model Project {
   authorizedEmails String[]
   driveFolderId    String?
   lastSyncedAt     DateTime?
+  deletedDriveIds  String[]  @default([])
   createdById      String
   createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   files            File[]

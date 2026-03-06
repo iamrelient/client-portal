@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { PageHeader } from "@/components/page-header";
 import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
@@ -202,6 +203,7 @@ function groupByCategory(files: ProjectFile[]) {
 export default function AdminProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session } = useSession();
   const toast = useToast();
   const projectId = params.id as string;
 
@@ -1204,6 +1206,7 @@ export default function AdminProjectDetailPage() {
               files={categorized.DESIGN_INSPIRATION}
               projectId={project.id}
               userRole="ADMIN"
+              userId={session?.user?.id || ""}
               onRefresh={loadProject}
               onPreview={(f) => setPreviewFile(f as ProjectFile)}
             />

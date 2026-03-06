@@ -3,7 +3,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listFilesInFolder, isGoogleDriveConnected } from "@/lib/google-drive";
+import { FileCategory } from "@prisma/client";
 import { randomBytes } from "crypto";
+
+function detectCategory(fileName: string): FileCategory {
+  // .url files are always design inspiration
+  if (fileName.toLowerCase().endsWith(".url")) {
+    return "DESIGN_INSPIRATION";
+  }
+  // Default for synced files with no existing match
+  return "OTHER";
+}
 
 export async function POST(
   _req: Request,
@@ -23,6 +33,7 @@ export async function POST(
         driveFolderId: true,
         lastSyncedAt: true,
         createdById: true,
+        deletedDriveIds: true,
       },
     });
 
@@ -56,10 +67,16 @@ export async function POST(
       dbFiles.filter((f) => f.driveFileId).map((f) => [f.driveFileId!, f])
     );
 
+    // Build set of deleted drive IDs to skip
+    const deletedIds = new Set(project.deletedDriveIds || []);
+
     let changed = false;
 
     // NEW FILES: in Drive but not in DB
     for (const driveFile of driveFiles) {
+      // Skip files that were intentionally deleted
+      if (deletedIds.has(driveFile.id)) continue;
+
       if (!dbDriveIdMap.has(driveFile.id)) {
         // Version detection (case-insensitive to handle name variations)
         const existingFiles = await prisma.file.findMany({
@@ -69,6 +86,10 @@ export async function POST(
 
         let version = 1;
         let fileGroupId: string | null = null;
+        // Inherit category from existing files with same name, or auto-detect
+        const category = existingFiles.length > 0
+          ? existingFiles[0].category
+          : detectCategory(driveFile.name);
 
         if (existingFiles.length > 0) {
           version = existingFiles[0].version + 1;
@@ -95,6 +116,7 @@ export async function POST(
             syncedFromDrive: true,
             uploadedById: project.createdById,
             projectId: params.id,
+            category,
             version,
             fileGroupId,
           },
@@ -118,6 +140,19 @@ export async function POST(
           });
           changed = true;
         }
+      }
+    }
+
+    // Clean up deletedDriveIds: remove IDs that are no longer in Drive
+    // (file was actually deleted from Drive, so no need to track anymore)
+    if (deletedIds.size > 0) {
+      const currentDriveIds = new Set(driveFiles.map((f) => f.id));
+      const stillRelevant = Array.from(deletedIds).filter((id) => currentDriveIds.has(id));
+      if (stillRelevant.length !== deletedIds.size) {
+        await prisma.project.update({
+          where: { id: params.id },
+          data: { deletedDriveIds: stillRelevant },
+        });
       }
     }
 
