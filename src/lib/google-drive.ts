@@ -210,15 +210,13 @@ export async function createResumableUploadSession(
   };
 
   // Include origin param so Google returns CORS headers for browser-based PUT
-  const url = new URL("https://www.googleapis.com/upload/drive/v3/files");
-  url.searchParams.set("uploadType", "resumable");
-  url.searchParams.set("fields", "id,name,size");
-  url.searchParams.set("supportsAllDrives", "true");
+  // IMPORTANT: origin must NOT be URL-encoded (Google expects raw URL like ?origin=https://example.com)
+  let uploadUrl = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size&supportsAllDrives=true";
   if (origin) {
-    url.searchParams.set("origin", origin);
+    uploadUrl += `&origin=${origin}`;
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(uploadUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
