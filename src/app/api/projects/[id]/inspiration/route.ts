@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
-import { listFilesInFolder } from "@/lib/google-drive";
+import { listFilesInFolder, uploadFileToFolder } from "@/lib/google-drive";
 import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
 
@@ -35,8 +35,105 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, displayName, notes, thumbnailUrl } =
-      await req.json();
+    const body = await req.json();
+
+    // ── URL shortcut upload (server-side) ──
+    if (body.url) {
+      const { url, displayName, notes } = body;
+
+      if (!project.driveFolderId) {
+        return NextResponse.json(
+          { error: "Project has no Drive folder" },
+          { status: 400 }
+        );
+      }
+
+      // Build the .url shortcut file
+      let domain = displayName || url;
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, "");
+      } catch {}
+
+      const fileName = `${domain}.url`;
+      const content = `[InternetShortcut]\nURL=${url}\n`;
+      const buffer = Buffer.from(content, "utf-8");
+
+      // Upload to Drive server-side
+      const driveResult = await uploadFileToFolder(
+        project.driveFolderId,
+        fileName,
+        "application/internet-shortcut",
+        buffer
+      );
+
+      // Version detection
+      const existingFiles = await prisma.file.findMany({
+        where: {
+          projectId: params.id,
+          originalName: { equals: fileName, mode: "insensitive" },
+        },
+        orderBy: { version: "desc" },
+      });
+
+      let version = 1;
+      let fileGroupId: string | null = null;
+
+      if (existingFiles.length > 0) {
+        version = existingFiles[0].version + 1;
+        if (existingFiles[0].fileGroupId) {
+          fileGroupId = existingFiles[0].fileGroupId;
+        } else {
+          fileGroupId = randomBytes(12).toString("hex");
+          await prisma.file.update({
+            where: { id: existingFiles[0].id },
+            data: { fileGroupId },
+          });
+        }
+      }
+
+      const dbFile = await prisma.file.create({
+        data: {
+          name: fileName,
+          originalName: fileName,
+          size: buffer.length,
+          mimeType: "application/internet-shortcut",
+          path: driveResult.id,
+          driveFileId: driveResult.id,
+          uploadedById: session.user.id,
+          projectId: params.id,
+          category: "DESIGN_INSPIRATION",
+          displayName: domain,
+          notes: notes || null,
+          version,
+          fileGroupId,
+        },
+      });
+
+      await prisma.activity.create({
+        data: {
+          type: "FILE_UPLOADED",
+          description: `Added inspiration "${domain}" to project "${project.name}"`,
+          userId: session.user.id,
+        },
+      });
+
+      sendInspirationNotification({
+        projectName: project.name,
+        fileName: domain,
+        uploaderName: session.user.name || session.user.email || "Unknown",
+        uploaderRole: session.user.role as "ADMIN" | "USER",
+        notes: notes || null,
+        projectId: params.id,
+      }).catch(() => {});
+
+      return NextResponse.json(
+        { message: "Inspiration added", fileId: dbFile.id },
+        { status: 201 }
+      );
+    }
+
+    // ── Standard file upload (client already uploaded to Drive) ──
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, displayName, notes } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -114,7 +211,6 @@ export async function POST(
         category: "DESIGN_INSPIRATION",
         displayName: displayName || null,
         notes: notes || null,
-        thumbnailUrl: thumbnailUrl || null,
         version,
         fileGroupId,
       },

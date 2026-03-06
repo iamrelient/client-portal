@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { listFilesInFolder } from "@/lib/google-drive";
+import { listFilesInFolder, uploadFileToFolder } from "@/lib/google-drive";
 import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
 
@@ -26,7 +26,78 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes, thumbnailUrl } = await req.json();
+    const body = await req.json();
+
+    // ── URL shortcut upload (server-side) ──
+    if (body.url) {
+      const { url, displayName, notes, category } = body;
+
+      if (!project.driveFolderId) {
+        return NextResponse.json(
+          { error: "Project has no Drive folder" },
+          { status: 400 }
+        );
+      }
+
+      let domain = displayName || url;
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, "");
+      } catch {}
+
+      const urlFileName = `${domain}.url`;
+      const content = `[InternetShortcut]\nURL=${url}\n`;
+      const buffer = Buffer.from(content, "utf-8");
+
+      const driveResult = await uploadFileToFolder(
+        project.driveFolderId,
+        urlFileName,
+        "application/internet-shortcut",
+        buffer
+      );
+
+      const dbFile = await prisma.file.create({
+        data: {
+          name: urlFileName,
+          originalName: urlFileName,
+          size: buffer.length,
+          mimeType: "application/internet-shortcut",
+          path: driveResult.id,
+          driveFileId: driveResult.id,
+          uploadedById: session.user.id,
+          projectId: params.id,
+          category: category || "DESIGN_INSPIRATION",
+          displayName: domain,
+          notes: notes || null,
+        },
+      });
+
+      await prisma.activity.create({
+        data: {
+          type: "FILE_UPLOADED",
+          description: `Added URL "${domain}" to project "${project.name}"`,
+          userId: session.user.id,
+        },
+      });
+
+      if ((category || "DESIGN_INSPIRATION") === "DESIGN_INSPIRATION") {
+        sendInspirationNotification({
+          projectName: project.name,
+          fileName: domain,
+          uploaderName: session.user.name || session.user.email || "Unknown",
+          uploaderRole: session.user.role as "ADMIN" | "USER",
+          notes: notes || null,
+          projectId: params.id,
+        }).catch(() => {});
+      }
+
+      return NextResponse.json(
+        { message: "URL added", fileId: dbFile.id },
+        { status: 201 }
+      );
+    }
+
+    // ── Standard file upload (client already uploaded to Drive) ──
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -116,7 +187,6 @@ export async function POST(
         category: category || "OTHER",
         displayName: displayName || null,
         notes: notes || null,
-        thumbnailUrl: thumbnailUrl || null,
         version,
         fileGroupId,
       },
