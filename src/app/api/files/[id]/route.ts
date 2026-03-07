@@ -110,25 +110,13 @@ export async function DELETE(
       return NextResponse.json({ error: "You can only delete files you uploaded" }, { status: 403 });
     }
 
-    // Check if other DB records reference the same driveFileId (e.g., sync duplicate)
-    const otherRefsCount = file.driveFileId
-      ? await prisma.file.count({
-          where: {
-            driveFileId: file.driveFileId,
-            id: { not: file.id },
-          },
-        })
-      : 0;
-
+    // Delete from Google Drive
     let driveDeleteSucceeded = false;
-    if (otherRefsCount === 0) {
-      // Only delete from Drive if no other records reference this file
-      try {
-        await deleteFile(file.path);
-        driveDeleteSucceeded = true;
-      } catch (err) {
-        console.error("Drive delete failed (will still remove from DB):", err);
-      }
+    try {
+      await deleteFile(file.path);
+      driveDeleteSucceeded = true;
+    } catch (err) {
+      console.error("Drive delete failed (will still remove from DB):", err);
     }
 
     // Track deleted driveFileId on the project so sync won't re-create it
@@ -148,10 +136,20 @@ export async function DELETE(
       }
     }
 
-    // Delete from database
-    await prisma.file.delete({
-      where: { id: params.id },
-    });
+    // Delete this record AND any duplicates with the same driveFileId
+    // (sync can create duplicate records pointing to the same Drive file)
+    if (file.driveFileId && file.projectId) {
+      await prisma.file.deleteMany({
+        where: {
+          projectId: file.projectId,
+          driveFileId: file.driveFileId,
+        },
+      });
+    } else {
+      await prisma.file.delete({
+        where: { id: params.id },
+      });
+    }
 
     await prisma.activity.create({
       data: {
