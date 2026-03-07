@@ -44,6 +44,7 @@ interface ProjectFile {
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
+  syncedFromDrive?: boolean;
   createdAt: string;
   uploadedBy: { id: string; name: string; role: string };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   Plus,
   Globe,
@@ -28,6 +28,7 @@ interface InspirationFile {
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
+  syncedFromDrive?: boolean;
   createdAt: string;
   uploadedBy: { id: string; name: string; role: string };
 }
@@ -45,12 +46,68 @@ function isImage(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
+function isPdf(mimeType: string) {
+  return mimeType === "application/pdf";
+}
+
 function isUrlShortcut(fileName: string) {
   return fileName.toLowerCase().endsWith(".url");
 }
 
 function getDomain(fileName: string) {
   return fileName.replace(/\.url$/i, "");
+}
+
+/** Renders first page of a PDF as a canvas thumbnail */
+function PdfThumbnail({ fileId, alt }: { fileId: string; alt: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const render = useCallback(async () => {
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const pdf = await pdfjsLib.getDocument(
+        `/api/files/${fileId}/download?inline=true`
+      ).promise;
+      const page = await pdf.getPage(1);
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const targetWidth = 512;
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const scale = targetWidth / unscaledViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      setLoaded(true);
+    } catch {
+      // PDF failed to render — fallback stays visible
+    }
+  }, [fileId]);
+
+  useEffect(() => {
+    render();
+  }, [render]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-label={alt}
+      className={`h-full w-full object-cover transition-opacity duration-300 ${
+        loaded ? "opacity-100" : "opacity-0"
+      }`}
+      style={{ display: "block" }}
+    />
+  );
 }
 
 export function InspirationBoard({
@@ -137,7 +194,7 @@ export function InspirationBoard({
   const handleCardClick = (file: InspirationFile) => {
     if (isUrlShortcut(file.originalName)) {
       window.open(`/api/files/${file.id}/download`, "_blank");
-    } else if (isImage(file.mimeType) && onPreview) {
+    } else if ((isImage(file.mimeType) || isPdf(file.mimeType)) && onPreview) {
       onPreview(file);
     }
   };
@@ -207,19 +264,28 @@ export function InspirationBoard({
         }).map(({ latest: file }) => {
           const isUrl = isUrlShortcut(file.originalName);
           const isImg = isImage(file.mimeType);
+          const isPdfFile = isPdf(file.mimeType);
           const fileName = file.displayName || file.originalName;
+          // Synced files have uploadedById = project creator (admin), which is
+          // misleading — show "Client" if the file was synced from Drive since
+          // it was likely uploaded by a client user through the mood board.
           const uploaderBadge =
-            file.uploadedBy.role === "ADMIN" ? "Studio" : "Client";
+            file.syncedFromDrive
+              ? "Client"
+              : file.uploadedBy.role === "ADMIN"
+                ? "Studio"
+                : "Client";
           const hasEdit = canEdit(file);
           const hasDelete = canDelete(file);
           const hasActions = hasEdit || hasDelete || file.notes;
+          const isClickable = isImg || isUrl || isPdfFile;
 
           return (
             <div
               key={file.id}
               onClick={() => handleCardClick(file)}
               className={`group relative aspect-square rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5 ${
-                isImg || isUrl ? "cursor-pointer" : ""
+                isClickable ? "cursor-pointer" : ""
               }`}
             >
               {/* ── Image Card ── */}
@@ -231,6 +297,27 @@ export function InspirationBoard({
                     className="h-full w-full object-cover"
                     loading="lazy"
                   />
+                  {/* View overlay (center) */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+                      <Eye className="h-3.5 w-3.5" />
+                      View
+                    </span>
+                  </div>
+                </>
+              ) : isPdfFile ? (
+                /* ── PDF Card with first-page thumbnail ── */
+                <>
+                  <div className="absolute inset-0 bg-white">
+                    <PdfThumbnail fileId={file.id} alt={fileName} />
+                  </div>
+                  {/* Fallback icon while PDF loads */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    {(() => {
+                      const FileIcon = getFileIcon(file.mimeType, file.originalName);
+                      return <FileIcon className="h-10 w-10 text-slate-300/30" />;
+                    })()}
+                  </div>
                   {/* View overlay (center) */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
@@ -297,9 +384,9 @@ export function InspirationBoard({
               <div className="absolute top-2 right-2 z-10">
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shadow-sm backdrop-blur-sm ${
-                    file.uploadedBy.role === "ADMIN"
-                      ? "bg-pink-500/80 text-white"
-                      : "bg-blue-500/80 text-white"
+                    uploaderBadge === "Client"
+                      ? "bg-blue-500/80 text-white"
+                      : "bg-pink-500/80 text-white"
                   }`}
                 >
                   {uploaderBadge}

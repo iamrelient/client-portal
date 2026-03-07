@@ -40,6 +40,7 @@ export async function GET(
           isCurrent: true,
           version: true,
           fileGroupId: true,
+          syncedFromDrive: true,
           createdAt: true,
           uploadedBy: { select: { id: true, name: true, role: true } },
         },
