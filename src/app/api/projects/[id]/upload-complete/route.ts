@@ -135,6 +135,51 @@ export async function POST(
       );
     }
 
+    // Check if sync already created a record for this driveFileId (race condition)
+    const existingByDriveId = driveFileId
+      ? await prisma.file.findFirst({
+          where: { projectId: params.id, driveFileId },
+        })
+      : null;
+
+    if (existingByDriveId) {
+      // Sync beat us — update the existing record with the correct category
+      const resolvedCategory = category || existingByDriveId.category || "OTHER";
+      const dbFile = await prisma.file.update({
+        where: { id: existingByDriveId.id },
+        data: {
+          category: resolvedCategory,
+          displayName: displayName || existingByDriveId.displayName,
+          notes: notes || existingByDriveId.notes,
+          uploadedById: session.user.id,
+        },
+      });
+
+      await prisma.activity.create({
+        data: {
+          type: "FILE_UPLOADED",
+          description: `Uploaded file "${fileName}" to project "${project.name}"`,
+          userId: session.user.id,
+        },
+      });
+
+      if (resolvedCategory === "DESIGN_INSPIRATION") {
+        sendInspirationNotification({
+          projectName: project.name,
+          fileName: displayName || fileName,
+          uploaderName: session.user.name || session.user.email || "Unknown",
+          uploaderRole: session.user.role as "ADMIN" | "USER",
+          notes: notes || null,
+          projectId: params.id,
+        }).catch(() => {});
+      }
+
+      return NextResponse.json(
+        { message: "File registered", fileId: dbFile.id },
+        { status: 201 }
+      );
+    }
+
     // Version detection: use targetFileGroupId (drag-to-iterate) or fall back to name matching
     let existingFiles;
     if (targetFileGroupId) {

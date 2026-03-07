@@ -110,15 +110,30 @@ export async function DELETE(
       return NextResponse.json({ error: "You can only delete files you uploaded" }, { status: 403 });
     }
 
-    // Delete from Google Drive
-    try {
-      await deleteFile(file.path);
-    } catch (err) {
-      console.error("Drive delete failed (will still remove from DB):", err);
+    // Check if other DB records reference the same driveFileId (e.g., sync duplicate)
+    const otherRefsCount = file.driveFileId
+      ? await prisma.file.count({
+          where: {
+            driveFileId: file.driveFileId,
+            id: { not: file.id },
+          },
+        })
+      : 0;
+
+    let driveDeleteSucceeded = false;
+    if (otherRefsCount === 0) {
+      // Only delete from Drive if no other records reference this file
+      try {
+        await deleteFile(file.path);
+        driveDeleteSucceeded = true;
+      } catch (err) {
+        console.error("Drive delete failed (will still remove from DB):", err);
+      }
     }
 
     // Track deleted driveFileId on the project so sync won't re-create it
-    if (file.driveFileId && file.projectId) {
+    // This is CRITICAL when Drive delete fails — without this, sync will re-import
+    if (file.driveFileId && file.projectId && !driveDeleteSucceeded) {
       try {
         await prisma.project.update({
           where: { id: file.projectId },
@@ -128,8 +143,8 @@ export async function DELETE(
             },
           },
         });
-      } catch {
-        // Non-critical — worst case sync might re-create, but Drive delete usually succeeds
+      } catch (pushErr) {
+        console.error("CRITICAL: Failed to track deleted driveFileId — file may reappear:", pushErr);
       }
     }
 
