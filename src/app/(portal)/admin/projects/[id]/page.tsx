@@ -18,7 +18,6 @@ import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
 import { InspirationBoard } from "@/components/inspiration-board";
-import { DashboardHero3D } from "@/components/dashboard-hero-3d";
 import { PageHeader } from "@/components/page-header";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
@@ -1184,9 +1183,6 @@ export default function AdminProjectDetailPage() {
                 </div>
               );
             })}
-
-            {/* 3D Building Model */}
-            <DashboardHero3D className="w-96 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl aspect-[4/3]" />
           </div>
         </div>
       )}
