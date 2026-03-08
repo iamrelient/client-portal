@@ -15,6 +15,8 @@ import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
 import { InspirationBoard } from "@/components/inspiration-board";
+import { DashboardHero3D } from "@/components/dashboard-hero-3d";
+import { motion } from "framer-motion";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -201,6 +203,7 @@ export default function ClientProjectDetailPage() {
   const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [introFinished, setIntroFinished] = useState(false);
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
 
   function loadProject() {
@@ -524,13 +527,25 @@ export default function ClientProjectDetailPage() {
     <div>
       <PageHeader title={project.name} />
 
-      {/* Status Timeline */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <StatusTimeline status={project.status} />
-      </div>
+      {/* Cinematic 3D Hero */}
+      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)} />
 
-      {/* Featured Deliverables */}
-      {featuredFiles.length > 0 && (
+      {/* Dashboard content — fades in after hero intro */}
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{
+          opacity: introFinished ? 1 : 0,
+          y: introFinished ? 0 : 40,
+        }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+      >
+        {/* Status Timeline */}
+        <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+          <StatusTimeline status={project.status} />
+        </div>
+
+        {/* Featured Deliverables */}
+        {featuredFiles.length > 0 && (
         <div className="mb-8">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -716,6 +731,7 @@ export default function ClientProjectDetailPage() {
           )}
         </>
       )}
+      </motion.div>
 
       {previewFile && (
         <FilePreviewModal
