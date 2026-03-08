@@ -35,7 +35,7 @@ declare global {
 /* ------------------------------------------------------------------ */
 /*  Constants                                                           */
 /* ------------------------------------------------------------------ */
-const DEFAULT_MODEL = "/models/building.gltf";
+const DEFAULT_MODEL = "/models/3dExport.gltf";
 const INTRO_DURATION_MS = 2500;
 const FAST_SPIN = "180deg";
 const SLOW_SPIN = "15deg";
