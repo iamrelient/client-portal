@@ -19,7 +19,7 @@ import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
 import { InspirationBoard } from "@/components/inspiration-board";
 import { DashboardHero3D } from "@/components/dashboard-hero-3d";
-import { motion } from "framer-motion";
+import { PageHeader } from "@/components/page-header";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -224,7 +224,6 @@ export default function AdminProjectDetailPage() {
 
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [introFinished, setIntroFinished] = useState(false);
 
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
@@ -1055,30 +1054,15 @@ export default function AdminProjectDetailPage() {
 
   return (
     <div>
-      {/* Layered 3D Hero — title + model + timeline */}
-      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)}>
-        <div>
-          <h1 className="text-2xl font-bold text-white drop-shadow-lg">
-            {project.name}
-          </h1>
-          <p className="mt-1 text-sm text-slate-300 drop-shadow">
-            Created by {project.createdBy.name} · {formatRelativeDate(project.createdAt)}
-          </p>
-        </div>
-        <div className="overflow-hidden rounded-xl bg-black/30 p-4 backdrop-blur-md">
-          <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
-        </div>
-      </DashboardHero3D>
+      <PageHeader
+        title={project.name}
+        description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
+      />
 
-      {/* Dashboard content — fades in after hero intro */}
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{
-          opacity: introFinished ? 1 : 0,
-          y: introFinished ? 0 : 40,
-        }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-      >
+      {/* Status Timeline */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-xl">
+        <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
+      </div>
         {/* Featured Deliverables */}
         {featuredFiles.length > 0 && (
         <div className="mb-8">
@@ -1200,6 +1184,9 @@ export default function AdminProjectDetailPage() {
                 </div>
               );
             })}
+
+            {/* 3D Building Model */}
+            <DashboardHero3D className="w-96 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl aspect-[4/3]" />
           </div>
         </div>
       )}
@@ -1232,7 +1219,6 @@ export default function AdminProjectDetailPage() {
           )
         )
       )}
-      </motion.div>
 
       {previewFile && (
         <FilePreviewModal
