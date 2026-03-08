@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { PageHeader } from "@/components/page-header";
 import { ChevronDown, ChevronRight, Download, FileX, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -525,10 +524,15 @@ export default function ClientProjectDetailPage() {
 
   return (
     <div>
-      <PageHeader title={project.name} />
-
-      {/* Cinematic 3D Hero */}
-      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)} />
+      {/* Layered 3D Hero — title + model + timeline */}
+      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)}>
+        <h1 className="text-2xl font-bold text-white drop-shadow-lg">
+          {project.name}
+        </h1>
+        <div className="overflow-hidden rounded-xl bg-black/30 p-4 backdrop-blur-md">
+          <StatusTimeline status={project.status} />
+        </div>
+      </DashboardHero3D>
 
       {/* Dashboard content — fades in after hero intro */}
       <motion.div
@@ -539,11 +543,6 @@ export default function ClientProjectDetailPage() {
         }}
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
-        {/* Status Timeline */}
-        <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-          <StatusTimeline status={project.status} />
-        </div>
-
         {/* Featured Deliverables */}
         {featuredFiles.length > 0 && (
         <div className="mb-8">

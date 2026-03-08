@@ -21,6 +21,9 @@ declare global {
         "auto-rotate"?: string;
         "rotation-per-second"?: string;
         "camera-controls"?: string;
+        "camera-orbit"?: string;
+        "min-camera-orbit"?: string;
+        bounds?: string;
         "environment-image"?: string;
         exposure?: string;
         "shadow-intensity"?: string;
@@ -46,6 +49,7 @@ const SLOW_SPIN = "15deg";
 interface DashboardHero3DProps {
   gltfUrl?: string;
   onIntroComplete?: () => void;
+  children?: React.ReactNode;
 }
 
 /* ------------------------------------------------------------------ */
@@ -53,7 +57,7 @@ interface DashboardHero3DProps {
 /* ------------------------------------------------------------------ */
 function HeroLoadingFallback() {
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div className="flex h-[400px] items-center justify-center">
       <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
     </div>
   );
@@ -65,6 +69,7 @@ function HeroLoadingFallback() {
 function DashboardHero3DInner({
   gltfUrl,
   onIntroComplete,
+  children,
 }: DashboardHero3DProps) {
   const [introFinished, setIntroFinished] = useState(false);
   const viewerRef = useRef<HTMLElement>(null);
@@ -85,11 +90,14 @@ function DashboardHero3DInner({
     return () => clearTimeout(timer);
   }, []);
 
-  /* Imperatively update rotation-per-second (React 18 custom-element compat) */
+  /* Imperatively update dynamic attributes (React 18 custom-element compat) */
   useEffect(() => {
     const el = viewerRef.current;
     if (!el) return;
     el.setAttribute("rotation-per-second", introFinished ? SLOW_SPIN : FAST_SPIN);
+    if (introFinished) {
+      el.setAttribute("camera-controls", "");
+    }
   }, [introFinished]);
 
   const modelSrc = gltfUrl || DEFAULT_MODEL;
@@ -98,19 +106,25 @@ function DashboardHero3DInner({
     <motion.div
       className="relative mb-6 w-full overflow-hidden rounded-xl border border-white/[0.08]"
       initial={{ height: "100vh" }}
-      animate={{ height: introFinished ? 320 : "100vh" }}
+      animate={{ height: introFinished ? 400 : "100vh" }}
       transition={{ duration: 1.2, ease: "easeInOut" }}
     >
+      {/* Layer 0: 3D model (background) */}
       <model-viewer
         ref={viewerRef}
         src={modelSrc}
         alt="3D Building Model"
         auto-rotate=""
         rotation-per-second={FAST_SPIN}
+        bounds="tight"
+        camera-orbit="0deg 60deg auto"
+        min-camera-orbit="auto auto 5%"
         environment-image="neutral"
         exposure="1"
         style={
           {
+            position: "absolute",
+            inset: 0,
             width: "100%",
             height: "100%",
             backgroundColor: "transparent",
@@ -118,6 +132,14 @@ function DashboardHero3DInner({
           } as React.CSSProperties
         }
       />
+
+      {/* Layer 1: gradient overlay for text readability */}
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-gray-900/80 via-transparent to-gray-900/90" />
+
+      {/* Layer 2: overlay content (title, timeline) */}
+      <div className="relative z-[2] flex h-full flex-col justify-between p-6">
+        {children}
+      </div>
     </motion.div>
   );
 }

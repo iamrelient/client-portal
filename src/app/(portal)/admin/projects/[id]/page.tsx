@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { PageHeader } from "@/components/page-header";
 import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -1056,13 +1055,20 @@ export default function AdminProjectDetailPage() {
 
   return (
     <div>
-      <PageHeader
-        title={project.name}
-        description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
-      />
-
-      {/* Cinematic 3D Hero */}
-      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)} />
+      {/* Layered 3D Hero — title + model + timeline */}
+      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)}>
+        <div>
+          <h1 className="text-2xl font-bold text-white drop-shadow-lg">
+            {project.name}
+          </h1>
+          <p className="mt-1 text-sm text-slate-300 drop-shadow">
+            Created by {project.createdBy.name} · {formatRelativeDate(project.createdAt)}
+          </p>
+        </div>
+        <div className="overflow-hidden rounded-xl bg-black/30 p-4 backdrop-blur-md">
+          <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
+        </div>
+      </DashboardHero3D>
 
       {/* Dashboard content — fades in after hero intro */}
       <motion.div
@@ -1073,11 +1079,6 @@ export default function AdminProjectDetailPage() {
         }}
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
-        {/* Status Timeline */}
-        <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-          <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
-        </div>
-
         {/* Featured Deliverables */}
         {featuredFiles.length > 0 && (
         <div className="mb-8">
