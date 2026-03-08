@@ -19,6 +19,8 @@ import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
 import { InspirationBoard } from "@/components/inspiration-board";
+import { DashboardHero3D } from "@/components/dashboard-hero-3d";
+import { motion } from "framer-motion";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -223,6 +225,7 @@ export default function AdminProjectDetailPage() {
 
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [introFinished, setIntroFinished] = useState(false);
 
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
@@ -1058,13 +1061,25 @@ export default function AdminProjectDetailPage() {
         description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
       />
 
-      {/* Status Timeline */}
-      <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
-        <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
-      </div>
+      {/* Cinematic 3D Hero */}
+      <DashboardHero3D onIntroComplete={() => setIntroFinished(true)} />
 
-      {/* Featured Deliverables */}
-      {featuredFiles.length > 0 && (
+      {/* Dashboard content — fades in after hero intro */}
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{
+          opacity: introFinished ? 1 : 0,
+          y: introFinished ? 0 : 40,
+        }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+      >
+        {/* Status Timeline */}
+        <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 backdrop-blur-xl">
+          <StatusTimeline status={project.status} onStatusChange={handleStatusChange} />
+        </div>
+
+        {/* Featured Deliverables */}
+        {featuredFiles.length > 0 && (
         <div className="mb-8">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -1216,6 +1231,7 @@ export default function AdminProjectDetailPage() {
           )
         )
       )}
+      </motion.div>
 
       {previewFile && (
         <FilePreviewModal
