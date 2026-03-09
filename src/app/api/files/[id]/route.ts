@@ -110,29 +110,58 @@ export async function DELETE(
       return NextResponse.json({ error: "You can only delete files you uploaded" }, { status: 403 });
     }
 
-    // Delete from Google Drive
-    let driveDeleteSucceeded = false;
-    try {
-      await deleteFile(file.path);
-      driveDeleteSucceeded = true;
-    } catch (err) {
-      console.error("Drive delete failed (will still remove from DB):", err);
-    }
+    // Resolve the Drive file ID (prefer explicit driveFileId, fall back to path)
+    const driveId = file.driveFileId || file.path;
 
-    // Track deleted driveFileId on the project so sync won't re-create it
-    // This is CRITICAL when Drive delete fails — without this, sync will re-import
-    if (file.driveFileId && file.projectId && !driveDeleteSucceeded) {
+    // ALWAYS track driveFileId on the project BEFORE deleting from Drive.
+    // This prevents a race where sync re-imports the file between Drive delete
+    // and DB delete. The sync cleanup will remove the ID once it confirms
+    // the file is gone from Drive.
+    if (driveId && file.projectId) {
+      // Collect both IDs in case they differ
+      const idsToTrack = new Set([driveId]);
+      if (file.driveFileId && file.driveFileId !== driveId) idsToTrack.add(file.driveFileId);
+      if (file.path && file.path !== driveId) idsToTrack.add(file.path);
+
       try {
         await prisma.project.update({
           where: { id: file.projectId },
           data: {
             deletedDriveIds: {
-              push: file.driveFileId,
+              push: Array.from(idsToTrack),
             },
           },
         });
       } catch (pushErr) {
-        console.error("CRITICAL: Failed to track deleted driveFileId — file may reappear:", pushErr);
+        console.error("Failed to track deleted driveFileId:", pushErr);
+      }
+    }
+
+    // Delete from Google Drive — try with retry for transient failures
+    let driveDeleteFailed = false;
+    if (driveId) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await deleteFile(driveId);
+          driveDeleteFailed = false;
+          break;
+        } catch (err) {
+          console.error(`Drive delete attempt ${attempt} failed for ${driveId}:`, err);
+          driveDeleteFailed = true;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+      }
+
+      // If primary ID failed and path differs, try path as fallback
+      if (driveDeleteFailed && file.path && file.path !== driveId) {
+        try {
+          await deleteFile(file.path);
+          driveDeleteFailed = false;
+        } catch (err) {
+          console.error(`Drive delete fallback failed for ${file.path}:`, err);
+        }
       }
     }
 
@@ -159,7 +188,10 @@ export async function DELETE(
       },
     });
 
-    return NextResponse.json({ message: "File deleted successfully" });
+    return NextResponse.json({
+      message: "File deleted successfully",
+      driveDeleted: !driveDeleteFailed,
+    });
   } catch (error) {
     console.error("File delete error:", error);
     return NextResponse.json(

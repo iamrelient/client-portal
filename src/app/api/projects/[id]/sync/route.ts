@@ -125,9 +125,20 @@ export async function POST(
       }
     }
 
-    // NOTE: We intentionally do NOT delete DB records for files missing from Drive.
-    // Files may exist in a different Drive folder (e.g. after migration) but are still
-    // accessible by their driveFileId. Only sync additions and renames.
+    // ORPHAN CLEANUP: Remove DB records for synced-from-Drive files that are
+    // no longer in Drive AND whose driveFileId is in deletedDriveIds (i.e. the
+    // user intentionally deleted them). This prevents stale records from causing
+    // false version bumps when the user re-uploads a file with the same name.
+    for (const dbFile of dbFiles) {
+      if (
+        dbFile.driveFileId &&
+        !driveFileMap.has(dbFile.driveFileId) &&
+        deletedIds.has(dbFile.driveFileId)
+      ) {
+        await prisma.file.delete({ where: { id: dbFile.id } }).catch(() => {});
+        changed = true;
+      }
+    }
 
     // RENAMED FILES: driveFileId matches but name differs
     for (const dbFile of dbFiles) {
