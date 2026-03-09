@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { X, Upload, Globe, Loader2, Image as ImageIcon, Link } from "lucide-react";
+import { chunkedUpload } from "@/lib/chunked-upload";
 
 interface InspirationUploadModalProps {
   open: boolean;
@@ -127,119 +128,22 @@ export function InspirationUploadModal({
     }
   }
 
-  // Google requires chunks to be multiples of 256 KB (except the last chunk)
-  // 14 × 256 KB = 3,670,016 bytes (3.5 MB) — safely under Vercel Hobby's 4.5 MB body limit
-  const CHUNK_SIZE = 14 * 256 * 1024;
-  const MAX_CHUNK_RETRIES = 3;
-
   async function uploadFile(fileToUpload: File, displayName: string) {
-    const totalSize = fileToUpload.size;
-
-    // Step 1: Start upload session (server creates Google resumable session + checks quota)
     setProgress(0);
     setError(null);
 
-    const startRes = await fetch(
-      `/api/projects/${projectId}/upload-start`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: fileToUpload.name,
-          mimeType: fileToUpload.type || "application/octet-stream",
-          fileSize: totalSize,
-        }),
-      }
-    );
-
-    if (!startRes.ok) {
-      const data = await startRes
-        .json()
-        .catch(() => ({ error: "Failed to start upload" }));
-      throw new Error(data.error);
-    }
-
-    const { uploadUri } = await startRes.json();
-
-    // Step 2: Upload in chunks through the server
-    let offset = 0;
-    let driveFileId: string | undefined;
-    let driveSize: number | undefined;
-
-    while (offset < totalSize) {
-      const chunkEnd = Math.min(offset + CHUNK_SIZE, totalSize);
-      const chunkBlob = fileToUpload.slice(offset, chunkEnd);
-      const rangeEnd = chunkEnd - 1; // inclusive byte index
-
-      let chunkSuccess = false;
-
-      for (let retry = 0; retry < MAX_CHUNK_RETRIES; retry++) {
-        try {
-          const formData = new FormData();
-          formData.append("chunk", chunkBlob, "chunk");
-          formData.append("uploadUri", uploadUri);
-          formData.append("rangeStart", String(offset));
-          formData.append("rangeEnd", String(rangeEnd));
-          formData.append("totalSize", String(totalSize));
-
-          const chunkRes = await fetch(
-            `/api/projects/${projectId}/upload-chunk`,
-            { method: "POST", body: formData }
-          );
-
-          if (!chunkRes.ok) {
-            const errData = await chunkRes
-              .json()
-              .catch(() => ({ error: "Chunk upload failed" }));
-            throw new Error(errData.error);
-          }
-
-          const result = await chunkRes.json();
-
-          if (result.complete) {
-            driveFileId = result.driveFileId;
-            driveSize = result.size;
-          }
-
-          // Update progress
-          const progressBytes = result.complete
-            ? totalSize
-            : result.bytesReceived || chunkEnd;
-          setProgress(Math.round((progressBytes / totalSize) * 100));
-
-          chunkSuccess = true;
-          break;
-        } catch (err) {
-          console.warn(
-            `Chunk at offset ${offset} failed (attempt ${retry + 1}):`,
-            err
-          );
-          if (retry < MAX_CHUNK_RETRIES - 1) {
-            await new Promise((r) => setTimeout(r, 1000 * (retry + 1)));
-            setError(
-              `Retrying upload (attempt ${retry + 2}/${MAX_CHUNK_RETRIES})…`
-            );
-          } else {
-            throw err instanceof Error
-              ? err
-              : new Error("Upload failed after multiple attempts");
-          }
-        }
-      }
-
-      if (!chunkSuccess) break;
-      offset = chunkEnd;
-    }
-
-    if (!driveFileId) {
-      throw new Error(
-        "Upload completed but no file ID was returned from Google Drive"
-      );
-    }
+    // Chunked upload to Google Drive with automatic retry
+    const { driveFileId, size } = await chunkedUpload({
+      file: fileToUpload,
+      projectId,
+      onProgress: (percent) => setProgress(percent),
+      onRetry: (attempt, max) =>
+        setError(`Retrying upload (attempt ${attempt}/${max})…`),
+    });
 
     setError(null);
 
-    // Step 3: Register in DB via existing endpoint
+    // Register in DB via existing endpoint
     const completeRes = await fetch(completeEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -247,7 +151,7 @@ export function InspirationUploadModal({
         driveFileId,
         fileName: fileToUpload.name,
         mimeType: fileToUpload.type || "application/octet-stream",
-        size: driveSize || totalSize,
+        size,
         category: "DESIGN_INSPIRATION",
         displayName: displayName !== fileToUpload.name ? displayName : null,
         notes: notes.trim() || null,

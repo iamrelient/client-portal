@@ -19,6 +19,7 @@ import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
 import { InspirationBoard } from "@/components/inspiration-board";
 import { PageHeader } from "@/components/page-header";
+import { chunkedUpload } from "@/lib/chunked-upload";
 
 type FileCategory = "RENDER" | "DRAWING" | "CAD_DRAWING" | "SUPPORTING" | "DESIGN_INSPIRATION" | "OTHER";
 
@@ -422,75 +423,27 @@ export default function AdminProjectDetailPage() {
     }
   }
 
-  // Upload a single file entry — uploads directly to Google Drive (bypasses Vercel body limit)
+  // Upload a single file entry — chunked upload with automatic retry
   async function uploadSingleFile(entry: UploadFileEntry): Promise<boolean> {
     const { file, category, displayName, targetFileGroupId } = entry;
 
     try {
-      // Step 1: Get a resumable upload session from our server (small JSON, no body limit issue)
-      const sessionRes = await fetch(`/api/projects/${projectId}/upload-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, mimeType: file.type || "application/octet-stream", origin: window.location.origin }),
+      // Steps 1 & 2: Chunked upload to Google Drive via server proxy (auto-retry per chunk)
+      const { driveFileId, size } = await chunkedUpload({
+        file,
+        projectId,
+        onProgress: (percent) => setUploadProgress(percent),
       });
-
-      if (!sessionRes.ok) {
-        const data = await sessionRes.json().catch(() => ({ error: "Failed to create upload session" }));
-        toast.error(`${file.name}: ${data.error}`);
-        return false;
-      }
-
-      const { uploadUri } = await sessionRes.json();
-
-      // Step 2: Upload file directly to Google Drive via XHR (bypasses Vercel entirely)
-      const uploadResult = await new Promise<{ ok: boolean; driveFileId?: string; size?: number; error?: string }>((resolve) => {
-        const xhr = new XMLHttpRequest();
-        xhr.timeout = 300000; // 5 minute timeout for large files
-
-        xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-
-        xhr.addEventListener("load", () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              resolve({ ok: true, driveFileId: data.id, size: Number(data.size) || file.size });
-            } catch {
-              resolve({ ok: true, size: file.size });
-            }
-          } else {
-            resolve({ ok: false, error: `Google Drive upload failed (${xhr.status})` });
-          }
-        });
-
-        xhr.addEventListener("error", () => {
-          console.error("Upload XHR error", { status: xhr.status, response: xhr.responseText });
-          resolve({ ok: false, error: "Network error during upload" });
-        });
-        xhr.addEventListener("timeout", () => resolve({ ok: false, error: "Upload timed out" }));
-
-        xhr.open("PUT", uploadUri);
-        xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-        xhr.send(file);
-      });
-
-      if (!uploadResult.ok) {
-        toast.error(`${file.name}: ${uploadResult.error}`);
-        return false;
-      }
 
       // Step 3: Register the file in our database (small JSON request)
       const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          driveFileId: uploadResult.driveFileId,
+          driveFileId,
           fileName: file.name,
           mimeType: file.type || "application/octet-stream",
-          size: uploadResult.size || file.size,
+          size,
           category,
           displayName: displayName && displayName !== file.name ? displayName : null,
           targetFileGroupId: targetFileGroupId || null,
