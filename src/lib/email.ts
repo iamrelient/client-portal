@@ -84,3 +84,46 @@ export async function sendInspirationNotification({
     console.error("Failed to send inspiration notification:", error);
   }
 }
+
+export async function sendPasswordResetEmail({
+  email,
+  resetUrl,
+}: {
+  email: string;
+  resetUrl: string;
+}) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("RESEND_API_KEY not set — skipping password reset email");
+    return;
+  }
+
+  try {
+    await getResend().emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "Portal <onboarding@resend.dev>",
+      to: [email],
+      subject: "Reset your password",
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+          <h2 style="color: #1a1a2e; margin-bottom: 4px;">Password Reset</h2>
+          <p style="color: #64748b; margin-top: 0; font-size: 14px;">We received a request to reset your password.</p>
+
+          <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid #e2e8f0;">
+            <p style="margin: 0 0 16px; font-size: 14px; color: #334155;">
+              Click the button below to set a new password. This link expires in 1 hour.
+            </p>
+            <a href="${resetUrl}"
+               style="display: inline-block; background: #4a6199; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">
+              Reset Password
+            </a>
+          </div>
+
+          <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">
+            If you didn&rsquo;t request this, you can safely ignore this email.
+          </p>
+        </div>
+      `,
+    });
+  } catch (error) {
+    console.error("Failed to send password reset email:", error);
+  }
+}
