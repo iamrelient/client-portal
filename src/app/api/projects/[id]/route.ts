@@ -36,6 +36,7 @@ export async function GET(
           category: true,
           displayName: true,
           notes: true,
+          boardType: true,
           thumbnailUrl: true,
           isCurrent: true,
           version: true,

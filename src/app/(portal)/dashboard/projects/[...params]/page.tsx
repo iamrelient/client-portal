@@ -36,6 +36,7 @@ interface ProjectFile {
   category: FileCategory;
   displayName: string | null;
   notes: string | null;
+  boardType?: "INTERIOR" | "EXTERIOR" | null;
   thumbnailUrl: string | null;
   isCurrent: boolean;
   version: number;

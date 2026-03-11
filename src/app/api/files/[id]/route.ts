@@ -71,6 +71,13 @@ export async function PATCH(
       data.notes = body.notes || null;
     }
 
+    if ("boardType" in body) {
+      const validBoardTypes = ["INTERIOR", "EXTERIOR"];
+      if (body.boardType === null || validBoardTypes.includes(body.boardType)) {
+        data.boardType = body.boardType;
+      }
+    }
+
     await prisma.file.update({
       where: { id: params.id },
       data,

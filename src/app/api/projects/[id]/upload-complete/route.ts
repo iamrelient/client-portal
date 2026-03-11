@@ -30,7 +30,7 @@ export async function POST(
 
     // ── URL shortcut upload (server-side) ──
     if (body.url) {
-      const { url, displayName, notes, category } = body;
+      const { url, displayName, notes, category, boardType } = body;
 
       if (!project.driveFolderId) {
         return NextResponse.json(
@@ -68,6 +68,7 @@ export async function POST(
           category: category || "DESIGN_INSPIRATION",
           displayName: domain,
           notes: notes || null,
+          boardType: boardType || null,
         },
       });
 
@@ -97,7 +98,7 @@ export async function POST(
     }
 
     // ── Standard file upload (client already uploaded to Drive) ──
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes } = body;
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes, boardType: bodyBoardType } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -151,6 +152,7 @@ export async function POST(
           category: resolvedCategory,
           displayName: displayName || existingByDriveId.displayName,
           notes: notes || existingByDriveId.notes,
+          boardType: bodyBoardType || existingByDriveId.boardType,
           uploadedById: session.user.id,
         },
       });
@@ -232,6 +234,7 @@ export async function POST(
         category: category || "OTHER",
         displayName: displayName || null,
         notes: notes || null,
+        boardType: bodyBoardType || null,
         version,
         fileGroupId,
       },

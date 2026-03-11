@@ -21,6 +21,11 @@ enum FileCategory {
   OTHER
 }
 
+enum BoardType {
+  INTERIOR
+  EXTERIOR
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -74,6 +79,7 @@ model File {
   category        FileCategory @default(OTHER)
   displayName     String?
   notes           String?
+  boardType       BoardType?
   thumbnailUrl    String?
   isCurrent       Boolean  @default(false)
   version         Int      @default(1)
