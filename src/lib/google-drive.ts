@@ -84,7 +84,7 @@ export function isGoogleDriveConnected(): boolean {
 // ---------- Folder operations ----------
 
 export async function findOrCreateRootFolder(): Promise<string> {
-  const folderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+  const folderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
   if (!folderId) {
     throw new Error("GOOGLE_DRIVE_ROOT_FOLDER_ID is not set");
   }
