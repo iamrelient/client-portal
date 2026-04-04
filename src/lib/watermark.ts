@@ -8,9 +8,12 @@ const WATERMARKABLE_TYPES = new Set([
   "image/webp",
 ]);
 
-/** Padding as a fraction of image width (5%) */
-const PADDING_RATIO = 0.05;
-const MIN_PADDING = 40;
+/** Padding as a fraction of image width (2%) — tighter to the corner */
+const PADDING_RATIO = 0.02;
+const MIN_PADDING = 20;
+
+/** Watermark opacity (0 = invisible, 1 = fully opaque) */
+const WATERMARK_OPACITY = 0.5;
 
 let cachedWatermark: Buffer | null = null;
 let watermarkMissing = false;
@@ -62,9 +65,17 @@ export async function applyWatermark(
     const imgHeight = metadata.height || 1080;
 
     // Resize watermark to ~15% of image width, preserving aspect ratio
+    // Then apply 50% opacity via ensureAlpha + linear transform on alpha channel
     const targetWatermarkWidth = Math.round(imgWidth * 0.15);
     const watermark = await sharp(watermarkBuf)
       .resize({ width: targetWatermarkWidth, withoutEnlargement: true })
+      .ensureAlpha(WATERMARK_OPACITY)
+      .composite([{
+        input: Buffer.from([255, 255, 255, Math.round(255 * WATERMARK_OPACITY)]),
+        raw: { width: 1, height: 1, channels: 4 },
+        tile: true,
+        blend: "dest-in",
+      }])
       .toBuffer();
 
     const wmMeta = await sharp(watermark).metadata();
