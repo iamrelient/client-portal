@@ -262,6 +262,39 @@ export async function downloadFile(
   };
 }
 
+/**
+ * Replace the content of an existing Drive file (keeps the same file ID).
+ */
+export async function updateFileContent(
+  fileId: string,
+  mimeType: string,
+  buffer: Buffer
+): Promise<void> {
+  const accessToken = await getValidAccessToken();
+
+  const arrayBuffer = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength
+  ) as ArrayBuffer;
+
+  const res = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": mimeType,
+      },
+      body: new Blob([arrayBuffer]),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Failed to update file content: ${err}`);
+  }
+}
+
 export async function moveFile(
   fileId: string,
   oldParentId: string,

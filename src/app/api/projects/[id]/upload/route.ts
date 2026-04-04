@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToFolder } from "@/lib/google-drive";
+import { applyWatermark } from "@/lib/watermark";
 import { FileCategory } from "@prisma/client";
 import { randomBytes } from "crypto";
 
@@ -52,7 +53,10 @@ export async function POST(
     const fileName = file.name;
     const mimeType = file.type || "application/octet-stream";
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const rawBuffer = Buffer.from(bytes);
+
+    // Apply watermark to images before uploading
+    const buffer = await applyWatermark(rawBuffer, mimeType);
 
     // Upload to Google Drive server-side
     const driveResult = await uploadFileToFolder(

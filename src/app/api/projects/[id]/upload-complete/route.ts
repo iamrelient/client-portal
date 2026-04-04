@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { listFilesInFolder, uploadFileToFolder } from "@/lib/google-drive";
+import { listFilesInFolder, uploadFileToFolder, downloadFile, updateFileContent } from "@/lib/google-drive";
+import { applyWatermark, isWatermarkable } from "@/lib/watermark";
 import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
 
@@ -134,6 +135,30 @@ export async function POST(
         { error: "Could not find uploaded file in Drive" },
         { status: 400 }
       );
+    }
+
+    // Apply watermark to images (chunked uploads already landed on Drive)
+    const resolvedMimeType = mimeType || "application/octet-stream";
+    if (isWatermarkable(resolvedMimeType)) {
+      try {
+        const { stream } = await downloadFile(driveFileId);
+        const chunks: Uint8Array[] = [];
+        const reader = (stream as ReadableStream<Uint8Array>).getReader();
+        let done = false;
+        while (!done) {
+          const result = await reader.read();
+          if (result.value) chunks.push(result.value);
+          done = result.done;
+        }
+        const originalBuf = Buffer.concat(chunks);
+        const watermarked = await applyWatermark(originalBuf, resolvedMimeType);
+        if (watermarked !== originalBuf) {
+          await updateFileContent(driveFileId, resolvedMimeType, watermarked);
+          resolvedSize = watermarked.length;
+        }
+      } catch (wmErr) {
+        console.error("Watermark post-process failed (non-fatal):", wmErr);
+      }
     }
 
     // Check if sync already created a record for this driveFileId (race condition)
