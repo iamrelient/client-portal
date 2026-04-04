@@ -163,8 +163,10 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
           ) : isImage ? (
             <TransformWrapper
               key={file.id}
-              minScale={1}
+              minScale={0.5}
               maxScale={8}
+              initialScale={1}
+              centerOnInit={true}
               doubleClick={{ mode: "zoomIn", step: 2 }}
               pinch={{ step: 5 }}
               wheel={{ step: 0.1 }}
@@ -175,12 +177,14 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
               <ZoomControls />
               <TransformComponent
                 wrapperClass="!flex-1 !min-h-0 !w-full"
-                contentClass="!flex !items-center !justify-center !min-h-full !w-full"
+                contentClass="!flex !items-center !justify-center"
               >
+                {/* Use viewport units so the image fits the modal at scale 1 */}
                 <img
                   src={inlineUrl}
                   alt={file.originalName}
-                  className="max-h-full max-w-full object-contain"
+                  className="object-contain"
+                  style={{ maxWidth: "calc(95vw - 3rem)", maxHeight: "calc(95vh - 6rem)" }}
                   draggable={false}
                 />
               </TransformComponent>
