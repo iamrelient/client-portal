@@ -477,7 +477,7 @@ export default function AdminProjectDetailPage() {
           mimeType: file.type || "application/octet-stream",
           size,
           category,
-          customCategory: customCategory || null,
+          customCategory: customCategory?.trim() || null,
           displayName: displayName && displayName !== file.name ? displayName : null,
           targetFileGroupId: targetFileGroupId || null,
         }),
@@ -1243,7 +1243,7 @@ export default function AdminProjectDetailPage() {
                     const val = e.target.value;
                     if (val === "__CUSTOM__") {
                       setUploadQueue((prev) =>
-                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: item.customCategory || "" })) : null
+                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: item.customCategory || " " })) : null
                       );
                     } else {
                       const cat = val as FileCategory;
@@ -1364,7 +1364,7 @@ export default function AdminProjectDetailPage() {
                         <label className="block text-xs font-medium text-slate-400 mb-1">Custom Category Name</label>
                         <input
                           type="text"
-                          value={entry.customCategory.trim()}
+                          value={entry.customCategory === " " ? "" : entry.customCategory}
                           placeholder="e.g. Floor Plans, Elevations"
                           autoFocus
                           onChange={(e) =>
