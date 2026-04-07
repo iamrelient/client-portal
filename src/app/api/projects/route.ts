@@ -63,9 +63,8 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
-    const company = formData.get("company") as string | null;
+    const companyId = formData.get("companyId") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
-    const companyLogo = formData.get("companyLogo") as globalThis.File | null;
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -76,9 +75,22 @@ export async function POST(req: Request) {
 
     const driveConnected = await isGoogleDriveConnected();
 
+    // Resolve company from companyId
+    let companyName: string | null = null;
+    let companyLogoPath: string | null = null;
+    if (companyId) {
+      const companyRecord = await prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, logoPath: true },
+      });
+      if (companyRecord) {
+        companyName = companyRecord.name;
+        companyLogoPath = companyRecord.logoPath;
+      }
+    }
+
     let driveFolderId: string | null = null;
     let thumbnailPath: string | null = null;
-    let companyLogoPath: string | null = null;
 
     if (driveConnected) {
       // Create project folder in Drive
@@ -100,17 +112,6 @@ export async function POST(req: Request) {
         thumbnailPath = result.id;
       }
 
-      if (companyLogo && companyLogo.size > 0) {
-        const bytes = await companyLogo.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        const result = await uploadFileToFolder(
-          assetsId,
-          `logo_${companyLogo.name}`,
-          companyLogo.type || "image/jpeg",
-          buffer
-        );
-        companyLogoPath = result.id;
-      }
     }
 
     const authorizedEmails = emails
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
       data: {
         name: name.trim(),
         thumbnailPath,
-        company: company?.trim() || null,
+        company: companyName,
         companyLogoPath,
         driveFolderId,
         authorizedEmails,

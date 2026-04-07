@@ -570,7 +570,10 @@ export default function ClientProjectDetailPage() {
 
   return (
     <div>
-      <PageHeader title={project.name} />
+      <PageHeader
+        title={project.name}
+        logo={project.companyLogoPath ? `/api/projects/${project.id}/company-logo` : undefined}
+      />
 
       {/* Status Timeline */}
       <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-xl">

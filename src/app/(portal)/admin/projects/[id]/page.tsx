@@ -257,8 +257,9 @@ export default function AdminProjectDetailPage() {
 
   const [editName, setEditName] = useState("");
   const [editEmails, setEditEmails] = useState("");
-  const [editCompany, setEditCompany] = useState("");
+  const [editCompanyId, setEditCompanyId] = useState("");
   const [editStatus, setEditStatus] = useState("concept");
+  const [companies, setCompanies] = useState<{ id: string; name: string; logoPath: string | null }[]>([]);
 
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
 
@@ -278,7 +279,6 @@ export default function AdminProjectDetailPage() {
         setProject(data);
         setEditName(data.name);
         setEditEmails(data.authorizedEmails?.join(", ") || "");
-        setEditCompany(data.company || "");
         setEditStatus(data.status || "concept");
         setLoading(false);
       })
@@ -287,7 +287,21 @@ export default function AdminProjectDetailPage() {
 
   useEffect(() => {
     loadProject();
+    fetch("/api/companies")
+      .then((res) => res.json())
+      .then((data) => {
+        setCompanies(data);
+      })
+      .catch(() => {});
   }, [projectId]);
+
+  // Match company dropdown to project's current company name
+  useEffect(() => {
+    if (project && companies.length > 0) {
+      const match = companies.find((c) => c.name === project.company);
+      setEditCompanyId(match?.id || "");
+    }
+  }, [project, companies]);
 
   // Trigger auto-sync on mount
   useEffect(() => {
@@ -306,7 +320,7 @@ export default function AdminProjectDetailPage() {
       const fd = new FormData();
       fd.set("name", editName);
       fd.set("emails", editEmails);
-      fd.set("company", editCompany);
+      fd.set("companyId", editCompanyId);
       fd.set("status", newStatus);
       const res = await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
@@ -330,7 +344,7 @@ export default function AdminProjectDetailPage() {
     const formData = new FormData(e.currentTarget);
     formData.set("name", editName);
     formData.set("emails", editEmails);
-    formData.set("company", editCompany);
+    formData.set("companyId", editCompanyId);
     formData.set("status", editStatus);
 
     // Compress images before uploading
@@ -1028,6 +1042,7 @@ export default function AdminProjectDetailPage() {
       <PageHeader
         title={project.name}
         description={`Created by ${project.createdBy.name} · ${formatRelativeDate(project.createdAt)}`}
+        logo={project.companyLogoPath ? `/api/projects/${projectId}/company-logo` : undefined}
       />
 
       {/* Status Timeline */}
@@ -1465,16 +1480,19 @@ export default function AdminProjectDetailPage() {
             </div>
             <div>
               <label htmlFor="edit-company" className="block text-sm font-medium text-slate-300">
-                Company name <span className="font-normal text-slate-400">(optional)</span>
+                Company <span className="font-normal text-slate-400">(optional)</span>
               </label>
-              <input
+              <select
                 id="edit-company"
-                type="text"
-                value={editCompany}
-                onChange={(e) => setEditCompany(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Acme Corp"
-              />
+                value={editCompanyId}
+                onChange={(e) => setEditCompanyId(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="">None</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="edit-thumbnail" className="block text-sm font-medium text-slate-300">

@@ -24,9 +24,18 @@ export default function AdminProjectsPage() {
   const router = useRouter();
   const toast = useToast();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [companies, setCompanies] = useState<{ id: string; name: string; logoPath: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+
+  function loadCompanies() {
+    fetch("/api/companies")
+      .then((res) => res.json())
+      .then((data) => setCompanies(data))
+      .catch(() => {});
+  }
 
   function loadProjects() {
     fetch("/api/projects")
@@ -40,6 +49,7 @@ export default function AdminProjectsPage() {
 
   useEffect(() => {
     loadProjects();
+    loadCompanies();
   }, []);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -53,9 +63,10 @@ export default function AdminProjectsPage() {
     if (thumbnail && thumbnail.size > 0) {
       formData.set("thumbnail", await compressImage(thumbnail));
     }
-    const companyLogo = formData.get("companyLogo") as File | null;
-    if (companyLogo && companyLogo.size > 0) {
-      formData.set("companyLogo", await compressImage(companyLogo));
+
+    // Add selected company ID
+    if (selectedCompanyId) {
+      formData.set("companyId", selectedCompanyId);
     }
 
     try {
@@ -74,6 +85,7 @@ export default function AdminProjectsPage() {
 
       toast.success("Project created successfully");
       setCreating(false);
+      setSelectedCompanyId("");
       (e.target as HTMLFormElement).reset();
       loadProjects();
     } catch {
@@ -141,27 +153,19 @@ export default function AdminProjectsPage() {
               </div>
               <div>
                 <label htmlFor="company" className="block text-sm font-medium text-slate-300">
-                  Company name <span className="font-normal text-slate-400">(optional)</span>
+                  Company <span className="font-normal text-slate-400">(optional)</span>
                 </label>
-                <input
+                <select
                   id="company"
-                  name="company"
-                  type="text"
-                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="Acme Corp"
-                />
-              </div>
-              <div>
-                <label htmlFor="companyLogo" className="block text-sm font-medium text-slate-300">
-                  Company logo <span className="font-normal text-slate-400">(optional)</span>
-                </label>
-                <input
-                  id="companyLogo"
-                  name="companyLogo"
-                  type="file"
-                  accept="image/*"
-                  className="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:rounded-lg file:border-0 file:bg-brand-500/10 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-brand-400 hover:file:bg-brand-500/20"
-                />
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">None</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="emails" className="block text-sm font-medium text-slate-300">

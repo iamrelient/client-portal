@@ -69,6 +69,7 @@ export async function GET(
     status: project.status,
     thumbnailPath: project.thumbnailPath,
     company: project.company,
+    companyLogoPath: project.companyLogoPath,
     driveFolderId: project.driveFolderId,
     files: project.files,
     createdBy: project.createdBy,
@@ -126,7 +127,7 @@ export async function PATCH(
     const formData = await req.formData();
     const name = formData.get("name") as string | null;
     const emails = formData.get("emails") as string | null;
-    const company = formData.get("company") as string | null;
+    const companyId = formData.get("companyId") as string | null;
     const status = formData.get("status") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
 
@@ -136,8 +137,20 @@ export async function PATCH(
       data.name = name.trim();
     }
 
-    if (formData.has("company")) {
-      data.company = company?.trim() || null;
+    if (formData.has("companyId")) {
+      if (companyId) {
+        const companyRecord = await prisma.company.findUnique({
+          where: { id: companyId },
+          select: { name: true, logoPath: true },
+        });
+        if (companyRecord) {
+          data.company = companyRecord.name;
+          data.companyLogoPath = companyRecord.logoPath;
+        }
+      } else {
+        data.company = null;
+        data.companyLogoPath = null;
+      }
     }
 
     const validStatuses = ["concept", "design", "construction_drawings", "awaiting_state_review", "in_construction", "complete"];

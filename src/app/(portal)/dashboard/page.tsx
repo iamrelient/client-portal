@@ -17,6 +17,7 @@ interface ProjectCard {
   name: string;
   status: string;
   company: string | null;
+  companyLogoPath: string | null;
   thumbnailPath: string | null;
   createdAt: string;
   updatedAt: string;
@@ -191,7 +192,16 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         {project.company && (
-                          <p className="mt-0.5 text-sm text-slate-400">{project.company}</p>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            {project.companyLogoPath && (
+                              <img
+                                src={`/api/projects/${project.id}/company-logo`}
+                                alt=""
+                                className="h-4 w-4 rounded object-contain"
+                              />
+                            )}
+                            <p className="text-sm text-slate-400">{project.company}</p>
+                          </div>
                         )}
                         <p className="mt-1 text-sm text-slate-400">
                           {project._count.files} file{project._count.files !== 1 ? "s" : ""}
@@ -251,8 +261,15 @@ export default function DashboardPage() {
                           {project.name}
                         </h3>
                         {project.company && (
-                          <span className="hidden sm:block text-xs text-slate-500 truncate max-w-[140px]">
-                            {project.company}
+                          <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
+                            {project.companyLogoPath && (
+                              <img
+                                src={`/api/projects/${project.id}/company-logo`}
+                                alt=""
+                                className="h-3.5 w-3.5 rounded object-contain flex-shrink-0"
+                              />
+                            )}
+                            <span className="truncate">{project.company}</span>
                           </span>
                         )}
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 ${getStatusColorClass(project.status)}`}>
