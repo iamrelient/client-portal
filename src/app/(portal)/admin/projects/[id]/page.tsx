@@ -571,13 +571,45 @@ export default function AdminProjectDetailPage() {
     setTogglingCurrent(null);
   }
 
-  async function handleCategoryChange(fileId: string, category: FileCategory) {
+  const [editingCustomCategory, setEditingCustomCategory] = useState<string | null>(null);
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+
+  async function handleCategoryChange(fileId: string, value: string) {
+    if (value === "__CUSTOM__") {
+      const file = project?.files.find((f) => f.id === fileId);
+      setCustomCategoryInput(file?.customCategory || "");
+      setEditingCustomCategory(fileId);
+      return;
+    }
     setUpdatingCategory(fileId);
+    setEditingCustomCategory(null);
     try {
       const res = await fetch(`/api/files/${fileId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category }),
+        body: JSON.stringify({ category: value as FileCategory, customCategory: null }),
+      });
+      if (res.ok) {
+        loadProject();
+      } else {
+        toast.error("Failed to update category");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setUpdatingCategory(null);
+  }
+
+  async function handleCustomCategorySave(fileId: string) {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed) return;
+    setUpdatingCategory(fileId);
+    setEditingCustomCategory(null);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "OTHER", customCategory: trimmed }),
       });
       if (res.ok) {
         loadProject();
@@ -912,19 +944,43 @@ export default function AdminProjectDetailPage() {
                           </span>
                         </td>
                         <td className="px-4 py-4">
-                          <select
-                            value={latest.category}
-                            disabled={updatingCategory === latest.id}
-                            onChange={(e) => handleCategoryChange(latest.id, e.target.value as FileCategory)}
-                            className="w-full rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
-                          >
-                            <option value="RENDER">Renders</option>
-                            <option value="DRAWING">Drawings</option>
-                            <option value="CAD_DRAWING">CAD Drawings</option>
-                            <option value="SUPPORTING">Supporting Docs</option>
-                            <option value="DESIGN_INSPIRATION">Design Inspirations</option>
-                            <option value="OTHER">Others</option>
-                          </select>
+                          {editingCustomCategory === latest.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={customCategoryInput}
+                                onChange={(e) => setCustomCategoryInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleCustomCategorySave(latest.id);
+                                  if (e.key === "Escape") setEditingCustomCategory(null);
+                                }}
+                                autoFocus
+                                placeholder="Category name"
+                                className="w-full rounded-md border border-brand-500 bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                              />
+                              <button
+                                onClick={() => handleCustomCategorySave(latest.id)}
+                                className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              value={latest.customCategory ? "__CUSTOM__" : latest.category}
+                              disabled={updatingCategory === latest.id}
+                              onChange={(e) => handleCategoryChange(latest.id, e.target.value)}
+                              className="w-full rounded-md border border-white/[0.1] bg-[#1a1d2e] px-2 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                            >
+                              <option value="RENDER">Renders</option>
+                              <option value="DRAWING">Drawings</option>
+                              <option value="CAD_DRAWING">CAD Drawings</option>
+                              <option value="SUPPORTING">Supporting Docs</option>
+                              <option value="DESIGN_INSPIRATION">Design Inspirations</option>
+                              <option value="OTHER">Others</option>
+                              <option value="__CUSTOM__">{latest.customCategory ? latest.customCategory : "Custom..."}</option>
+                            </select>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-slate-400 truncate">
                           {formatRelativeDate(latest.createdAt)}
