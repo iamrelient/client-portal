@@ -53,6 +53,10 @@ export async function PATCH(
         data.category = body.category;
       }
 
+      if ("customCategory" in body) {
+        data.customCategory = body.customCategory || null;
+      }
+
       if ("fileGroupId" in body) {
         data.fileGroupId = body.fileGroupId ?? null; // null to detach
       }

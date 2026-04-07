@@ -39,6 +39,7 @@ interface ProjectFile {
   size: number;
   mimeType: string;
   category: FileCategory;
+  customCategory: string | null;
   displayName: string | null;
   notes: string | null;
   boardType?: "INTERIOR" | "EXTERIOR" | null;
@@ -68,6 +69,7 @@ interface ProjectDetail {
 interface UploadFileEntry {
   file: File;
   category: FileCategory;
+  customCategory: string;
   displayName: string;
   targetFileGroupId: string | null;
 }
@@ -184,9 +186,14 @@ function getLatestFiles(files: ProjectFile[]) {
 }
 
 /** Group latest files by category */
-function groupByCategory(files: ProjectFile[]) {
+interface GroupedFiles {
+  standard: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]>;
+  custom: Record<string, { latest: ProjectFile; versionCount: number }[]>;
+}
+
+function groupByCategory(files: ProjectFile[]): GroupedFiles {
   const latest = getLatestFiles(files);
-  const grouped: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
+  const standard: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
     RENDER: [],
     DRAWING: [],
     CAD_DRAWING: [],
@@ -194,13 +201,20 @@ function groupByCategory(files: ProjectFile[]) {
     DESIGN_INSPIRATION: [],
     OTHER: [],
   };
+  const custom: Record<string, { latest: ProjectFile; versionCount: number }[]> = {};
 
   for (const item of latest) {
-    const cat = item.latest.category || "OTHER";
-    grouped[cat].push(item);
+    if (item.latest.customCategory) {
+      const key = item.latest.customCategory;
+      if (!custom[key]) custom[key] = [];
+      custom[key].push(item);
+    } else {
+      const cat = item.latest.category || "OTHER";
+      standard[cat].push(item);
+    }
   }
 
-  return grouped;
+  return { standard, custom };
 }
 
 export default function AdminProjectDetailPage() {
@@ -354,6 +368,7 @@ export default function AdminProjectDetailPage() {
     const entries: UploadFileEntry[] = Array.from(fileList).map((file) => ({
       file,
       category: "OTHER" as FileCategory,
+      customCategory: "",
       displayName: file.name,
       targetFileGroupId: null,
     }));
@@ -375,6 +390,7 @@ export default function AdminProjectDetailPage() {
     setUploadQueue([{
       file,
       category: targetFile.category || "OTHER",
+      customCategory: targetFile.customCategory || "",
       displayName: targetFile.displayName || targetFile.originalName,
       targetFileGroupId: groupId,
     }]);
@@ -407,6 +423,7 @@ export default function AdminProjectDetailPage() {
       const ok = await uploadSingleFile({
         file,
         category: urlCategory,
+        customCategory: "",
         displayName,
         targetFileGroupId: null,
       });
@@ -426,7 +443,7 @@ export default function AdminProjectDetailPage() {
 
   // Upload a single file entry — chunked upload with automatic retry
   async function uploadSingleFile(entry: UploadFileEntry): Promise<boolean> {
-    const { file, category, displayName, targetFileGroupId } = entry;
+    const { file, category, customCategory, displayName, targetFileGroupId } = entry;
 
     try {
       // Steps 1 & 2: Chunked upload to Google Drive via server proxy (auto-retry per chunk)
@@ -446,6 +463,7 @@ export default function AdminProjectDetailPage() {
           mimeType: file.type || "application/octet-stream",
           size,
           category,
+          customCategory: customCategory || null,
           displayName: displayName && displayName !== file.name ? displayName : null,
           targetFileGroupId: targetFileGroupId || null,
         }),
@@ -732,13 +750,13 @@ export default function AdminProjectDetailPage() {
   })();
 
   /** Render a file table for a given category section */
-  function renderCategorySection(category: FileCategory) {
-    const items = categorized[category];
+  function renderCategorySection(category: FileCategory, label?: string, items?: { latest: ProjectFile; versionCount: number }[]) {
+    const sectionItems = items || categorized.standard[category];
 
     return (
-      <div key={category} className="mb-6">
+      <div key={label || category} className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-slate-100">
-          {CATEGORY_LABELS[category]}
+          {label || CATEGORY_LABELS[category]}
         </h2>
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
@@ -766,14 +784,14 @@ export default function AdminProjectDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06]">
-                {items.length === 0 && (
+                {sectionItems.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-400">
                       No files in this category
                     </td>
                   </tr>
                 )}
-                {items.map(({ latest, versionCount }) => {
+                {sectionItems.map(({ latest, versionCount }) => {
                   const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
                   const fileName = latest.displayName || latest.originalName;
                   const isDragOver = dragOverFileId === latest.id;
@@ -1151,23 +1169,30 @@ export default function AdminProjectDetailPage() {
           />
         </div>
       ) : (
-        CATEGORY_ORDER.filter(
-          (cat) => categorized[cat].length > 0
-        ).map((cat) =>
-          cat === "DESIGN_INSPIRATION" ? (
-            <InspirationBoard
-              key={cat}
-              files={categorized.DESIGN_INSPIRATION}
-              projectId={project.id}
-              userRole="ADMIN"
-              userId={session?.user?.id || ""}
-              onRefresh={loadProject}
-              onPreview={(f) => setPreviewFile(f as ProjectFile)}
-            />
-          ) : (
-            renderCategorySection(cat)
-          )
-        )
+        <>
+          {CATEGORY_ORDER.filter(
+            (cat) => categorized.standard[cat].length > 0
+          ).map((cat) =>
+            cat === "DESIGN_INSPIRATION" ? (
+              <InspirationBoard
+                key={cat}
+                files={categorized.standard.DESIGN_INSPIRATION}
+                projectId={project.id}
+                userRole="ADMIN"
+                userId={session?.user?.id || ""}
+                onRefresh={loadProject}
+                onPreview={(f) => setPreviewFile(f as ProjectFile)}
+              />
+            ) : (
+              renderCategorySection(cat)
+            )
+          )}
+          {Object.entries(categorized.custom)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, files]) =>
+              renderCategorySection("OTHER", name, files)
+            )}
+        </>
       )}
 
       {previewFile && (
@@ -1200,10 +1225,17 @@ export default function AdminProjectDetailPage() {
                 <label className="text-xs font-medium text-slate-400 whitespace-nowrap">Set all to:</label>
                 <select
                   onChange={(e) => {
-                    const cat = e.target.value as FileCategory;
-                    setUploadQueue((prev) =>
-                      prev ? prev.map((item) => ({ ...item, category: cat })) : null
-                    );
+                    const val = e.target.value;
+                    if (val === "__CUSTOM__") {
+                      setUploadQueue((prev) =>
+                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: item.customCategory || "" })) : null
+                      );
+                    } else {
+                      const cat = val as FileCategory;
+                      setUploadQueue((prev) =>
+                        prev ? prev.map((item) => ({ ...item, category: cat, customCategory: "" })) : null
+                      );
+                    }
                     e.target.value = "";
                   }}
                   defaultValue=""
@@ -1216,6 +1248,7 @@ export default function AdminProjectDetailPage() {
                   <option value="SUPPORTING">Supporting Docs</option>
                   <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                   <option value="OTHER">Others</option>
+                  <option value="__CUSTOM__">Custom...</option>
                 </select>
               </div>
             )}
@@ -1262,47 +1295,76 @@ export default function AdminProjectDetailPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
-                      <select
-                        value={entry.category}
-                        onChange={(e) =>
-                          setUploadQueue((prev) =>
-                            prev
-                              ? prev.map((item, i) =>
-                                  i === idx ? { ...item, category: e.target.value as FileCategory } : item
-                                )
-                              : null
-                          )
-                        }
-                        className="block w-full rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      >
-                        <option value="RENDER">Renders</option>
-                        <option value="DRAWING">Drawings</option>
-                        <option value="CAD_DRAWING">CAD Drawings</option>
-                        <option value="SUPPORTING">Supporting Docs</option>
-                        <option value="DESIGN_INSPIRATION">Design Inspirations</option>
-                        <option value="OTHER">Others</option>
-                      </select>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Category</label>
+                        <select
+                          value={entry.customCategory ? "__CUSTOM__" : entry.category}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setUploadQueue((prev) =>
+                              prev
+                                ? prev.map((item, i) =>
+                                    i === idx
+                                      ? val === "__CUSTOM__"
+                                        ? { ...item, category: "OTHER" as FileCategory, customCategory: " " }
+                                        : { ...item, category: val as FileCategory, customCategory: "" }
+                                      : item
+                                  )
+                                : null
+                            );
+                          }}
+                          className="block w-full rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        >
+                          <option value="RENDER">Renders</option>
+                          <option value="DRAWING">Drawings</option>
+                          <option value="CAD_DRAWING">CAD Drawings</option>
+                          <option value="SUPPORTING">Supporting Docs</option>
+                          <option value="DESIGN_INSPIRATION">Design Inspirations</option>
+                          <option value="OTHER">Others</option>
+                          <option value="__CUSTOM__">Custom...</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Display Name</label>
+                        <input
+                          type="text"
+                          value={entry.displayName}
+                          onChange={(e) =>
+                            setUploadQueue((prev) =>
+                              prev
+                                ? prev.map((item, i) =>
+                                    i === idx ? { ...item, displayName: e.target.value } : item
+                                  )
+                                : null
+                            )
+                          }
+                          className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Display Name</label>
-                      <input
-                        type="text"
-                        value={entry.displayName}
-                        onChange={(e) =>
-                          setUploadQueue((prev) =>
-                            prev
-                              ? prev.map((item, i) =>
-                                  i === idx ? { ...item, displayName: e.target.value } : item
-                                )
-                              : null
-                          )
-                        }
-                        className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      />
-                    </div>
+                    {entry.customCategory ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Custom Category Name</label>
+                        <input
+                          type="text"
+                          value={entry.customCategory.trim()}
+                          placeholder="e.g. Floor Plans, Elevations"
+                          autoFocus
+                          onChange={(e) =>
+                            setUploadQueue((prev) =>
+                              prev
+                                ? prev.map((item, i) =>
+                                    i === idx ? { ...item, customCategory: e.target.value || " " } : item
+                                  )
+                                : null
+                            )
+                          }
+                          className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

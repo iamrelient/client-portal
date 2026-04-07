@@ -34,6 +34,7 @@ interface ProjectFile {
   size: number;
   mimeType: string;
   category: FileCategory;
+  customCategory: string | null;
   displayName: string | null;
   notes: string | null;
   boardType?: "INTERIOR" | "EXTERIOR" | null;
@@ -170,9 +171,14 @@ function getLatestFiles(files: ProjectFile[]) {
 }
 
 /** Group latest files by category */
-function groupByCategory(files: ProjectFile[]) {
+interface GroupedFiles {
+  standard: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]>;
+  custom: Record<string, { latest: ProjectFile; versionCount: number }[]>;
+}
+
+function groupByCategory(files: ProjectFile[]): GroupedFiles {
   const latest = getLatestFiles(files);
-  const grouped: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
+  const standard: Record<FileCategory, { latest: ProjectFile; versionCount: number }[]> = {
     RENDER: [],
     DRAWING: [],
     CAD_DRAWING: [],
@@ -180,13 +186,20 @@ function groupByCategory(files: ProjectFile[]) {
     DESIGN_INSPIRATION: [],
     OTHER: [],
   };
+  const custom: Record<string, { latest: ProjectFile; versionCount: number }[]> = {};
 
   for (const item of latest) {
-    const cat = item.latest.category || "OTHER";
-    grouped[cat].push(item);
+    if (item.latest.customCategory) {
+      const key = item.latest.customCategory;
+      if (!custom[key]) custom[key] = [];
+      custom[key].push(item);
+    } else {
+      const cat = item.latest.category || "OTHER";
+      standard[cat].push(item);
+    }
   }
 
-  return grouped;
+  return { standard, custom };
 }
 
 export default function ClientProjectDetailPage() {
@@ -378,13 +391,13 @@ export default function ClientProjectDetailPage() {
     return Array.from(groups.values());
   })();
 
-  function renderCategorySection(category: FileCategory) {
-    const items = categorized[category];
+  function renderCategorySection(category: FileCategory, label?: string, overrideItems?: { latest: ProjectFile; versionCount: number }[]) {
+    const items = overrideItems || categorized.standard[category];
 
     return (
-      <div key={category} className="mb-6">
+      <div key={label || category} className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-slate-100">
-          {CATEGORY_LABELS[category]}
+          {label || CATEGORY_LABELS[category]}
         </h2>
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
@@ -757,12 +770,12 @@ export default function ClientProjectDetailPage() {
             </div>
           )}
           {CATEGORY_ORDER.filter(
-            (cat) => categorized[cat].length > 0
+            (cat) => categorized.standard[cat].length > 0
           ).map((cat) =>
             cat === "DESIGN_INSPIRATION" ? (
               <InspirationBoard
                 key={cat}
-                files={categorized.DESIGN_INSPIRATION}
+                files={categorized.standard.DESIGN_INSPIRATION}
                 projectId={project.id}
                 userRole="USER"
                 userId={session?.user?.id || ""}
@@ -772,6 +785,9 @@ export default function ClientProjectDetailPage() {
             ) : (
               renderCategorySection(cat)
             )
+          )}
+          {Object.entries(categorized.custom).map(([name, items]) =>
+            renderCategorySection("OTHER", name, items)
           )}
         </>
       )}

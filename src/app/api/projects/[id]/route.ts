@@ -34,6 +34,7 @@ export async function GET(
           size: true,
           mimeType: true,
           category: true,
+          customCategory: true,
           displayName: true,
           notes: true,
           boardType: true,

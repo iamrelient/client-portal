@@ -99,7 +99,7 @@ export async function POST(
     }
 
     // ── Standard file upload (client already uploaded to Drive) ──
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, displayName, targetFileGroupId, notes, boardType: bodyBoardType } = body;
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -175,6 +175,7 @@ export async function POST(
         where: { id: existingByDriveId.id },
         data: {
           category: resolvedCategory,
+          customCategory: customCategory !== undefined ? (customCategory || null) : existingByDriveId.customCategory,
           displayName: displayName || existingByDriveId.displayName,
           notes: notes || existingByDriveId.notes,
           boardType: bodyBoardType || existingByDriveId.boardType,
@@ -257,6 +258,7 @@ export async function POST(
         uploadedById: session.user.id,
         projectId: params.id,
         category: category || "OTHER",
+        customCategory: customCategory || null,
         displayName: displayName || null,
         notes: notes || null,
         boardType: bodyBoardType || null,
