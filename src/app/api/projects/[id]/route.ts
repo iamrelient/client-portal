@@ -131,6 +131,8 @@ export async function PATCH(
     const status = formData.get("status") as string | null;
     const thumbnail = formData.get("thumbnail") as globalThis.File | null;
 
+    console.log("PATCH project:", { name, companyId, status, thumbnailName: thumbnail?.name, thumbnailSize: thumbnail?.size });
+
     const data: Record<string, unknown> = {};
 
     if (name?.trim()) {
@@ -198,6 +200,7 @@ export async function PATCH(
       }
     }
 
+    console.log("PATCH project data:", JSON.stringify(data));
     await prisma.project.update({
       where: { id: params.id },
       data,
