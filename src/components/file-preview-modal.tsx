@@ -104,6 +104,7 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
   const is3D = canPreview3D(file.mimeType, file.originalName);
   const isPdf = file.mimeType === "application/pdf";
   const isImage = file.mimeType.startsWith("image/");
+  const isVideo = file.mimeType.startsWith("video/");
 
   return (
     <div
@@ -157,9 +158,19 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
             </div>
           ) : isPdf ? (
             <iframe
-              src={inlineUrl}
+              src={`${inlineUrl}#zoom=page-fit`}
               className="min-h-0 flex-1 w-full rounded-lg border border-white/[0.08]"
             />
+          ) : isVideo ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <video
+                src={inlineUrl}
+                controls
+                autoPlay
+                className="max-h-full max-w-full rounded-lg"
+                style={{ maxWidth: "calc(95vw - 3rem)", maxHeight: "calc(95vh - 6rem)" }}
+              />
+            </div>
           ) : isImage ? (
             <TransformWrapper
               key={file.id}

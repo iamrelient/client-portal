@@ -84,6 +84,7 @@ function canPreview(mimeType: string, fileName: string) {
   return (
     mimeType === "application/pdf" ||
     mimeType.startsWith("image/") ||
+    mimeType.startsWith("video/") ||
     canPreview3D(mimeType, fileName)
   );
 }
