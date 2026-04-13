@@ -1270,27 +1270,28 @@ export default function AdminProjectDetailPage() {
       ) : (
         <>
           {CATEGORY_ORDER.filter(
-            (cat) => categorized.standard[cat].length > 0
-          ).map((cat) =>
-            cat === "DESIGN_INSPIRATION" ? (
-              <InspirationBoard
-                key={cat}
-                files={categorized.standard.DESIGN_INSPIRATION}
-                projectId={project.id}
-                userRole="ADMIN"
-                userId={session?.user?.id || ""}
-                onRefresh={loadProject}
-                onPreview={(f) => setPreviewFile(f as ProjectFile)}
-              />
-            ) : (
-              renderCategorySection(cat)
-            )
-          )}
+            (cat) => cat !== "DESIGN_INSPIRATION" && categorized.standard[cat].length > 0
+          ).map((cat) => renderCategorySection(cat))}
           {Object.entries(categorized.custom)
-            .sort(([a], [b]) => a.localeCompare(b))
+            .sort(([, a], [, b]) => {
+              const aMax = Math.max(...a.map((f) => new Date(f.latest.createdAt).getTime()));
+              const bMax = Math.max(...b.map((f) => new Date(f.latest.createdAt).getTime()));
+              return bMax - aMax;
+            })
             .map(([name, files]) =>
               renderCategorySection("OTHER", name, files)
             )}
+          {categorized.standard.DESIGN_INSPIRATION.length > 0 && (
+            <InspirationBoard
+              key="DESIGN_INSPIRATION"
+              files={categorized.standard.DESIGN_INSPIRATION}
+              projectId={project.id}
+              userRole="ADMIN"
+              userId={session?.user?.id || ""}
+              onRefresh={loadProject}
+              onPreview={(f) => setPreviewFile(f as ProjectFile)}
+            />
+          )}
         </>
       )}
 
