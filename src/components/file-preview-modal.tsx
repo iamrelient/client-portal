@@ -158,7 +158,7 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
             </div>
           ) : isPdf ? (
             <iframe
-              src={`${inlineUrl}#zoom=page-fit`}
+              src={`${inlineUrl}#page=1&view=Fit`}
               className="min-h-0 flex-1 w-full rounded-lg border border-white/[0.08]"
             />
           ) : isVideo ? (
