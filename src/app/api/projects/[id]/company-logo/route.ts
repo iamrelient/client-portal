@@ -30,7 +30,7 @@ export async function GET(
     return new NextResponse(stream, {
       headers: {
         "Content-Type": mimeType || "image/png",
-        "Cache-Control": "no-store, must-revalidate",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=3600",
       },
     });
   } catch (error) {

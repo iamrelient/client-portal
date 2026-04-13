@@ -33,7 +33,7 @@ export async function GET(
     return new NextResponse(stream, {
       headers: {
         "Content-Type": mimeType || "image/jpeg",
-        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+        "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=3600",
       },
     });
   } catch (error) {
