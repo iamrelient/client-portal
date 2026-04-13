@@ -242,6 +242,8 @@ export default function AdminProjectDetailPage() {
 
   // Upload modal state (supports multiple files)
   const [uploadQueue, setUploadQueue] = useState<UploadFileEntry[] | null>(null);
+  const [bulkCustomMode, setBulkCustomMode] = useState(false);
+  const [bulkCustomCategory, setBulkCustomCategory] = useState("");
 
   // Add URL state
   const [urlInput, setUrlInput] = useState("");
@@ -388,6 +390,8 @@ export default function AdminProjectDetailPage() {
     }));
 
     setUploadQueue(entries);
+    setBulkCustomMode(false);
+    setBulkCustomCategory("");
   }
 
   // Called when a file is dropped onto an existing file row (drag-to-iterate)
@@ -579,6 +583,27 @@ export default function AdminProjectDetailPage() {
       const file = project?.files.find((f) => f.id === fileId);
       setCustomCategoryInput(file?.customCategory || "");
       setEditingCustomCategory(fileId);
+      return;
+    }
+    if (value.startsWith("__EXISTING_CUSTOM__:")) {
+      const name = value.slice("__EXISTING_CUSTOM__:".length);
+      setUpdatingCategory(fileId);
+      setEditingCustomCategory(null);
+      try {
+        const res = await fetch(`/api/files/${fileId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: "OTHER", customCategory: name }),
+        });
+        if (res.ok) {
+          loadProject();
+        } else {
+          toast.error("Failed to update category");
+        }
+      } catch {
+        toast.error("Something went wrong");
+      }
+      setUpdatingCategory(null);
       return;
     }
     setUpdatingCategory(fileId);
@@ -978,6 +1003,9 @@ export default function AdminProjectDetailPage() {
                               <option value="SUPPORTING">Supporting Docs</option>
                               <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                               <option value="OTHER">Others</option>
+                              {Object.keys(categorized.custom).map((name) => (
+                                <option key={name} value={`__EXISTING_CUSTOM__:${name}`}>{name}</option>
+                              ))}
                               <option value="__CUSTOM__">{latest.customCategory ? latest.customCategory : "Custom..."}</option>
                             </select>
                           )}
@@ -1298,10 +1326,21 @@ export default function AdminProjectDetailPage() {
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === "__CUSTOM__") {
+                      setBulkCustomMode(true);
+                      setBulkCustomCategory("");
                       setUploadQueue((prev) =>
-                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: item.customCategory || " " })) : null
+                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: " " })) : null
+                      );
+                    } else if (val.startsWith("__EXISTING_CUSTOM__:")) {
+                      const name = val.slice("__EXISTING_CUSTOM__:".length);
+                      setBulkCustomMode(false);
+                      setBulkCustomCategory("");
+                      setUploadQueue((prev) =>
+                        prev ? prev.map((item) => ({ ...item, category: "OTHER" as FileCategory, customCategory: name })) : null
                       );
                     } else {
+                      setBulkCustomMode(false);
+                      setBulkCustomCategory("");
                       const cat = val as FileCategory;
                       setUploadQueue((prev) =>
                         prev ? prev.map((item) => ({ ...item, category: cat, customCategory: "" })) : null
@@ -1319,8 +1358,30 @@ export default function AdminProjectDetailPage() {
                   <option value="SUPPORTING">Supporting Docs</option>
                   <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                   <option value="OTHER">Others</option>
+                  {Object.keys(categorized.custom).map((name) => (
+                    <option key={name} value={`__EXISTING_CUSTOM__:${name}`}>{name}</option>
+                  ))}
                   <option value="__CUSTOM__">Custom...</option>
                 </select>
+              </div>
+            )}
+            {bulkCustomMode && uploadQueue.length > 1 && (
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-slate-400 mb-1">Custom Category Name (all files)</label>
+                <input
+                  type="text"
+                  value={bulkCustomCategory}
+                  placeholder="e.g. Floor Plans, Elevations"
+                  autoFocus
+                  onChange={(e) => {
+                    const val = e.target.value || " ";
+                    setBulkCustomCategory(e.target.value);
+                    setUploadQueue((prev) =>
+                      prev ? prev.map((item) => ({ ...item, customCategory: val })) : null
+                    );
+                  }}
+                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                />
               </div>
             )}
 
@@ -1374,17 +1435,28 @@ export default function AdminProjectDetailPage() {
                           value={entry.customCategory ? "__CUSTOM__" : entry.category}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setUploadQueue((prev) =>
-                              prev
-                                ? prev.map((item, i) =>
-                                    i === idx
-                                      ? val === "__CUSTOM__"
-                                        ? { ...item, category: "OTHER" as FileCategory, customCategory: " " }
-                                        : { ...item, category: val as FileCategory, customCategory: "" }
-                                      : item
-                                  )
-                                : null
-                            );
+                            if (val.startsWith("__EXISTING_CUSTOM__:")) {
+                              const name = val.slice("__EXISTING_CUSTOM__:".length);
+                              setUploadQueue((prev) =>
+                                prev
+                                  ? prev.map((item, i) =>
+                                      i === idx ? { ...item, category: "OTHER" as FileCategory, customCategory: name } : item
+                                    )
+                                  : null
+                              );
+                            } else {
+                              setUploadQueue((prev) =>
+                                prev
+                                  ? prev.map((item, i) =>
+                                      i === idx
+                                        ? val === "__CUSTOM__"
+                                          ? { ...item, category: "OTHER" as FileCategory, customCategory: " " }
+                                          : { ...item, category: val as FileCategory, customCategory: "" }
+                                        : item
+                                    )
+                                  : null
+                              );
+                            }
                           }}
                           className="block w-full rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-2.5 py-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                         >
@@ -1394,6 +1466,9 @@ export default function AdminProjectDetailPage() {
                           <option value="SUPPORTING">Supporting Docs</option>
                           <option value="DESIGN_INSPIRATION">Design Inspirations</option>
                           <option value="OTHER">Others</option>
+                          {Object.keys(categorized.custom).map((name) => (
+                            <option key={name} value={`__EXISTING_CUSTOM__:${name}`}>{name}</option>
+                          ))}
                           <option value="__CUSTOM__">Custom...</option>
                         </select>
                       </div>
@@ -1415,7 +1490,7 @@ export default function AdminProjectDetailPage() {
                         />
                       </div>
                     </div>
-                    {entry.customCategory ? (
+                    {entry.customCategory && !bulkCustomMode ? (
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">Custom Category Name</label>
                         <input
