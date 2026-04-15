@@ -29,32 +29,52 @@ interface CategoryInfo {
   hasOldVersions: boolean;
 }
 
+interface CustomCategoryInfo {
+  name: string;
+  count: number;
+  hasOldVersions: boolean;
+}
+
 interface DownloadOptionsModalProps {
   categories: CategoryInfo[];
-  onDownload: (selectedCategories: FileCategory[], includeOldVersions: boolean) => void;
+  customCategories?: CustomCategoryInfo[];
+  onDownload: (
+    selectedCategories: FileCategory[],
+    selectedCustomCategories: string[],
+    includeOldVersions: boolean
+  ) => void;
   onClose: () => void;
 }
 
 export function DownloadOptionsModal({
   categories,
+  customCategories = [],
   onDownload,
   onClose,
 }: DownloadOptionsModalProps) {
   const availableCategories = CATEGORY_ORDER.filter((cat) =>
     categories.some((c) => c.category === cat && c.count > 0)
   );
+  const availableCustomCategories = customCategories.filter((c) => c.count > 0);
 
   const [selected, setSelected] = useState<Set<FileCategory>>(
     new Set(availableCategories)
   );
+  const [selectedCustom, setSelectedCustom] = useState<Set<string>>(
+    new Set(availableCustomCategories.map((c) => c.name))
+  );
   const [includeOldVersions, setIncludeOldVersions] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const allSelected = selected.size === availableCategories.length;
-  const noneSelected = selected.size === 0;
+  const totalAvailable = availableCategories.length + availableCustomCategories.length;
+  const totalSelected = selected.size + selectedCustom.size;
+  const allSelected = totalSelected === totalAvailable;
+  const noneSelected = totalSelected === 0;
   const someSelected = !allSelected && !noneSelected;
 
-  const hasAnyOldVersions = categories.some((c) => c.hasOldVersions);
+  const hasAnyOldVersions =
+    categories.some((c) => c.hasOldVersions) ||
+    customCategories.some((c) => c.hasOldVersions);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -80,8 +100,10 @@ export function DownloadOptionsModal({
   function toggleAll() {
     if (allSelected) {
       setSelected(new Set());
+      setSelectedCustom(new Set());
     } else {
       setSelected(new Set(availableCategories));
+      setSelectedCustom(new Set(availableCustomCategories.map((c) => c.name)));
     }
   }
 
@@ -95,8 +117,18 @@ export function DownloadOptionsModal({
     setSelected(next);
   }
 
+  function toggleCustomCategory(name: string) {
+    const next = new Set(selectedCustom);
+    if (next.has(name)) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+    setSelectedCustom(next);
+  }
+
   function handleDownload() {
-    onDownload(Array.from(selected), includeOldVersions);
+    onDownload(Array.from(selected), Array.from(selectedCustom), includeOldVersions);
   }
 
   const allCheckboxRef = useRef<HTMLInputElement>(null);
@@ -147,7 +179,9 @@ export function DownloadOptionsModal({
             />
             <span className="font-medium text-slate-100">All Categories</span>
             <span className="ml-auto text-xs text-slate-400">
-              {categories.reduce((sum, c) => sum + c.count, 0)} files
+              {categories.reduce((sum, c) => sum + c.count, 0) +
+                customCategories.reduce((sum, c) => sum + c.count, 0)}{" "}
+              files
             </span>
           </label>
 
@@ -175,6 +209,23 @@ export function DownloadOptionsModal({
                 </label>
               );
             })}
+            {availableCustomCategories.map((info) => (
+              <label
+                key={`custom:${info.name}`}
+                className="flex items-center gap-3 rounded-lg px-4 py-2.5 cursor-pointer hover:bg-white/[0.03] transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedCustom.has(info.name)}
+                  onChange={() => toggleCustomCategory(info.name)}
+                  className="h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-500 focus:ring-brand-500"
+                />
+                <span className="text-sm text-slate-200">{info.name}</span>
+                <span className="ml-auto inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-slate-400">
+                  {info.count}
+                </span>
+              </label>
+            ))}
           </div>
 
           {/* Include old versions */}

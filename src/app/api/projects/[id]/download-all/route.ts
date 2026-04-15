@@ -29,20 +29,46 @@ export async function GET(
   try {
     const url = new URL(req.url);
     const categoriesParam = url.searchParams.get("categories");
+    const customCategoriesParam = url.searchParams.get("customCategories");
     const includeOldVersions = url.searchParams.get("includeOldVersions") === "true";
 
-    // Parse category filter
+    // Parse category filters
     const categoryFilter = categoriesParam
       ? (categoriesParam.split(",").filter(Boolean) as FileCategory[])
+      : null;
+    const customCategoryFilter = customCategoriesParam
+      ? customCategoriesParam.split(",").filter(Boolean)
       : null;
 
     // Build file filter
     const fileWhere: Record<string, unknown> = {
       presentationSections: { none: {} },
     };
-    if (categoryFilter) {
-      fileWhere.category = { in: categoryFilter };
+
+    // When either filter is present, match files in (standard categories) OR (custom categories).
+    // Files with a customCategory set are stored as category OTHER in the DB but
+    // should only match the custom filter, not the standard OTHER filter.
+    if (categoryFilter || customCategoryFilter) {
+      const orClauses: Record<string, unknown>[] = [];
+      if (categoryFilter && categoryFilter.length > 0) {
+        orClauses.push({
+          category: { in: categoryFilter },
+          customCategory: null,
+        });
+      }
+      if (customCategoryFilter && customCategoryFilter.length > 0) {
+        orClauses.push({
+          customCategory: { in: customCategoryFilter },
+        });
+      }
+      if (orClauses.length > 0) {
+        fileWhere.OR = orClauses;
+      } else {
+        // Both filters present but empty — match nothing
+        fileWhere.id = "__none__";
+      }
     }
+
     if (!includeOldVersions) {
       fileWhere.isCurrent = true;
     }
@@ -58,6 +84,7 @@ export async function GET(
             path: true,
             mimeType: true,
             category: true,
+            customCategory: true,
             isCurrent: true,
             version: true,
             fileGroupId: true,
@@ -100,7 +127,10 @@ export async function GET(
         }
         const buffer = Buffer.concat(chunks);
 
-        const folder = CATEGORY_FOLDERS[file.category] || "Other";
+        // Custom categories take precedence over standard category folders
+        const folder = file.customCategory
+          ? file.customCategory.replace(/[/\\:*?"<>|]/g, "_")
+          : CATEGORY_FOLDERS[file.category] || "Other";
 
         if (includeOldVersions) {
           // When including old versions, add version suffix and separate old versions

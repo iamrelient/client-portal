@@ -313,13 +313,20 @@ export default function ClientProjectDetailPage() {
     }
   }
 
-  async function handleDownloadAll(categories?: FileCategory[], includeOldVersions?: boolean) {
+  async function handleDownloadAll(
+    categories?: FileCategory[],
+    customCategories?: string[],
+    includeOldVersions?: boolean
+  ) {
     setShowDownloadModal(false);
     setDownloadingZip(true);
     try {
       const params = new URLSearchParams();
       if (categories && categories.length > 0) {
         params.set("categories", categories.join(","));
+      }
+      if (customCategories && customCategories.length > 0) {
+        params.set("customCategories", customCategories.join(","));
       }
       if (includeOldVersions) {
         params.set("includeOldVersions", "true");
@@ -812,11 +819,23 @@ export default function ClientProjectDetailPage() {
       {showDownloadModal && project && (
         <DownloadOptionsModal
           categories={CATEGORY_ORDER.map((cat) => {
-            const allFiles = project.files.filter((f) => f.category === cat);
+            const allFiles = project.files.filter(
+              (f) => f.category === cat && !f.customCategory
+            );
             const currentFiles = allFiles.filter((f) => f.isCurrent);
             const oldFiles = allFiles.filter((f) => !f.isCurrent);
             return {
               category: cat,
+              count: currentFiles.length,
+              hasOldVersions: oldFiles.length > 0,
+            };
+          })}
+          customCategories={Object.keys(categorized.custom).map((name) => {
+            const allFiles = project.files.filter((f) => f.customCategory === name);
+            const currentFiles = allFiles.filter((f) => f.isCurrent);
+            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            return {
+              name,
               count: currentFiles.length,
               hasOldVersions: oldFiles.length > 0,
             };

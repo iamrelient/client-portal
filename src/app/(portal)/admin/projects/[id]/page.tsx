@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -578,6 +578,29 @@ export default function AdminProjectDetailPage() {
 
   const [editingCustomCategory, setEditingCustomCategory] = useState<string | null>(null);
   const [customCategoryInput, setCustomCategoryInput] = useState("");
+  const [editingFileName, setEditingFileName] = useState<string | null>(null);
+  const [fileNameInput, setFileNameInput] = useState("");
+
+  async function handleFileNameSave(fileId: string) {
+    const trimmed = fileNameInput.trim();
+    setEditingFileName(null);
+    if (!trimmed) return;
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: trimmed }),
+      });
+      if (res.ok) {
+        toast.success("File renamed");
+        loadProject();
+      } else {
+        toast.error("Failed to rename file");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+  }
 
   async function handleCategoryChange(fileId: string, value: string) {
     if (value === "__CUSTOM__") {
@@ -704,13 +727,20 @@ export default function AdminProjectDetailPage() {
     }
   }
 
-  async function handleDownloadAll(categories?: FileCategory[], includeOldVersions?: boolean) {
+  async function handleDownloadAll(
+    categories?: FileCategory[],
+    customCategories?: string[],
+    includeOldVersions?: boolean
+  ) {
     setShowDownloadModal(false);
     setDownloadingZip(true);
     try {
       const params = new URLSearchParams();
       if (categories && categories.length > 0) {
         params.set("categories", categories.join(","));
+      }
+      if (customCategories && customCategories.length > 0) {
+        params.set("customCategories", customCategories.join(","));
       }
       if (includeOldVersions) {
         params.set("includeOldVersions", "true");
@@ -904,6 +934,42 @@ export default function AdminProjectDetailPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
+                            {editingFileName === latest.id ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={fileNameInput}
+                                  onChange={(e) => setFileNameInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleFileNameSave(latest.id);
+                                    if (e.key === "Escape") setEditingFileName(null);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  autoFocus
+                                  placeholder="File name"
+                                  className="min-w-0 flex-1 rounded-md border border-brand-500 bg-[#1a1d2e] px-2 py-1 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFileNameSave(latest.id);
+                                  }}
+                                  className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingFileName(null);
+                                  }}
+                                  className="text-xs text-slate-400 hover:text-slate-200 whitespace-nowrap"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
                             {isUrlShortcut(latest.originalName) ? (
                               <a
                                 href={`/api/files/${latest.id}/download`}
@@ -928,6 +994,17 @@ export default function AdminProjectDetailPage() {
                                 {fileName}
                               </a>
                             )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFileNameInput(fileName);
+                                setEditingFileName(latest.id);
+                              }}
+                              className="rounded p-0.5 text-slate-500 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
+                              title="Rename file"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
                             {latest.isCurrent && (
                               <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                                 Current
@@ -958,6 +1035,8 @@ export default function AdminProjectDetailPage() {
                                   <Columns className="h-3.5 w-3.5" />
                                   Compare
                                 </button>
+                              </>
+                            )}
                               </>
                             )}
                           </div>
@@ -1776,11 +1855,24 @@ export default function AdminProjectDetailPage() {
       {showDownloadModal && project && (
         <DownloadOptionsModal
           categories={CATEGORY_ORDER.map((cat) => {
-            const allFiles = project.files.filter((f) => f.category === cat);
+            // Exclude files with a customCategory set — they're counted separately below
+            const allFiles = project.files.filter(
+              (f) => f.category === cat && !f.customCategory
+            );
             const currentFiles = allFiles.filter((f) => f.isCurrent);
             const oldFiles = allFiles.filter((f) => !f.isCurrent);
             return {
               category: cat,
+              count: currentFiles.length,
+              hasOldVersions: oldFiles.length > 0,
+            };
+          })}
+          customCategories={Object.keys(categorized.custom).map((name) => {
+            const allFiles = project.files.filter((f) => f.customCategory === name);
+            const currentFiles = allFiles.filter((f) => f.isCurrent);
+            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            return {
+              name,
               count: currentFiles.length,
               hasOldVersions: oldFiles.length > 0,
             };
