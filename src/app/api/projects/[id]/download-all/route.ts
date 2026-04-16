@@ -7,6 +7,10 @@ import { downloadFile } from "@/lib/google-drive";
 import { FileCategory } from "@prisma/client";
 import JSZip from "jszip";
 
+// Zipping many/large files from Drive easily exceeds the 10s Vercel Hobby
+// default. 60s is the Hobby-plan ceiling.
+export const maxDuration = 60;
+
 const CATEGORY_FOLDERS: Record<string, string> = {
   RENDER: "Renders",
   DRAWING: "Drawings",

@@ -1,6 +1,8 @@
 /**
  * Compress an image file client-side using Canvas.
- * Returns a Blob under the target size (default 2MB).
+ * - PNG inputs stay PNG (lossless, preserves transparency — no quality loop).
+ * - Everything else is encoded as JPEG with a quality ladder until under the size cap.
+ * Returns a File under the target size (default 2MB) when possible.
  */
 export async function compressImage(
   file: File,
@@ -9,6 +11,8 @@ export async function compressImage(
 ): Promise<File> {
   // Skip if already small enough
   if (file.size <= maxSizeBytes) return file;
+
+  const isPng = file.type === "image/png";
 
   const bitmap = await createImageBitmap(file);
 
@@ -24,7 +28,16 @@ export async function compressImage(
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
-  // Try decreasing quality until under target size
+  if (isPng) {
+    // Lossless — single encode, preserve alpha, keep .png extension.
+    const blob = await canvas.convertToBlob({ type: "image/png" });
+    const newName = /\.png$/i.test(file.name)
+      ? file.name
+      : file.name.replace(/\.\w+$/, ".png");
+    return new File([blob], newName, { type: "image/png" });
+  }
+
+  // JPEG: try decreasing quality until under target size
   let quality = 0.85;
   let blob: Blob;
 

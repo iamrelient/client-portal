@@ -77,6 +77,11 @@ export async function POST(
       // Skip files that were intentionally deleted
       if (deletedIds.has(driveFile.id)) continue;
 
+      // Safety net: project thumbnails are supposed to live in the _assets
+      // subfolder, but if that upload ever leaks into the project root we
+      // must not import it as a regular project file.
+      if (/^thumbnail_/i.test(driveFile.name)) continue;
+
       if (!dbDriveIdMap.has(driveFile.id)) {
         // Version detection (case-insensitive to handle name variations)
         const existingFiles = await prisma.file.findMany({

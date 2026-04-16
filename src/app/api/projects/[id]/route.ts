@@ -180,21 +180,29 @@ export async function PATCH(
         const bytes = await thumbnail.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        // Find or create _assets folder
-        let assetsId: string;
+        // Find or create _assets folder. If this fails we SKIP the thumbnail
+        // upload entirely — we must never fall back to uploading into the
+        // project root, or the thumbnail leaks into the project's file list
+        // and ends up in every zip download.
+        let assetsId: string | null = null;
         try {
           assetsId = await createFolder("_assets", project.driveFolderId);
-        } catch {
-          assetsId = project.driveFolderId;
+        } catch (err) {
+          console.error(
+            "Failed to create _assets folder, skipping thumbnail upload:",
+            err
+          );
         }
 
-        const result = await uploadFileToFolder(
-          assetsId,
-          `thumbnail_${thumbnail.name}`,
-          thumbnail.type || "image/jpeg",
-          buffer
-        );
-        data.thumbnailPath = result.id;
+        if (assetsId) {
+          const result = await uploadFileToFolder(
+            assetsId,
+            `thumbnail_${thumbnail.name}`,
+            thumbnail.type || "image/jpeg",
+            buffer
+          );
+          data.thumbnailPath = result.id;
+        }
       }
     }
 
