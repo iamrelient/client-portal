@@ -91,6 +91,7 @@ export async function POST(
 
     let version = 1;
     let fileGroupId: string | null = null;
+    let ensureGroupId: string | null = null;
 
     if (existingFiles && existingFiles.length > 0) {
       version = existingFiles[0].version + 1;
@@ -99,28 +100,40 @@ export async function POST(
         fileGroupId = existingFiles[0].fileGroupId;
       } else {
         fileGroupId = randomBytes(12).toString("hex");
-        await prisma.file.update({
-          where: { id: existingFiles[0].id },
-          data: { fileGroupId },
-        });
+        ensureGroupId = existingFiles[0].id;
       }
     }
 
-    const dbFile = await prisma.file.create({
-      data: {
-        name: fileName,
-        originalName: fileName,
-        size: resolvedSize,
-        mimeType,
-        path: driveFileId,
-        driveFileId,
-        uploadedById: session.user.id,
-        projectId: params.id,
-        category,
-        displayName: displayName || null,
-        version,
-        fileGroupId,
-      },
+    const dbFile = await prisma.$transaction(async (tx) => {
+      if (ensureGroupId && fileGroupId) {
+        await tx.file.update({
+          where: { id: ensureGroupId },
+          data: { fileGroupId },
+        });
+      }
+      if (fileGroupId) {
+        await tx.file.updateMany({
+          where: { fileGroupId },
+          data: { isCurrent: false },
+        });
+      }
+      return tx.file.create({
+        data: {
+          name: fileName,
+          originalName: fileName,
+          size: resolvedSize,
+          mimeType,
+          path: driveFileId,
+          driveFileId,
+          uploadedById: session.user.id,
+          projectId: params.id,
+          category,
+          displayName: displayName || null,
+          version,
+          fileGroupId,
+          isCurrent: true,
+        },
+      });
     });
 
     await prisma.activity.create({

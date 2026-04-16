@@ -29,6 +29,7 @@ export async function POST(req: Request) {
         path: driveFileId,
         driveFileId,
         uploadedById: session.user.id,
+        isCurrent: true,
       },
     });
 

@@ -91,6 +91,7 @@ export async function POST(
 
         let version = 1;
         let fileGroupId: string | null = null;
+        let ensureGroupId: string | null = null;
         // Inherit category from existing files with same name, or auto-detect
         const category = existingFiles.length > 0
           ? existingFiles[0].category
@@ -103,28 +104,40 @@ export async function POST(
             fileGroupId = existingFiles[0].fileGroupId;
           } else {
             fileGroupId = randomBytes(12).toString("hex");
-            await prisma.file.update({
-              where: { id: existingFiles[0].id },
-              data: { fileGroupId },
-            });
+            ensureGroupId = existingFiles[0].id;
           }
         }
 
-        await prisma.file.create({
-          data: {
-            name: driveFile.name,
-            originalName: driveFile.name,
-            size: Number(driveFile.size) || 0,
-            mimeType: driveFile.mimeType,
-            path: driveFile.id,
-            driveFileId: driveFile.id,
-            syncedFromDrive: true,
-            uploadedById: project.createdById,
-            projectId: params.id,
-            category,
-            version,
-            fileGroupId,
-          },
+        await prisma.$transaction(async (tx) => {
+          if (ensureGroupId && fileGroupId) {
+            await tx.file.update({
+              where: { id: ensureGroupId },
+              data: { fileGroupId },
+            });
+          }
+          if (fileGroupId) {
+            await tx.file.updateMany({
+              where: { fileGroupId },
+              data: { isCurrent: false },
+            });
+          }
+          await tx.file.create({
+            data: {
+              name: driveFile.name,
+              originalName: driveFile.name,
+              size: Number(driveFile.size) || 0,
+              mimeType: driveFile.mimeType,
+              path: driveFile.id,
+              driveFileId: driveFile.id,
+              syncedFromDrive: true,
+              uploadedById: project.createdById,
+              projectId: params.id,
+              category,
+              version,
+              fileGroupId,
+              isCurrent: true,
+            },
+          });
         });
         changed = true;
       }

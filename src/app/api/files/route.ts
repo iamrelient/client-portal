@@ -124,6 +124,7 @@ export async function POST(req: Request) {
         path: result.id,
         driveFileId: result.id,
         uploadedById: session.user.id,
+        isCurrent: true,
       },
     });
 
