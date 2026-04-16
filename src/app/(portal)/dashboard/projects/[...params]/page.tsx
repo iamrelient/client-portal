@@ -439,7 +439,9 @@ export default function ClientProjectDetailPage() {
 
   const categorized = groupByCategory(project.files);
   const featuredFiles = (() => {
-    const currentFiles = project.files.filter((f) => f.isCurrent);
+    const currentFiles = project.files.filter(
+      (f) => f.isCurrent && f.category !== "DESIGN_INSPIRATION"
+    );
     const groups = new Map<string, ProjectFile>();
     for (const file of currentFiles) {
       const key = file.fileGroupId || file.id;
