@@ -217,6 +217,8 @@ export default function ClientProjectDetailPage() {
   const [downloadingZip, setDownloadingZip] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [downloadingSelected, setDownloadingSelected] = useState(false);
 
   // Featured carousel scroll state
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -349,6 +351,56 @@ export default function ClientProjectDetailPage() {
     setDownloadingZip(false);
   }
 
+  function toggleFileSelected(id: string) {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSectionSelected(ids: string[]) {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedFileIds(new Set());
+  }
+
+  async function handleDownloadSelected() {
+    if (selectedFileIds.size === 0) return;
+    setDownloadingSelected(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("fileIds", Array.from(selectedFileIds).join(","));
+      const res = await fetch(`/api/projects/${projectId}/download-all?${qs.toString()}`);
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project?.name || "project"}_selected_files.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSelectedFileIds(new Set());
+    } catch {
+      // silently fail
+    }
+    setDownloadingSelected(false);
+  }
+
   async function handleCompare(fileId: string, fileGroupId: string | null) {
     // Ensure version history is loaded
     if (fileGroupId && !versionHistory[fileId]) {
@@ -401,6 +453,11 @@ export default function ClientProjectDetailPage() {
 
   function renderCategorySection(category: FileCategory, label?: string, overrideItems?: { latest: ProjectFile; versionCount: number }[]) {
     const items = overrideItems || categorized.standard[category];
+    const sectionIds = items.map((i) => i.latest.id);
+    const sectionAllSelected =
+      sectionIds.length > 0 && sectionIds.every((id) => selectedFileIds.has(id));
+    const sectionSomeSelected =
+      !sectionAllSelected && sectionIds.some((id) => selectedFileIds.has(id));
 
     return (
       <div key={label || category} className="mb-6">
@@ -411,6 +468,7 @@ export default function ClientProjectDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <colgroup>
+                <col style={{ width: "3rem" }} />
                 <col className="w-[40%]" />
                 <col className="w-[12%]" />
                 <col className="w-[15%]" />
@@ -419,6 +477,18 @@ export default function ClientProjectDetailPage() {
               </colgroup>
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                  <th className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={sectionAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = sectionSomeSelected;
+                      }}
+                      onChange={() => toggleSectionSelected(sectionIds)}
+                      aria-label="Select all in section"
+                      className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium text-slate-400">File</th>
                   <th className="px-4 py-3 font-medium text-slate-400">Size</th>
                   <th className="px-4 py-3 font-medium text-slate-400">Type</th>
@@ -443,24 +513,24 @@ export default function ClientProjectDetailPage() {
                             setPreviewFile(latest);
                           }
                         }}
-                        className={`transition-colors ${
+                        className={`transition-colors hover:bg-white/[0.03] ${
                           previewable || isUrlShortcut(latest.originalName) ? "cursor-pointer" : ""
-                        } ${
-                          latest.isCurrent
-                            ? "bg-green-500/[0.06] hover:bg-green-500/10"
-                            : "hover:bg-white/[0.03]"
-                        }`}
+                        } ${selectedFileIds.has(latest.id) ? "bg-brand-500/[0.06]" : ""}`}
                       >
+                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedFileIds.has(latest.id)}
+                            onChange={() => toggleFileSelected(latest.id)}
+                            aria-label={`Select ${fileName}`}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                          />
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-slate-100">
                               {fileName}
                             </span>
-                            {latest.isCurrent && (
-                              <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                                Current
-                              </span>
-                            )}
                             {latest.version > 1 && (
                               <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
                                 v{latest.version}
@@ -516,7 +586,7 @@ export default function ClientProjectDetailPage() {
                       {/* Version history expansion */}
                       {expandedGroup === latest.id && versionCount > 1 && (
                         <tr key={`${latest.id}-versions`}>
-                          <td colSpan={5} className="bg-white/[0.02] px-6 py-3">
+                          <td colSpan={6} className="bg-white/[0.02] px-6 py-3">
                             <div className="space-y-2">
                               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
                                 Version History
@@ -524,9 +594,18 @@ export default function ClientProjectDetailPage() {
                               {(versionHistory[latest.id] || []).map((v) => (
                                 <div
                                   key={v.id}
-                                  className="flex items-center justify-between rounded-lg bg-white/[0.03] px-4 py-2 border border-white/[0.06]"
+                                  className={`flex items-center justify-between rounded-lg px-4 py-2 border border-white/[0.06] ${
+                                    selectedFileIds.has(v.id) ? "bg-brand-500/[0.08]" : "bg-white/[0.03]"
+                                  }`}
                                 >
                                   <div className="flex items-center gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedFileIds.has(v.id)}
+                                      onChange={() => toggleFileSelected(v.id)}
+                                      aria-label={`Select version ${v.version}`}
+                                      className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                                    />
                                     <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
                                       v{v.version}
                                     </span>
@@ -681,7 +760,7 @@ export default function ClientProjectDetailPage() {
                         {/* Category pill – top left */}
                         <div className="absolute left-3 top-3">
                           <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
-                            {CATEGORY_LABELS[file.category]}
+                            {file.customCategory || CATEGORY_LABELS[file.category]}
                           </span>
                         </div>
 
@@ -710,7 +789,7 @@ export default function ClientProjectDetailPage() {
                         {/* Category pill – top left */}
                         <div className="absolute left-3 top-4">
                           <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
-                            {CATEGORY_LABELS[file.category]}
+                            {file.customCategory || CATEGORY_LABELS[file.category]}
                           </span>
                         </div>
 
@@ -819,25 +898,19 @@ export default function ClientProjectDetailPage() {
       {showDownloadModal && project && (
         <DownloadOptionsModal
           categories={CATEGORY_ORDER.map((cat) => {
-            const allFiles = project.files.filter(
-              (f) => f.category === cat && !f.customCategory
-            );
-            const currentFiles = allFiles.filter((f) => f.isCurrent);
-            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            const groups = categorized.standard[cat];
             return {
               category: cat,
-              count: currentFiles.length,
-              hasOldVersions: oldFiles.length > 0,
+              count: groups.length,
+              hasOldVersions: groups.some((g) => g.versionCount > 1),
             };
           })}
           customCategories={Object.keys(categorized.custom).map((name) => {
-            const allFiles = project.files.filter((f) => f.customCategory === name);
-            const currentFiles = allFiles.filter((f) => f.isCurrent);
-            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            const groups = categorized.custom[name];
             return {
               name,
-              count: currentFiles.length,
-              hasOldVersions: oldFiles.length > 0,
+              count: groups.length,
+              hasOldVersions: groups.some((g) => g.versionCount > 1),
             };
           })}
           onDownload={handleDownloadAll}
@@ -850,6 +923,35 @@ export default function ClientProjectDetailPage() {
           versions={versionHistory[compareTarget]}
           onClose={() => setCompareTarget(null)}
         />
+      )}
+
+      {/* Floating "Download Selected" action bar */}
+      {selectedFileIds.size > 0 && (
+        <div className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-gray-900/95 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <span className="px-2 text-sm font-medium text-slate-200">
+              {selectedFileIds.size} {selectedFileIds.size === 1 ? "file" : "files"} selected
+            </span>
+            <button
+              onClick={clearSelection}
+              className="rounded-full px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
+            >
+              Clear
+            </button>
+            <button
+              onClick={handleDownloadSelected}
+              disabled={downloadingSelected}
+              className="inline-flex items-center gap-2 rounded-full bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50"
+            >
+              {downloadingSelected ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Download Selected (.zip)
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

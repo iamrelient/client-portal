@@ -34,14 +34,18 @@ export async function GET(
     const url = new URL(req.url);
     const categoriesParam = url.searchParams.get("categories");
     const customCategoriesParam = url.searchParams.get("customCategories");
+    const fileIdsParam = url.searchParams.get("fileIds");
     const includeOldVersions = url.searchParams.get("includeOldVersions") === "true";
 
-    // Parse category filters
+    // Parse filters
     const categoryFilter = categoriesParam
       ? (categoriesParam.split(",").filter(Boolean) as FileCategory[])
       : null;
     const customCategoryFilter = customCategoriesParam
       ? customCategoriesParam.split(",").filter(Boolean)
+      : null;
+    const fileIdsFilter = fileIdsParam
+      ? fileIdsParam.split(",").filter(Boolean)
       : null;
 
     // Build file filter
@@ -49,10 +53,19 @@ export async function GET(
       presentationSections: { none: {} },
     };
 
-    // When either filter is present, match files in (standard categories) OR (custom categories).
-    // Files with a customCategory set are stored as category OTHER in the DB but
-    // should only match the custom filter, not the standard OTHER filter.
-    if (categoryFilter || customCategoryFilter) {
+    // Explicit fileIds take precedence: user selected specific files, zip exactly those.
+    if (fileIdsFilter) {
+      if (fileIdsFilter.length === 0) {
+        return NextResponse.json(
+          { error: "No files selected" },
+          { status: 400 }
+        );
+      }
+      fileWhere.id = { in: fileIdsFilter };
+    } else if (categoryFilter || customCategoryFilter) {
+      // When either filter is present, match files in (standard categories) OR (custom categories).
+      // Files with a customCategory set are stored as category OTHER in the DB but
+      // should only match the custom filter, not the standard OTHER filter.
       const orClauses: Record<string, unknown>[] = [];
       if (categoryFilter && categoryFilter.length > 0) {
         orClauses.push({
@@ -73,10 +86,6 @@ export async function GET(
       }
     }
 
-    if (!includeOldVersions) {
-      fileWhere.isCurrent = true;
-    }
-
     const project = await prisma.project.findUnique({
       where: { id: params.id },
       include: {
@@ -89,7 +98,6 @@ export async function GET(
             mimeType: true,
             category: true,
             customCategory: true,
-            isCurrent: true,
             version: true,
             fileGroupId: true,
           },
@@ -108,7 +116,23 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (project.files.length === 0) {
+    // Compute the highest version per fileGroupId so we can identify "latest"
+    // without relying on isCurrent (which now means "featured").
+    const maxVersionByGroup = new Map<string, number>();
+    for (const f of project.files) {
+      const key = f.fileGroupId || f.id;
+      const prev = maxVersionByGroup.get(key) ?? 0;
+      if (f.version > prev) maxVersionByGroup.set(key, f.version);
+    }
+
+    // Explicit file selections bypass version filtering — user chose those exact rows.
+    const filesToZip = fileIdsFilter || includeOldVersions
+      ? project.files
+      : project.files.filter(
+          (f) => f.version === maxVersionByGroup.get(f.fileGroupId || f.id)
+        );
+
+    if (filesToZip.length === 0) {
       return NextResponse.json(
         { error: "No files to download" },
         { status: 400 }
@@ -117,7 +141,9 @@ export async function GET(
 
     const zip = new JSZip();
 
-    for (const file of project.files) {
+    for (const file of filesToZip) {
+      const isLatestInGroup =
+        file.version === maxVersionByGroup.get(file.fileGroupId || file.id);
       try {
         const { stream } = await downloadFile(file.path);
 
@@ -145,8 +171,8 @@ export async function GET(
             ? file.originalName.slice(0, file.originalName.lastIndexOf("."))
             : file.originalName;
 
-          if (file.isCurrent) {
-            // Current files go in category root with version suffix
+          if (isLatestInGroup) {
+            // Latest versions go in category root with version suffix
             const versionedName =
               file.version > 1
                 ? `${baseName}_v${file.version}${ext}`
@@ -158,7 +184,7 @@ export async function GET(
             zip.file(`${folder}/Old Versions/${versionedName}`, buffer);
           }
         } else {
-          // Standard behavior: just current files, no version suffix
+          // Standard behavior: just latest versions, no version suffix
           zip.file(`${folder}/${file.originalName}`, buffer);
         }
       } catch (err) {

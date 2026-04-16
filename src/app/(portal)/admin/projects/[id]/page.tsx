@@ -875,7 +875,7 @@ export default function AdminProjectDetailPage() {
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
                   <th className="px-3 py-3 font-medium text-slate-400">
-                    <span className="sr-only">Current</span>
+                    <span className="sr-only">Featured</span>
                   </th>
                   <th className="px-4 py-3 font-medium text-slate-400">File</th>
                   <th className="px-4 py-3 font-medium text-slate-400">Size</th>
@@ -929,7 +929,7 @@ export default function AdminProjectDetailPage() {
                             disabled={togglingCurrent === latest.id}
                             onChange={() => handleToggleCurrent(latest.id, latest.isCurrent)}
                             className="h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-500 focus:ring-brand-500 cursor-pointer disabled:opacity-50"
-                            title="Mark as most up to date"
+                            title="Mark as featured"
                           />
                         </td>
                         <td className="px-6 py-4">
@@ -1007,7 +1007,7 @@ export default function AdminProjectDetailPage() {
                             </button>
                             {latest.isCurrent && (
                               <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                                Current
+                                Featured
                               </span>
                             )}
                             {latest.version > 1 && (
@@ -1277,7 +1277,7 @@ export default function AdminProjectDetailPage() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                       <div className="absolute left-3 top-3">
                         <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
-                          {CATEGORY_LABELS[file.category]}
+                          {file.customCategory || CATEGORY_LABELS[file.category]}
                         </span>
                       </div>
                       <div className="absolute inset-x-0 bottom-0 p-4">
@@ -1297,7 +1297,7 @@ export default function AdminProjectDetailPage() {
                       <div className={`h-1.5 w-full bg-gradient-to-r ${accent}`} />
                       <div className="absolute left-3 top-4">
                         <span className={`inline-flex items-center rounded-full bg-gradient-to-r ${accent} px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm`}>
-                          {CATEGORY_LABELS[file.category]}
+                          {file.customCategory || CATEGORY_LABELS[file.category]}
                         </span>
                       </div>
                       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
@@ -1855,26 +1855,19 @@ export default function AdminProjectDetailPage() {
       {showDownloadModal && project && (
         <DownloadOptionsModal
           categories={CATEGORY_ORDER.map((cat) => {
-            // Exclude files with a customCategory set — they're counted separately below
-            const allFiles = project.files.filter(
-              (f) => f.category === cat && !f.customCategory
-            );
-            const currentFiles = allFiles.filter((f) => f.isCurrent);
-            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            const groups = categorized.standard[cat];
             return {
               category: cat,
-              count: currentFiles.length,
-              hasOldVersions: oldFiles.length > 0,
+              count: groups.length,
+              hasOldVersions: groups.some((g) => g.versionCount > 1),
             };
           })}
           customCategories={Object.keys(categorized.custom).map((name) => {
-            const allFiles = project.files.filter((f) => f.customCategory === name);
-            const currentFiles = allFiles.filter((f) => f.isCurrent);
-            const oldFiles = allFiles.filter((f) => !f.isCurrent);
+            const groups = categorized.custom[name];
             return {
               name,
-              count: currentFiles.length,
-              hasOldVersions: oldFiles.length > 0,
+              count: groups.length,
+              hasOldVersions: groups.some((g) => g.versionCount > 1),
             };
           })}
           onDownload={handleDownloadAll}
