@@ -374,9 +374,9 @@ export default function DashboardPage() {
         </div>
       );
     }
-    // Multi-company: each group gets its own bordered container so a
-    // one-project group doesn't look like a half-empty row. Inside, cards
-    // flow with a fixed width so they stay visually consistent across groups.
+    // Multi-company: each group gets its own bordered container so the
+    // heading and its cards read as one block. The card grid itself is
+    // unchanged — same 3-column responsive layout as the flat view.
     return (
       <div className="space-y-4">
         {groups.map((group) => (
@@ -385,12 +385,8 @@ export default function DashboardPage() {
             className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl"
           >
             {renderCompanyHeading(group)}
-            <div className="flex flex-wrap gap-6">
-              {group.projects.map((p) => (
-                <div key={p.id} className="w-full sm:w-[22rem]">
-                  {renderActiveCard(p)}
-                </div>
-              ))}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {group.projects.map(renderActiveCard)}
             </div>
           </section>
         ))}
