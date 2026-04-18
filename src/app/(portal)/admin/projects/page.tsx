@@ -14,10 +14,39 @@ interface ProjectRow {
   id: string;
   name: string;
   company: string | null;
+  companyLogoPath: string | null;
   thumbnailPath: string | null;
   authorizedEmails: string[];
   createdAt: string;
   _count: { files: number };
+}
+
+const NO_COMPANY_KEY = "__none__";
+
+/** Group projects by company, returning entries sorted alphabetically with
+ *  "No company" placed last. Each group's projects keep their API order. */
+function groupProjectsByCompany(
+  projects: ProjectRow[]
+): { company: string | null; projects: ProjectRow[] }[] {
+  const groups = new Map<string, ProjectRow[]>();
+  for (const p of projects) {
+    const key = p.company?.trim() || NO_COMPANY_KEY;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
+  }
+
+  const named: { company: string; projects: ProjectRow[] }[] = [];
+  let unnamed: ProjectRow[] | null = null;
+  groups.forEach((list, key) => {
+    if (key === NO_COMPANY_KEY) unnamed = list;
+    else named.push({ company: key, projects: list });
+  });
+
+  named.sort((a, b) => a.company.localeCompare(b.company, undefined, { sensitivity: "base" }));
+
+  const result: { company: string | null; projects: ProjectRow[] }[] = named;
+  if (unnamed) result.push({ company: null, projects: unnamed });
+  return result;
 }
 
 export default function AdminProjectsPage() {
@@ -198,57 +227,86 @@ export default function AdminProjectsPage() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                <th className="px-6 py-3 font-medium text-slate-400">Project</th>
-                <th className="px-6 py-3 font-medium text-slate-400">Company</th>
-                <th className="px-6 py-3 font-medium text-slate-400">Files</th>
-                <th className="px-6 py-3 font-medium text-slate-400">Access</th>
-                <th className="px-6 py-3 font-medium text-slate-400">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.06]">
-              {projects.map((project) => (
-                <tr key={project.id} onClick={() => router.push(`/admin/projects/${project.id}`)} className="cursor-pointer hover:bg-white/[0.03] transition-colors">
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-slate-100">{project.name}</p>
-                  </td>
-                  <td className="px-6 py-4 text-slate-400">
-                    {project.company || "--"}
-                  </td>
-                  <td className="px-6 py-4 text-slate-400">
-                    {project._count.files}
-                  </td>
-                  <td className="px-6 py-4 text-slate-400">
-                    <span className="max-w-[200px] truncate block">
-                      {project.authorizedEmails.length > 0
-                        ? project.authorizedEmails.join(", ")
-                        : "--"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-slate-400">
-                    {formatRelativeDate(project.createdAt)}
-                  </td>
-                </tr>
-              ))}
-              {projects.length === 0 && (
-                <tr>
-                  <td colSpan={5}>
-                    <EmptyState
-                      icon={FolderOpen}
-                      title="No projects yet"
-                      description="Create your first project using the form above"
-                    />
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {projects.length === 0 ? (
+        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
+          <EmptyState
+            icon={FolderOpen}
+            title="No projects yet"
+            description="Create your first project using the form above"
+          />
         </div>
-      </div>
+      ) : (
+        <div className="space-y-6">
+          {groupProjectsByCompany(projects).map(({ company, projects: rows }) => {
+            // Pull a logo URL from any project in this group that has one.
+            const withLogo = rows.find((p) => p.companyLogoPath);
+            const logoSrc = withLogo
+              ? `/api/projects/${withLogo.id}/company-logo`
+              : null;
+
+            return (
+              <section key={company ?? NO_COMPANY_KEY}>
+                <div className="mb-3 flex items-center gap-2.5">
+                  {logoSrc && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoSrc}
+                      alt={company ?? ""}
+                      className="h-6 w-6 rounded object-contain bg-white/[0.05] p-0.5"
+                    />
+                  )}
+                  <h2 className="text-base font-semibold text-slate-100">
+                    {company ?? "No company"}
+                  </h2>
+                  <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
+                    {rows.length}
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                          <th className="px-6 py-3 font-medium text-slate-400">Project</th>
+                          <th className="px-6 py-3 font-medium text-slate-400">Files</th>
+                          <th className="px-6 py-3 font-medium text-slate-400">Access</th>
+                          <th className="px-6 py-3 font-medium text-slate-400">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06]">
+                        {rows.map((project) => (
+                          <tr
+                            key={project.id}
+                            onClick={() => router.push(`/admin/projects/${project.id}`)}
+                            className="cursor-pointer hover:bg-white/[0.03] transition-colors"
+                          >
+                            <td className="px-6 py-4">
+                              <p className="font-medium text-slate-100">{project.name}</p>
+                            </td>
+                            <td className="px-6 py-4 text-slate-400">
+                              {project._count.files}
+                            </td>
+                            <td className="px-6 py-4 text-slate-400">
+                              <span className="max-w-[200px] truncate block">
+                                {project.authorizedEmails.length > 0
+                                  ? project.authorizedEmails.join(", ")
+                                  : "--"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-400">
+                              {formatRelativeDate(project.createdAt)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
