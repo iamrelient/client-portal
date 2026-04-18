@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ChevronDown, ChevronRight, Download, Eye, FileX, Folder as FolderIcon, FolderPlus, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
@@ -284,6 +284,11 @@ export default function AdminProjectDetailPage() {
   const [renameFolderName, setRenameFolderName] = useState("");
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [movingFileId, setMovingFileId] = useState<string | null>(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+
+  // Bulk action state
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   // Client activity
   const [showActivity, setShowActivity] = useState(false);
@@ -679,6 +684,116 @@ export default function AdminProjectDetailPage() {
     setMovingFileId(null);
   }
 
+  function toggleAdminFolderExpanded(folderId: string) {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  }
+
+  function toggleFileSelected(fileId: string) {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  }
+
+  function toggleGroupSelected(ids: string[]) {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedFileIds(new Set());
+  }
+
+  /** Patch a list of files in parallel with the same body. */
+  async function bulkPatchFiles(ids: string[], body: Record<string, unknown>) {
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        fetch(`/api/files/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `Failed: ${id}`);
+          }
+        })
+      )
+    );
+    const failures = results.filter((r) => r.status === "rejected").length;
+    return { failures };
+  }
+
+  async function handleBulkMoveToFolder(folderId: string | null) {
+    const ids = Array.from(selectedFileIds);
+    if (ids.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      const { failures } = await bulkPatchFiles(ids, { folderId });
+      if (failures > 0) {
+        toast.error(`${failures} file${failures === 1 ? "" : "s"} failed to move`);
+      } else {
+        toast.success(
+          folderId
+            ? `Moved ${ids.length} file${ids.length === 1 ? "" : "s"} to folder`
+            : `Removed ${ids.length} file${ids.length === 1 ? "" : "s"} from folder`
+        );
+      }
+      clearSelection();
+      loadProject();
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setBulkUpdating(false);
+  }
+
+  async function handleBulkChangeCategory(value: string) {
+    const ids = Array.from(selectedFileIds);
+    if (ids.length === 0 || !value) return;
+    let body: Record<string, unknown>;
+    if (value.startsWith("__EXISTING_CUSTOM__:")) {
+      body = {
+        category: "OTHER",
+        customCategory: value.slice("__EXISTING_CUSTOM__:".length),
+      };
+    } else {
+      body = { category: value, customCategory: null };
+    }
+    setBulkUpdating(true);
+    try {
+      const { failures } = await bulkPatchFiles(ids, body);
+      if (failures > 0) {
+        toast.error(
+          `${failures} file${failures === 1 ? "" : "s"} failed to update`
+        );
+      } else {
+        toast.success(
+          `Updated category for ${ids.length} file${ids.length === 1 ? "" : "s"}`
+        );
+      }
+      clearSelection();
+      loadProject();
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setBulkUpdating(false);
+  }
+
   async function handleToggleCurrent(fileId: string, currentValue: boolean) {
     setTogglingCurrent(fileId);
     try {
@@ -988,75 +1103,65 @@ export default function AdminProjectDetailPage() {
     const sectionKey = folderSectionKey(category, customCategoryName);
     const isAddingFolder = folderFormKey === sectionKey;
 
+    const looseItems = sectionItems.filter((i) => !i.latest.folderId);
+    const folderItemsByFolder = new Map<
+      string,
+      { latest: ProjectFile; versionCount: number }[]
+    >();
+    for (const item of sectionItems) {
+      if (item.latest.folderId) {
+        const arr = folderItemsByFolder.get(item.latest.folderId) || [];
+        arr.push(item);
+        folderItemsByFolder.set(item.latest.folderId, arr);
+      }
+    }
+
+    const sectionFileIds = sectionItems.map((i) => i.latest.id);
+    const sectionAllSelected =
+      sectionFileIds.length > 0 && sectionFileIds.every((id) => selectedFileIds.has(id));
+    const sectionSomeSelected =
+      !sectionAllSelected && sectionFileIds.some((id) => selectedFileIds.has(id));
+
+    // Flat list of rows to render: loose files first, then for each folder
+    // a divider entry followed by its files (only when expanded or empty).
+    type DisplayEntry =
+      | { kind: "file"; latest: ProjectFile; versionCount: number }
+      | {
+          kind: "divider";
+          folder: ProjectFolder;
+          count: number;
+          isEmpty: boolean;
+          isExpanded: boolean;
+        };
+    const displayEntries: DisplayEntry[] = [
+      ...looseItems.map(
+        (i) => ({ kind: "file", ...i }) as DisplayEntry
+      ),
+      ...sectionFolders.flatMap<DisplayEntry>((folder) => {
+        const fItems = folderItemsByFolder.get(folder.id) || [];
+        const isEmpty = fItems.length === 0;
+        const isExpanded = expandedFolderIds.has(folder.id);
+        const divider: DisplayEntry = {
+          kind: "divider",
+          folder,
+          count: fItems.length,
+          isEmpty,
+          isExpanded,
+        };
+        if (!isExpanded || isEmpty) return [divider];
+        return [
+          divider,
+          ...fItems.map((i) => ({ kind: "file", ...i }) as DisplayEntry),
+        ];
+      }),
+    ];
+
     return (
       <div key={label || category} className="mb-6">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold text-slate-100">
             {label || CATEGORY_LABELS[category]}
           </h2>
-          {sectionFolders.map((folder) =>
-            renamingFolderId === folder.id ? (
-              <span
-                key={folder.id}
-                className="inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/10 px-2 py-0.5"
-              >
-                <FolderIcon className="h-3.5 w-3.5 text-brand-300" />
-                <input
-                  type="text"
-                  value={renameFolderName}
-                  onChange={(e) => setRenameFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleRenameFolder(folder.id);
-                    if (e.key === "Escape") setRenamingFolderId(null);
-                  }}
-                  autoFocus
-                  className="w-32 bg-transparent text-xs text-slate-100 focus:outline-none"
-                />
-                <button
-                  onClick={() => handleRenameFolder(folder.id)}
-                  className="text-xs font-medium text-brand-300 hover:text-brand-200"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setRenamingFolderId(null)}
-                  className="text-xs text-slate-400 hover:text-slate-200"
-                >
-                  Cancel
-                </button>
-              </span>
-            ) : (
-              <span
-                key={folder.id}
-                className="group/folder inline-flex items-center gap-1 rounded-full border border-white/[0.1] bg-white/[0.05] px-2 py-0.5 text-xs text-slate-300"
-              >
-                <FolderIcon className="h-3.5 w-3.5 text-slate-400" />
-                {folder.name}
-                <button
-                  onClick={() => {
-                    setRenamingFolderId(folder.id);
-                    setRenameFolderName(folder.name);
-                  }}
-                  className="ml-0.5 rounded p-0.5 text-slate-400 opacity-0 transition-opacity group-hover/folder:opacity-100 hover:bg-white/[0.06] hover:text-slate-200"
-                  title="Rename"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-                <button
-                  onClick={() => handleDeleteFolder(folder)}
-                  disabled={deletingFolderId === folder.id}
-                  className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity group-hover/folder:opacity-100 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
-                  title="Delete"
-                >
-                  {deletingFolderId === folder.id ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
-                </button>
-              </span>
-            )
-          )}
           {isAddingFolder ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/10 px-2 py-0.5">
               <FolderPlus className="h-3.5 w-3.5 text-brand-300" />
@@ -1109,8 +1214,9 @@ export default function AdminProjectDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <colgroup>
+                <col style={{ width: "3rem" }} />
                 <col className="w-[3%]" />
-                <col className="w-[35%]" />
+                <col className="w-[32%]" />
                 <col className="w-[8%]" />
                 <col className="w-[8%]" />
                 <col className="w-[16%]" />
@@ -1119,6 +1225,18 @@ export default function AdminProjectDetailPage() {
               </colgroup>
               <thead>
                 <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                  <th className="px-3 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={sectionAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = sectionSomeSelected;
+                      }}
+                      onChange={() => toggleGroupSelected(sectionFileIds)}
+                      aria-label="Select all in section"
+                      className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                    />
+                  </th>
                   <th className="px-3 py-3 font-medium text-slate-400">
                     <span className="sr-only">Featured</span>
                   </th>
@@ -1133,12 +1251,114 @@ export default function AdminProjectDetailPage() {
               <tbody className="divide-y divide-white/[0.06]">
                 {sectionItems.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={8} className="px-6 py-8 text-center text-sm text-slate-400">
                       No files in this category
                     </td>
                   </tr>
                 )}
-                {sectionItems.map(({ latest, versionCount }) => {
+                {displayEntries.map((entry) => {
+                  if (entry.kind === "divider") {
+                    const { folder, count, isEmpty, isExpanded } = entry;
+                    return (
+                      <Fragment key={`folder-divider-${folder.id}`}>
+                        <tr
+                          onClick={() =>
+                            !isEmpty && toggleAdminFolderExpanded(folder.id)
+                          }
+                          className={`bg-white/[0.04] transition-colors ${
+                            isEmpty ? "" : "cursor-pointer hover:bg-white/[0.06]"
+                          }`}
+                        >
+                          <td
+                            colSpan={8}
+                            className="px-3 py-2.5 text-sm font-medium text-slate-200"
+                          >
+                            <div className="group/divider flex items-center gap-2">
+                              {isEmpty ? (
+                                <span className="inline-block h-4 w-4" />
+                              ) : isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-slate-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-slate-400" />
+                              )}
+                              <FolderIcon className="h-4 w-4 text-brand-400" />
+                              {renamingFolderId === folder.id ? (
+                                <input
+                                  type="text"
+                                  value={renameFolderName}
+                                  onChange={(e) => setRenameFolderName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleRenameFolder(folder.id);
+                                    if (e.key === "Escape") setRenamingFolderId(null);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  autoFocus
+                                  className="rounded-md border border-brand-500 bg-[#1a1d2e] px-2 py-0.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                />
+                              ) : (
+                                <span>{folder.name}</span>
+                              )}
+                              <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-normal text-slate-400">
+                                {count}
+                              </span>
+                              {isEmpty && (
+                                <span className="text-xs italic text-slate-500">
+                                  empty
+                                </span>
+                              )}
+                              <div
+                                className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover/divider:opacity-100"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {renamingFolderId === folder.id ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleRenameFolder(folder.id)}
+                                      className="rounded px-2 py-0.5 text-xs font-medium text-brand-300 hover:bg-brand-500/10"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={() => setRenamingFolderId(null)}
+                                      className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-white/[0.05] hover:text-slate-200"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setRenamingFolderId(folder.id);
+                                        setRenameFolderName(folder.name);
+                                      }}
+                                      className="rounded p-1 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200"
+                                      title="Rename folder"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFolder(folder)}
+                                      disabled={deletingFolderId === folder.id}
+                                      className="rounded p-1 text-slate-400 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                                      title="Delete folder"
+                                    >
+                                      {deletingFolderId === folder.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </Fragment>
+                    );
+                  }
+                  const { latest, versionCount } = entry;
                   const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
                   const fileName = latest.displayName || latest.originalName;
                   const isDragOver = dragOverFileId === latest.id;
@@ -1148,7 +1368,9 @@ export default function AdminProjectDetailPage() {
                       <tr
                         key={latest.id}
                         className={`transition-colors cursor-pointer ${
-                          latest.isCurrent
+                          selectedFileIds.has(latest.id)
+                            ? "bg-brand-500/[0.08] hover:bg-brand-500/10"
+                            : latest.isCurrent
                             ? "bg-green-500/[0.06] hover:bg-green-500/10"
                             : isDragOver
                               ? "bg-brand-500/10 ring-2 ring-inset ring-brand-400"
@@ -1167,6 +1389,15 @@ export default function AdminProjectDetailPage() {
                         onDragLeave={handleDragLeave}
                         onDrop={(e) => handleDropOnFile(e, latest)}
                       >
+                        <td className="px-3 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedFileIds.has(latest.id)}
+                            onChange={() => toggleFileSelected(latest.id)}
+                            aria-label={`Select ${fileName}`}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                          />
+                        </td>
                         <td className="px-3 py-4 text-center">
                           <input
                             type="checkbox"
@@ -1395,7 +1626,7 @@ export default function AdminProjectDetailPage() {
                       {/* Version history expansion */}
                       {expandedGroup === latest.id && versionCount > 1 && (
                         <tr key={`${latest.id}-versions`}>
-                          <td colSpan={7} className="bg-white/[0.02] px-6 py-3">
+                          <td colSpan={8} className="bg-white/[0.02] px-6 py-3">
                             <div className="space-y-2">
                               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
                                 Version History
@@ -2178,6 +2409,99 @@ export default function AdminProjectDetailPage() {
           onClose={() => setCompareTarget(null)}
         />
       )}
+
+      {/* Bulk action bar — floats at bottom when any file is selected */}
+      {selectedFileIds.size > 0 && project && (() => {
+        // Group folders by category for the "Move to folder" optgroups.
+        const byCat = new Map<string, ProjectFolder[]>();
+        for (const f of project.folders || []) {
+          const key = f.customCategory
+            ? `Custom · ${f.customCategory}`
+            : CATEGORY_LABELS[f.category];
+          const arr = byCat.get(key) || [];
+          arr.push(f);
+          byCat.set(key, arr);
+        }
+        const catEntries = Array.from(byCat.entries()).sort(([a], [b]) =>
+          a.localeCompare(b)
+        );
+        const existingCustom = Object.keys(categorized.custom);
+
+        return (
+          <div className="fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 pointer-events-none">
+            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-gray-900/95 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+              <span className="px-2 text-sm font-medium text-slate-200">
+                {selectedFileIds.size} selected
+              </span>
+              <select
+                value=""
+                disabled={bulkUpdating}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  handleBulkMoveToFolder(v === "__NONE__" ? null : v);
+                  e.currentTarget.value = "";
+                }}
+                className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-1.5 text-sm text-slate-200 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+              >
+                <option value="" disabled>
+                  Move to folder…
+                </option>
+                <option value="__NONE__">— No folder —</option>
+                {catEntries.map(([label, folders]) => (
+                  <optgroup key={label} label={label}>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <select
+                value=""
+                disabled={bulkUpdating}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  handleBulkChangeCategory(v);
+                  e.currentTarget.value = "";
+                }}
+                className="rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-1.5 text-sm text-slate-200 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+              >
+                <option value="" disabled>
+                  Change category…
+                </option>
+                <option value="RENDER">Renders</option>
+                <option value="DRAWING">Drawings</option>
+                <option value="CAD_DRAWING">CAD Drawings</option>
+                <option value="SUPPORTING">Supporting Docs</option>
+                <option value="DESIGN_INSPIRATION">Design Inspirations</option>
+                <option value="OTHER">Others</option>
+                {existingCustom.length > 0 && (
+                  <optgroup label="Custom">
+                    {existingCustom.map((name) => (
+                      <option key={name} value={`__EXISTING_CUSTOM__:${name}`}>
+                        {name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              {bulkUpdating && (
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+              )}
+              <button
+                onClick={clearSelection}
+                disabled={bulkUpdating}
+                className="rounded-full px-3 py-1.5 text-sm text-slate-400 hover:bg-white/[0.05] hover:text-slate-200 disabled:opacity-50"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -229,6 +229,16 @@ export default function ClientProjectDetailPage() {
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [downloadingSelected, setDownloadingSelected] = useState(false);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+
+  function toggleFolderExpanded(folderId: string) {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  }
 
   // Featured carousel scroll state
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -688,17 +698,31 @@ export default function ClientProjectDetailPage() {
                 {renderFileRows(looseItems)}
                 {sectionFolders.map((folder) => {
                   const folderItems = folderItemsByFolder.get(folder.id) || [];
+                  const isExpanded = expandedFolderIds.has(folder.id);
+                  const isEmpty = folderItems.length === 0;
                   return (
                     <>
                       <tr
                         key={`folder-divider-${folder.id}`}
-                        className="bg-white/[0.03]"
+                        onClick={() => !isEmpty && toggleFolderExpanded(folder.id)}
+                        className={`bg-white/[0.04] transition-colors ${
+                          isEmpty
+                            ? ""
+                            : "cursor-pointer hover:bg-white/[0.06]"
+                        }`}
                       >
                         <td
                           colSpan={6}
                           className="px-4 py-2.5 text-sm font-medium text-slate-200"
                         >
                           <span className="inline-flex items-center gap-2">
+                            {isEmpty ? (
+                              <span className="inline-block h-4 w-4" />
+                            ) : isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-slate-400" />
+                            )}
                             <FolderIcon className="h-4 w-4 text-brand-400" />
                             {folder.name}
                             <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-normal text-slate-400">
@@ -707,18 +731,18 @@ export default function ClientProjectDetailPage() {
                           </span>
                         </td>
                       </tr>
-                      {folderItems.length === 0 ? (
+                      {isEmpty ? (
                         <tr key={`folder-empty-${folder.id}`}>
                           <td
                             colSpan={6}
-                            className="px-6 py-3 text-xs italic text-slate-500"
+                            className="px-12 py-3 text-xs italic text-slate-500"
                           >
                             Empty folder
                           </td>
                         </tr>
-                      ) : (
+                      ) : isExpanded ? (
                         renderFileRows(folderItems)
-                      )}
+                      ) : null}
                     </>
                   );
                 })}

@@ -82,7 +82,12 @@ export async function PATCH(
             nextFolderId
               ? prisma.projectFolder.findUnique({
                   where: { id: nextFolderId },
-                  select: { driveFolderId: true, projectId: true },
+                  select: {
+                    driveFolderId: true,
+                    projectId: true,
+                    category: true,
+                    customCategory: true,
+                  },
                 })
               : Promise.resolve(null),
             file.projectId
@@ -116,6 +121,45 @@ export async function PATCH(
           }
 
           data.folderId = nextFolderId;
+
+          // Keep the file's category in sync with the folder it's moving into.
+          // Folders are scoped to (category, customCategory) so a file living
+          // in a folder must share that category. Caller-supplied category
+          // still wins if they explicitly set one in the same PATCH.
+          if (newFolder && !("category" in body) && !("customCategory" in body)) {
+            data.category = newFolder.category;
+            data.customCategory = newFolder.customCategory;
+          }
+        }
+      }
+
+      // If the file's category or customCategory changed and it no longer
+      // matches the folder it lives in, detach the folder automatically.
+      const nextCategory =
+        "category" in body ? (data.category as string | undefined) : undefined;
+      const nextCustomCategory =
+        "customCategory" in body
+          ? (data.customCategory as string | null | undefined)
+          : undefined;
+      const categoryChanged = nextCategory !== undefined && nextCategory !== file.category;
+      const customChanged =
+        nextCustomCategory !== undefined && nextCustomCategory !== file.customCategory;
+      if ((categoryChanged || customChanged) && !("folderId" in body) && file.folderId) {
+        const currentFolder = await prisma.projectFolder.findUnique({
+          where: { id: file.folderId },
+          select: { category: true, customCategory: true },
+        });
+        if (currentFolder) {
+          const effectiveCategory =
+            nextCategory !== undefined ? nextCategory : file.category;
+          const effectiveCustom =
+            nextCustomCategory !== undefined ? nextCustomCategory : file.customCategory;
+          if (
+            currentFolder.category !== effectiveCategory ||
+            (currentFolder.customCategory ?? null) !== (effectiveCustom ?? null)
+          ) {
+            data.folderId = null;
+          }
         }
       }
     }
