@@ -25,6 +25,34 @@ interface ProjectCard {
   _count: { files: number };
 }
 
+const NO_COMPANY_KEY = "__none__";
+
+/** Group projects by company, alphabetically with "No company" last. */
+function groupProjectsByCompany(
+  projects: ProjectCard[]
+): { company: string | null; projects: ProjectCard[] }[] {
+  const groups = new Map<string, ProjectCard[]>();
+  for (const p of projects) {
+    const key = p.company?.trim() || NO_COMPANY_KEY;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
+  }
+
+  const named: { company: string; projects: ProjectCard[] }[] = [];
+  let unnamed: ProjectCard[] | null = null;
+  groups.forEach((list, key) => {
+    if (key === NO_COMPANY_KEY) unnamed = list;
+    else named.push({ company: key, projects: list });
+  });
+  named.sort((a, b) =>
+    a.company.localeCompare(b.company, undefined, { sensitivity: "base" })
+  );
+
+  const result: { company: string | null; projects: ProjectCard[] }[] = named;
+  if (unnamed) result.push({ company: null, projects: unnamed });
+  return result;
+}
+
 function isRecentlyUpdated(lastFileAt: string | null): boolean {
   if (!lastFileAt) return false;
   const diff = Date.now() - new Date(lastFileAt).getTime();
@@ -159,148 +187,223 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Active projects — standard card grid */}
-          {active.length > 0 && (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {active.map((project) => (
-                <div key={project.id} className="relative">
-                  <Link href={isAdmin ? `/admin/projects/${project.id}` : `/dashboard/projects/${project.id}`}>
-                    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] hover:border-brand-500/30 hover:shadow-[0_0_20px_rgba(74,97,153,0.15)] transition-all duration-300">
-                      <div className="relative aspect-video bg-white/[0.02]">
-                        {project.thumbnailPath ? (
-                          <BlurImage
-                            src={`/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`}
-                            alt={project.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <ProjectThumbnail name={project.name} />
-                        )}
-                        {isRecentlyUpdated(project.lastFileAt) && (
-                          <span className="absolute top-2 left-2 inline-flex items-center rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
-                            Recently Updated
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-slate-100">{project.name}</h3>
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColorClass(project.status)}`}
-                          >
-                            {getStatusLabel(project.status)}
-                          </span>
-                        </div>
-                        {project.company && (
-                          <div className="mt-0.5 flex items-center gap-1.5">
-                            {project.companyLogoPath && (
-                              <img
-                                src={`/api/projects/${project.id}/company-logo`}
-                                alt=""
-                                className="h-4 w-4 rounded object-contain"
-                              />
-                            )}
-                            <p className="text-sm text-slate-400">{project.company}</p>
-                          </div>
-                        )}
-                        <p className="mt-1 text-sm text-slate-400">
-                          {project._count.files} file{project._count.files !== 1 ? "s" : ""}
-                        </p>
-                        {project.updatedAt && (
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            Updated {formatRelativeDate(project.updatedAt)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                  {isAdmin && (
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        copyProjectLink(project, setCopiedId);
-                      }}
-                      className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white/70 hover:bg-black/80 hover:text-white backdrop-blur-sm transition-colors"
-                      title="Copy client link"
-                    >
-                      {copiedId === project.id ? (
-                        <Check className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Active projects — standard card grid, grouped by company when >1 */}
+          {active.length > 0 && renderActiveSection(active)}
 
-          {/* Completed projects — compact horizontal rows */}
+          {/* Completed projects — compact rows, grouped by company when >1 */}
           {completed.length > 0 && (
             <div className={active.length > 0 ? "mt-10" : ""}>
               <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-500">
                 Completed
               </h2>
-              <div className="space-y-2">
-                {completed.map((project) => (
-                  <div key={project.id} className="relative">
-                    <Link href={isAdmin ? `/admin/projects/${project.id}` : `/dashboard/projects/${project.id}`}>
-                      <div className="flex items-center gap-4 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-4 py-3 hover:bg-white/[0.05] hover:border-brand-500/30 transition-all duration-300">
-                        <div className="h-10 w-16 flex-shrink-0 overflow-hidden rounded-md bg-white/[0.02]">
-                          {project.thumbnailPath ? (
-                            <BlurImage
-                              src={`/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`}
-                              alt={project.name}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <ProjectThumbnail name={project.name} compact />
-                          )}
-                        </div>
-                        <h3 className="flex-1 truncate font-medium text-sm text-slate-300">
-                          {project.name}
-                        </h3>
-                        {project.company && (
-                          <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
-                            {project.companyLogoPath && (
-                              <img
-                                src={`/api/projects/${project.id}/company-logo`}
-                                alt=""
-                                className="h-3.5 w-3.5 rounded object-contain flex-shrink-0"
-                              />
-                            )}
-                            <span className="truncate">{project.company}</span>
-                          </span>
-                        )}
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 ${getStatusColorClass(project.status)}`}>
-                          {getStatusLabel(project.status)}
-                        </span>
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              copyProjectLink(project, setCopiedId);
-                            }}
-                            className="flex-shrink-0 rounded-md p-1 text-slate-500 hover:bg-white/[0.06] hover:text-slate-300 transition-colors"
-                            title="Copy client link"
-                          >
-                            {copiedId === project.id ? (
-                              <Check className="h-3.5 w-3.5 text-green-400" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </Link>
-                  </div>
-                ))}
-              </div>
+              {renderCompletedSection(completed)}
             </div>
           )}
         </>
       )}
     </div>
   );
+
+  /** Company heading rendered above each group when multiple companies are present. */
+  function renderCompanyHeading(
+    group: { company: string | null; projects: ProjectCard[] }
+  ) {
+    const withLogo = group.projects.find((p) => p.companyLogoPath);
+    const logoSrc = withLogo
+      ? `/api/projects/${withLogo.id}/company-logo`
+      : null;
+    return (
+      <div className="mb-3 flex items-center gap-2.5">
+        {logoSrc && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoSrc}
+            alt={group.company ?? ""}
+            className="h-6 w-6 rounded object-contain bg-white/[0.05] p-0.5"
+          />
+        )}
+        <h3 className="text-base font-semibold text-slate-100">
+          {group.company ?? "No company"}
+        </h3>
+        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
+          {group.projects.length}
+        </span>
+      </div>
+    );
+  }
+
+  function renderActiveCard(project: ProjectCard) {
+    return (
+      <div key={project.id} className="relative">
+        <Link href={isAdmin ? `/admin/projects/${project.id}` : `/dashboard/projects/${project.id}`}>
+          <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl hover:bg-white/[0.05] hover:border-brand-500/30 hover:shadow-[0_0_20px_rgba(74,97,153,0.15)] transition-all duration-300">
+            <div className="relative aspect-video bg-white/[0.02]">
+              {project.thumbnailPath ? (
+                <BlurImage
+                  src={`/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`}
+                  alt={project.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ProjectThumbnail name={project.name} />
+              )}
+              {isRecentlyUpdated(project.lastFileAt) && (
+                <span className="absolute top-2 left-2 inline-flex items-center rounded-full bg-brand-500 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
+                  Recently Updated
+                </span>
+              )}
+            </div>
+            <div className="p-4">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-slate-100">{project.name}</h3>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColorClass(project.status)}`}
+                >
+                  {getStatusLabel(project.status)}
+                </span>
+              </div>
+              {project.company && (
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  {project.companyLogoPath && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/projects/${project.id}/company-logo`}
+                      alt=""
+                      className="h-4 w-4 rounded object-contain"
+                    />
+                  )}
+                  <p className="text-sm text-slate-400">{project.company}</p>
+                </div>
+              )}
+              <p className="mt-1 text-sm text-slate-400">
+                {project._count.files} file{project._count.files !== 1 ? "s" : ""}
+              </p>
+              {project.updatedAt && (
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Updated {formatRelativeDate(project.updatedAt)}
+                </p>
+              )}
+            </div>
+          </div>
+        </Link>
+        {isAdmin && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              copyProjectLink(project, setCopiedId);
+            }}
+            className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white/70 hover:bg-black/80 hover:text-white backdrop-blur-sm transition-colors"
+            title="Copy client link"
+          >
+            {copiedId === project.id ? (
+              <Check className="h-4 w-4 text-green-400" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  function renderCompletedRow(project: ProjectCard) {
+    return (
+      <div key={project.id} className="relative">
+        <Link href={isAdmin ? `/admin/projects/${project.id}` : `/dashboard/projects/${project.id}`}>
+          <div className="flex items-center gap-4 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl px-4 py-3 hover:bg-white/[0.05] hover:border-brand-500/30 transition-all duration-300">
+            <div className="h-10 w-16 flex-shrink-0 overflow-hidden rounded-md bg-white/[0.02]">
+              {project.thumbnailPath ? (
+                <BlurImage
+                  src={`/api/projects/${project.id}/thumbnail?v=${encodeURIComponent(project.thumbnailPath)}`}
+                  alt={project.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ProjectThumbnail name={project.name} compact />
+              )}
+            </div>
+            <h3 className="flex-1 truncate font-medium text-sm text-slate-300">
+              {project.name}
+            </h3>
+            {project.company && (
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 truncate max-w-[180px]">
+                {project.companyLogoPath && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/projects/${project.id}/company-logo`}
+                    alt=""
+                    className="h-3.5 w-3.5 rounded object-contain flex-shrink-0"
+                  />
+                )}
+                <span className="truncate">{project.company}</span>
+              </span>
+            )}
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 ${getStatusColorClass(project.status)}`}>
+              {getStatusLabel(project.status)}
+            </span>
+            {isAdmin && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  copyProjectLink(project, setCopiedId);
+                }}
+                className="flex-shrink-0 rounded-md p-1 text-slate-500 hover:bg-white/[0.06] hover:text-slate-300 transition-colors"
+                title="Copy client link"
+              >
+                {copiedId === project.id ? (
+                  <Check className="h-3.5 w-3.5 text-green-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+        </Link>
+      </div>
+    );
+  }
+
+  function renderActiveSection(rows: ProjectCard[]) {
+    const groups = groupProjectsByCompany(rows);
+    // Flat view when everything shares one company — clients see the old layout.
+    if (groups.length <= 1) {
+      return (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map(renderActiveCard)}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-8">
+        {groups.map((group) => (
+          <section key={group.company ?? NO_COMPANY_KEY}>
+            {renderCompanyHeading(group)}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {group.projects.map(renderActiveCard)}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
+  function renderCompletedSection(rows: ProjectCard[]) {
+    const groups = groupProjectsByCompany(rows);
+    if (groups.length <= 1) {
+      return <div className="space-y-2">{rows.map(renderCompletedRow)}</div>;
+    }
+    return (
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <section key={group.company ?? NO_COMPANY_KEY}>
+            {renderCompanyHeading(group)}
+            <div className="space-y-2">
+              {group.projects.map(renderCompletedRow)}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
 }
