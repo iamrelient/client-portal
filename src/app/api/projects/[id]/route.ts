@@ -132,7 +132,8 @@ export async function PATCH(
         jsonData.thumbnailPath = null;
       }
 
-
+      // Any JSON PATCH path counts as a real activity for the dashboard sort.
+      jsonData.lastActivityAt = new Date();
       await prisma.project.update({ where: { id: params.id }, data: jsonData });
       return NextResponse.json({ message: "Project updated" });
     }
@@ -219,6 +220,8 @@ export async function PATCH(
       }
     }
 
+    // Mark this as real activity so the dashboard sort reflects it.
+    data.lastActivityAt = new Date();
     await prisma.project.update({
       where: { id: params.id },
       data,

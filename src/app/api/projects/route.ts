@@ -29,6 +29,7 @@ export async function GET() {
       authorizedEmails: true,
       createdAt: true,
       updatedAt: true,
+      lastActivityAt: true,
       _count: { select: { files: true } },
       files: {
         select: { createdAt: true },

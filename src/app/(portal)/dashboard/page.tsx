@@ -21,17 +21,19 @@ interface ProjectCard {
   thumbnailPath: string | null;
   createdAt: string;
   updatedAt: string;
+  lastActivityAt: string;
   lastFileAt: string | null;
   _count: { files: number };
 }
 
-/** A project's "last activity" is the latest of: project.updatedAt (captures
- *  project edits and file/folder mutations that bump it) or the creation time
- *  of its most recent file (captures uploads). */
+/** A project's "last activity" is the latest of its explicit lastActivityAt
+ *  timestamp (bumped on real changes — uploads, edits, folder ops, thumbnail
+ *  swaps) and the latest file's createdAt (covers uploads). Sync touches
+ *  updatedAt on every project view, so we deliberately don't read it here. */
 function lastActivityAt(p: ProjectCard): number {
-  const u = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
+  const a = p.lastActivityAt ? new Date(p.lastActivityAt).getTime() : 0;
   const f = p.lastFileAt ? new Date(p.lastFileAt).getTime() : 0;
-  return Math.max(u, f);
+  return Math.max(a, f);
 }
 
 /** Most-recently-touched project first. Ties fall back to createdAt so order
@@ -249,11 +251,17 @@ export default function DashboardPage() {
               <p className="mt-1 text-sm text-slate-400">
                 {project._count.files} file{project._count.files !== 1 ? "s" : ""}
               </p>
-              {project.updatedAt && (
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Updated {formatRelativeDate(project.updatedAt)}
-                </p>
-              )}
+              {(() => {
+                // Prefer the activity timestamp; fall back to the last file
+                // upload time or the project's creation time.
+                const t = lastActivityAt(project) || (project.createdAt ? new Date(project.createdAt).getTime() : 0);
+                if (!t) return null;
+                return (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Updated {formatRelativeDate(new Date(t).toISOString())}
+                  </p>
+                );
+              })()}
             </div>
           </div>
         </Link>

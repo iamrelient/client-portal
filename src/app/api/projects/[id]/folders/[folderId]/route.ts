@@ -88,7 +88,7 @@ export async function PATCH(
     // Bump project activity timestamp for the dashboard sort.
     await prisma.project.update({
       where: { id: folder.projectId },
-      data: { updatedAt: new Date() },
+      data: { lastActivityAt: new Date() },
     });
 
     return NextResponse.json(updated);
@@ -148,7 +148,7 @@ export async function DELETE(
     // Bump project activity timestamp for the dashboard sort.
     await prisma.project.update({
       where: { id: folder.projectId },
-      data: { updatedAt: new Date() },
+      data: { lastActivityAt: new Date() },
     });
 
     return NextResponse.json({ message: "Folder deleted" });

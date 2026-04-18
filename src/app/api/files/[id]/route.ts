@@ -185,11 +185,13 @@ export async function PATCH(
       data,
     });
 
-    // Bump project.updatedAt so the dashboard can surface recent activity.
+    // Bump project.lastActivityAt so the dashboard can surface recent
+    // activity. We use a dedicated column instead of updatedAt because
+    // sync touches updatedAt on every project view.
     if (file.projectId) {
       await prisma.project.update({
         where: { id: file.projectId },
-        data: { updatedAt: new Date() },
+        data: { lastActivityAt: new Date() },
       });
     }
 
@@ -304,6 +306,14 @@ export async function DELETE(
         userId: session.user.id,
       },
     });
+
+    // Bump project.lastActivityAt so this surfaces on the dashboard.
+    if (file.projectId) {
+      await prisma.project.update({
+        where: { id: file.projectId },
+        data: { lastActivityAt: new Date() },
+      });
+    }
 
     return NextResponse.json({
       message: "File deleted successfully",

@@ -162,6 +162,7 @@ model Project {
   presentations    Presentation[]
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  lastActivityAt   DateTime  @default(now())
 
   @@map("projects")
 }
