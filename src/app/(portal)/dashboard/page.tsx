@@ -25,32 +25,18 @@ interface ProjectCard {
   _count: { files: number };
 }
 
-const NO_COMPANY_KEY = "__none__";
-
-/** Group projects by company, alphabetically with "No company" last. */
-function groupProjectsByCompany(
-  projects: ProjectCard[]
-): { company: string | null; projects: ProjectCard[] }[] {
-  const groups = new Map<string, ProjectCard[]>();
-  for (const p of projects) {
-    const key = p.company?.trim() || NO_COMPANY_KEY;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(p);
-  }
-
-  const named: { company: string; projects: ProjectCard[] }[] = [];
-  let unnamed: ProjectCard[] | null = null;
-  groups.forEach((list, key) => {
-    if (key === NO_COMPANY_KEY) unnamed = list;
-    else named.push({ company: key, projects: list });
+/** Sort projects so same-company projects cluster together. Named companies
+ *  come first, alphabetical (case-insensitive), and "No company" projects
+ *  are pushed to the end. Within a company, original order is preserved. */
+function sortProjectsByCompany(projects: ProjectCard[]): ProjectCard[] {
+  return [...projects].sort((a, b) => {
+    const ca = a.company?.trim() ?? "";
+    const cb = b.company?.trim() ?? "";
+    if (!ca && cb) return 1; // no-company goes last
+    if (ca && !cb) return -1;
+    if (!ca && !cb) return 0;
+    return ca.localeCompare(cb, undefined, { sensitivity: "base" });
   });
-  named.sort((a, b) =>
-    a.company.localeCompare(b.company, undefined, { sensitivity: "base" })
-  );
-
-  const result: { company: string | null; projects: ProjectCard[] }[] = named;
-  if (unnamed) result.push({ company: null, projects: unnamed });
-  return result;
 }
 
 function isRecentlyUpdated(lastFileAt: string | null): boolean {
@@ -187,50 +173,28 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Active projects — standard card grid, grouped by company when >1 */}
-          {active.length > 0 && renderActiveSection(active)}
+          {/* Active projects — sorted by company so same-company cards cluster */}
+          {active.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {sortProjectsByCompany(active).map(renderActiveCard)}
+            </div>
+          )}
 
-          {/* Completed projects — compact rows, grouped by company when >1 */}
+          {/* Completed projects — compact rows, sorted by company */}
           {completed.length > 0 && (
             <div className={active.length > 0 ? "mt-10" : ""}>
               <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-500">
                 Completed
               </h2>
-              {renderCompletedSection(completed)}
+              <div className="space-y-2">
+                {sortProjectsByCompany(completed).map(renderCompletedRow)}
+              </div>
             </div>
           )}
         </>
       )}
     </div>
   );
-
-  /** Company heading rendered above each group when multiple companies are present. */
-  function renderCompanyHeading(
-    group: { company: string | null; projects: ProjectCard[] }
-  ) {
-    const withLogo = group.projects.find((p) => p.companyLogoPath);
-    const logoSrc = withLogo
-      ? `/api/projects/${withLogo.id}/company-logo`
-      : null;
-    return (
-      <div className="mb-4 flex items-center gap-2.5">
-        {logoSrc && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoSrc}
-            alt={group.company ?? ""}
-            className="h-6 w-6 rounded object-contain bg-white/[0.05] p-0.5"
-          />
-        )}
-        <h3 className="text-base font-semibold text-slate-100">
-          {group.company ?? "No company"}
-        </h3>
-        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
-          {group.projects.length}
-        </span>
-      </div>
-    );
-  }
 
   function renderActiveCard(project: ProjectCard) {
     return (
@@ -364,55 +328,4 @@ export default function DashboardPage() {
     );
   }
 
-  function renderActiveSection(rows: ProjectCard[]) {
-    const groups = groupProjectsByCompany(rows);
-    // Flat view when everything shares one company — clients see the old layout.
-    if (groups.length <= 1) {
-      return (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map(renderActiveCard)}
-        </div>
-      );
-    }
-    // Multi-company: each group gets its own bordered container so the
-    // heading and its cards read as one block. The card grid itself is
-    // unchanged — same 3-column responsive layout as the flat view.
-    return (
-      <div className="space-y-4">
-        {groups.map((group) => (
-          <section
-            key={group.company ?? NO_COMPANY_KEY}
-            className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl"
-          >
-            {renderCompanyHeading(group)}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {group.projects.map(renderActiveCard)}
-            </div>
-          </section>
-        ))}
-      </div>
-    );
-  }
-
-  function renderCompletedSection(rows: ProjectCard[]) {
-    const groups = groupProjectsByCompany(rows);
-    if (groups.length <= 1) {
-      return <div className="space-y-2">{rows.map(renderCompletedRow)}</div>;
-    }
-    return (
-      <div className="space-y-4">
-        {groups.map((group) => (
-          <section
-            key={group.company ?? NO_COMPANY_KEY}
-            className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl"
-          >
-            {renderCompanyHeading(group)}
-            <div className="space-y-2">
-              {group.projects.map(renderCompletedRow)}
-            </div>
-          </section>
-        ))}
-      </div>
-    );
-  }
 }
