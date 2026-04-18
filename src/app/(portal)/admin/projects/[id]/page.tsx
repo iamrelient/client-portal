@@ -284,7 +284,6 @@ export default function AdminProjectDetailPage() {
   const [renameFolderName, setRenameFolderName] = useState("");
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [movingFileId, setMovingFileId] = useState<string | null>(null);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
   // Client activity
   const [showActivity, setShowActivity] = useState(false);
@@ -678,15 +677,6 @@ export default function AdminProjectDetailPage() {
       toast.error("Something went wrong");
     }
     setMovingFileId(null);
-  }
-
-  function toggleFolderCollapsed(folderId: string) {
-    setCollapsedFolders((prev) => {
-      const next = new Set(prev);
-      if (next.has(folderId)) next.delete(folderId);
-      else next.add(folderId);
-      return next;
-    });
   }
 
   async function handleToggleCurrent(fileId: string, currentValue: boolean) {
