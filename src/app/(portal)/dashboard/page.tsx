@@ -213,7 +213,7 @@ export default function DashboardPage() {
       ? `/api/projects/${withLogo.id}/company-logo`
       : null;
     return (
-      <div className="mb-3 flex items-center gap-2.5">
+      <div className="mb-4 flex items-center gap-2.5">
         {logoSrc && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -374,13 +374,23 @@ export default function DashboardPage() {
         </div>
       );
     }
+    // Multi-company: each group gets its own bordered container so a
+    // one-project group doesn't look like a half-empty row. Inside, cards
+    // flow with a fixed width so they stay visually consistent across groups.
     return (
-      <div className="space-y-8">
+      <div className="space-y-4">
         {groups.map((group) => (
-          <section key={group.company ?? NO_COMPANY_KEY}>
+          <section
+            key={group.company ?? NO_COMPANY_KEY}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl"
+          >
             {renderCompanyHeading(group)}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {group.projects.map(renderActiveCard)}
+            <div className="flex flex-wrap gap-6">
+              {group.projects.map((p) => (
+                <div key={p.id} className="w-full sm:w-[22rem]">
+                  {renderActiveCard(p)}
+                </div>
+              ))}
             </div>
           </section>
         ))}
@@ -394,9 +404,12 @@ export default function DashboardPage() {
       return <div className="space-y-2">{rows.map(renderCompletedRow)}</div>;
     }
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {groups.map((group) => (
-          <section key={group.company ?? NO_COMPANY_KEY}>
+          <section
+            key={group.company ?? NO_COMPANY_KEY}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 backdrop-blur-xl"
+          >
             {renderCompanyHeading(group)}
             <div className="space-y-2">
               {group.projects.map(renderCompletedRow)}
