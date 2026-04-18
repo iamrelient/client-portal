@@ -25,17 +25,24 @@ interface ProjectCard {
   _count: { files: number };
 }
 
-/** Sort projects so same-company projects cluster together. Named companies
- *  come first, alphabetical (case-insensitive), and "No company" projects
- *  are pushed to the end. Within a company, original order is preserved. */
-function sortProjectsByCompany(projects: ProjectCard[]): ProjectCard[] {
+/** A project's "last activity" is the latest of: project.updatedAt (captures
+ *  project edits and file/folder mutations that bump it) or the creation time
+ *  of its most recent file (captures uploads). */
+function lastActivityAt(p: ProjectCard): number {
+  const u = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
+  const f = p.lastFileAt ? new Date(p.lastFileAt).getTime() : 0;
+  return Math.max(u, f);
+}
+
+/** Most-recently-touched project first. Ties fall back to createdAt so order
+ *  is stable for projects that have never been edited. */
+function sortProjectsByRecency(projects: ProjectCard[]): ProjectCard[] {
   return [...projects].sort((a, b) => {
-    const ca = a.company?.trim() ?? "";
-    const cb = b.company?.trim() ?? "";
-    if (!ca && cb) return 1; // no-company goes last
-    if (ca && !cb) return -1;
-    if (!ca && !cb) return 0;
-    return ca.localeCompare(cb, undefined, { sensitivity: "base" });
+    const diff = lastActivityAt(b) - lastActivityAt(a);
+    if (diff !== 0) return diff;
+    const ac = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bc = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return bc - ac;
   });
 }
 
@@ -176,7 +183,7 @@ export default function DashboardPage() {
           {/* Active projects — sorted by company so same-company cards cluster */}
           {active.length > 0 && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {sortProjectsByCompany(active).map(renderActiveCard)}
+              {sortProjectsByRecency(active).map(renderActiveCard)}
             </div>
           )}
 
@@ -187,7 +194,7 @@ export default function DashboardPage() {
                 Completed
               </h2>
               <div className="space-y-2">
-                {sortProjectsByCompany(completed).map(renderCompletedRow)}
+                {sortProjectsByRecency(completed).map(renderCompletedRow)}
               </div>
             </div>
           )}

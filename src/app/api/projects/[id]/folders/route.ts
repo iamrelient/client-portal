@@ -93,6 +93,12 @@ export async function POST(
       },
     });
 
+    // Bump project activity timestamp so it surfaces on the dashboard.
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    });
+
     return NextResponse.json(folder, { status: 201 });
   } catch (error) {
     console.error("Create folder error:", error);

@@ -85,6 +85,12 @@ export async function PATCH(
       data: { name },
     });
 
+    // Bump project activity timestamp for the dashboard sort.
+    await prisma.project.update({
+      where: { id: folder.projectId },
+      data: { updatedAt: new Date() },
+    });
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Rename folder error:", error);
@@ -138,6 +144,12 @@ export async function DELETE(
     }
 
     await prisma.projectFolder.delete({ where: { id: folder.id } });
+
+    // Bump project activity timestamp for the dashboard sort.
+    await prisma.project.update({
+      where: { id: folder.projectId },
+      data: { updatedAt: new Date() },
+    });
 
     return NextResponse.json({ message: "Folder deleted" });
   } catch (error) {

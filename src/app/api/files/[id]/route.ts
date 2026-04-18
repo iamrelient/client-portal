@@ -185,6 +185,14 @@ export async function PATCH(
       data,
     });
 
+    // Bump project.updatedAt so the dashboard can surface recent activity.
+    if (file.projectId) {
+      await prisma.project.update({
+        where: { id: file.projectId },
+        data: { updatedAt: new Date() },
+      });
+    }
+
     return NextResponse.json({ message: "File updated" });
   } catch (error) {
     console.error("File update error:", error);
