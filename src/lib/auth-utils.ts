@@ -1,7 +1,7 @@
 /**
  * Detect gibberish/spam email local parts.
- * Uses a scoring system so a single real-name quirk (e.g. McCray, Schwartz)
- * won't cause a false positive — you need multiple spam signals.
+ * Tuned to pass real names with stacked initials (e.g. "dbmscray" = "DB McCray")
+ * while still catching digit-heavy and all-consonant gibberish.
  */
 export function isSpamEmail(email: string): boolean {
   const local = email.split("@")[0].toLowerCase().replace(/[._-]/g, "");
@@ -13,27 +13,25 @@ export function isSpamEmail(email: string): boolean {
   const digits = (local.match(/[0-9]/g) || []).length;
   const letters = vowels + consonants;
 
-  let score = 0;
-
-  // 5+ consecutive consonants (e.g. "xkjdfgh", "mcclellan" has 6 but is real)
   const runs = (local.match(/[bcdfghjklmnpqrstvwxyz]+/gi) || [""]).map(
     (m) => m.length
   );
-  if (Math.max(...runs) >= 5) score += 1;
+  const maxRun = Math.max(...runs);
 
-  // Very few vowels relative to letters (< 15% — "schwartz" is 12.5% but real)
-  if (letters > 4 && vowels / letters < 0.15) score += 1;
+  // Strong digit signals — real people don't register "a8k3j2m9"-style locals.
+  if (letters > 0 && digits > 0 && digits / local.length > 0.5) return true;
+  if (/([a-z]\d){3,}/i.test(local) || /(\d[a-z]){3,}/i.test(local)) return true;
 
-  // More than half the string is digits mixed with letters (e.g. "a8k3j2m9")
-  if (letters > 0 && digits > 0 && digits / local.length > 0.5) score += 2;
+  // 7+ consecutive consonants — no real Latin-alphabet name reaches this.
+  if (maxRun >= 7) return true;
 
-  // Alternating letter-digit pattern repeated 3+ times (e.g. "a1b2c3")
-  if (/([a-z]\d){3,}/i.test(local) || /(\d[a-z]){3,}/i.test(local))
-    score += 2;
+  // Combo signal: a long consonant run (5+) AND a very low vowel ratio (<10%).
+  // Real names with initials like "dbmscray" (12.5% vowels) stay above the
+  // 10% threshold, so they pass. True gibberish like "xkjdfgh" (0% vowels)
+  // still trips both conditions.
+  if (maxRun >= 5 && letters > 4 && vowels / letters < 0.1) return true;
 
-  // Need 2+ points: a single name quirk alone won't trigger, but gibberish
-  // hits multiple signals and digit-heavy patterns are strong signals on their own
-  return score >= 2;
+  return false;
 }
 
 /**
