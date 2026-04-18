@@ -101,6 +101,7 @@ export async function GET(
             customCategory: true,
             version: true,
             fileGroupId: true,
+            folder: { select: { name: true } },
           },
         },
       },
@@ -159,9 +160,17 @@ export async function GET(
         const buffer = Buffer.concat(chunks);
 
         // Custom categories take precedence over standard category folders
-        const folder = file.customCategory
+        const categoryDir = file.customCategory
           ? file.customCategory.replace(/[/\\:*?"<>|]/g, "_")
           : CATEGORY_FOLDERS[file.category] || "Other";
+
+        // Files inside a project folder get an additional subdirectory.
+        const subfolderDir = file.folder?.name
+          ? file.folder.name.replace(/[/\\:*?"<>|]/g, "_")
+          : null;
+        const folder = subfolderDir
+          ? `${categoryDir}/${subfolderDir}`
+          : categoryDir;
 
         if (includeOldVersions) {
           // When including old versions, add version suffix and separate old versions

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Eye, FileX, Folder as FolderIcon, FolderPlus, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -47,9 +47,18 @@ interface ProjectFile {
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
+  folderId: string | null;
   syncedFromDrive?: boolean;
   createdAt: string;
   uploadedBy: { id: string; name: string; role: string };
+}
+
+interface ProjectFolder {
+  id: string;
+  name: string;
+  category: FileCategory;
+  customCategory: string | null;
+  sortOrder: number;
 }
 
 interface ProjectDetail {
@@ -62,6 +71,7 @@ interface ProjectDetail {
   driveFolderId: string | null;
   authorizedEmails: string[];
   files: ProjectFile[];
+  folders: ProjectFolder[];
   createdBy: { name: string };
   createdAt: string;
 }
@@ -265,6 +275,16 @@ export default function AdminProjectDetailPage() {
   const [companies, setCompanies] = useState<{ id: string; name: string; logoPath: string | null }[]>([]);
 
   const [compareTarget, setCompareTarget] = useState<string | null>(null);
+
+  // Folder UI state
+  const [folderFormKey, setFolderFormKey] = useState<string | null>(null);
+  const [folderFormName, setFolderFormName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState("");
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+  const [movingFileId, setMovingFileId] = useState<string | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
   // Client activity
   const [showActivity, setShowActivity] = useState(false);
@@ -555,6 +575,118 @@ export default function AdminProjectDetailPage() {
 
     // Always refresh the file list
     loadProject();
+  }
+
+  /** Build a stable key for a category + customCategory pair. Used for
+   *  the "which section is opening the new-folder form" state. */
+  function folderSectionKey(category: FileCategory, customCategory: string | null) {
+    return customCategory ? `custom:${customCategory}` : `cat:${category}`;
+  }
+
+  async function handleCreateFolder(
+    category: FileCategory,
+    customCategory: string | null
+  ) {
+    const name = folderFormName.trim();
+    if (!name) {
+      toast.error("Folder name is required");
+      return;
+    }
+    setCreatingFolder(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category, customCategory }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to create folder");
+      } else {
+        toast.success(`Folder "${name}" created`);
+        setFolderFormKey(null);
+        setFolderFormName("");
+        loadProject();
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setCreatingFolder(false);
+  }
+
+  async function handleRenameFolder(folderId: string) {
+    const name = renameFolderName.trim();
+    if (!name) {
+      setRenamingFolderId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/projects/${projectId}/folders/${folderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to rename folder");
+      } else {
+        toast.success("Folder renamed");
+        setRenamingFolderId(null);
+        setRenameFolderName("");
+        loadProject();
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+  }
+
+  async function handleDeleteFolder(folder: ProjectFolder) {
+    if (!confirm(`Delete folder "${folder.name}"? It must be empty.`)) return;
+    setDeletingFolderId(folder.id);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/folders/${folder.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to delete folder");
+      } else {
+        toast.success("Folder deleted");
+        loadProject();
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setDeletingFolderId(null);
+  }
+
+  async function handleMoveFile(fileId: string, folderId: string | null) {
+    setMovingFileId(fileId);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folderId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Failed to move file");
+      } else {
+        loadProject();
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setMovingFileId(null);
+  }
+
+  function toggleFolderCollapsed(folderId: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
   }
 
   async function handleToggleCurrent(fileId: string, currentValue: boolean) {
@@ -856,12 +988,133 @@ export default function AdminProjectDetailPage() {
   /** Render a file table for a given category section */
   function renderCategorySection(category: FileCategory, label?: string, items?: { latest: ProjectFile; versionCount: number }[]) {
     const sectionItems = items || categorized.standard[category];
+    const customCategoryName =
+      label && label !== CATEGORY_LABELS[category] ? label : null;
+    const sectionFolders = (project?.folders || []).filter(
+      (f) =>
+        f.category === category &&
+        (f.customCategory ?? null) === customCategoryName
+    );
+    const sectionKey = folderSectionKey(category, customCategoryName);
+    const isAddingFolder = folderFormKey === sectionKey;
 
     return (
       <div key={label || category} className="mb-6">
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">
-          {label || CATEGORY_LABELS[category]}
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-100">
+            {label || CATEGORY_LABELS[category]}
+          </h2>
+          {sectionFolders.map((folder) =>
+            renamingFolderId === folder.id ? (
+              <span
+                key={folder.id}
+                className="inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/10 px-2 py-0.5"
+              >
+                <FolderIcon className="h-3.5 w-3.5 text-brand-300" />
+                <input
+                  type="text"
+                  value={renameFolderName}
+                  onChange={(e) => setRenameFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameFolder(folder.id);
+                    if (e.key === "Escape") setRenamingFolderId(null);
+                  }}
+                  autoFocus
+                  className="w-32 bg-transparent text-xs text-slate-100 focus:outline-none"
+                />
+                <button
+                  onClick={() => handleRenameFolder(folder.id)}
+                  className="text-xs font-medium text-brand-300 hover:text-brand-200"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setRenamingFolderId(null)}
+                  className="text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <span
+                key={folder.id}
+                className="group/folder inline-flex items-center gap-1 rounded-full border border-white/[0.1] bg-white/[0.05] px-2 py-0.5 text-xs text-slate-300"
+              >
+                <FolderIcon className="h-3.5 w-3.5 text-slate-400" />
+                {folder.name}
+                <button
+                  onClick={() => {
+                    setRenamingFolderId(folder.id);
+                    setRenameFolderName(folder.name);
+                  }}
+                  className="ml-0.5 rounded p-0.5 text-slate-400 opacity-0 transition-opacity group-hover/folder:opacity-100 hover:bg-white/[0.06] hover:text-slate-200"
+                  title="Rename"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => handleDeleteFolder(folder)}
+                  disabled={deletingFolderId === folder.id}
+                  className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity group-hover/folder:opacity-100 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                  title="Delete"
+                >
+                  {deletingFolderId === folder.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </button>
+              </span>
+            )
+          )}
+          {isAddingFolder ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/10 px-2 py-0.5">
+              <FolderPlus className="h-3.5 w-3.5 text-brand-300" />
+              <input
+                type="text"
+                value={folderFormName}
+                onChange={(e) => setFolderFormName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateFolder(category, customCategoryName);
+                  if (e.key === "Escape") {
+                    setFolderFormKey(null);
+                    setFolderFormName("");
+                  }
+                }}
+                autoFocus
+                placeholder="Folder name"
+                className="w-32 bg-transparent text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
+              />
+              <button
+                onClick={() => handleCreateFolder(category, customCategoryName)}
+                disabled={creatingFolder}
+                className="text-xs font-medium text-brand-300 hover:text-brand-200 disabled:opacity-50"
+              >
+                {creatingFolder ? "…" : "Add"}
+              </button>
+              <button
+                onClick={() => {
+                  setFolderFormKey(null);
+                  setFolderFormName("");
+                }}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => {
+                setFolderFormKey(sectionKey);
+                setFolderFormName("");
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-white/[0.08] px-2 py-0.5 text-xs text-slate-400 hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-brand-300 transition-colors"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              New folder
+            </button>
+          )}
+        </div>
         <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -1012,6 +1265,16 @@ export default function AdminProjectDetailPage() {
                                 Featured
                               </span>
                             )}
+                            {latest.folderId && (() => {
+                              const f = sectionFolders.find((x) => x.id === latest.folderId);
+                              if (!f) return null;
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-300">
+                                  <FolderIcon className="h-3 w-3" />
+                                  {f.name}
+                                </span>
+                              );
+                            })()}
                             {latest.version > 1 && (
                               <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
                                 v{latest.version}
@@ -1096,7 +1359,25 @@ export default function AdminProjectDetailPage() {
                           {formatRelativeDate(latest.createdAt)}
                         </td>
                         <td className="px-4 py-4">
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {sectionFolders.length > 0 && (
+                              <select
+                                value={latest.folderId ?? ""}
+                                disabled={movingFileId === latest.id}
+                                onChange={(e) =>
+                                  handleMoveFile(latest.id, e.target.value || null)
+                                }
+                                title="Move to folder"
+                                className="rounded-md border border-white/[0.1] bg-[#1a1d2e] px-1.5 py-1 text-xs text-slate-300 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50"
+                              >
+                                <option value="">— No folder —</option>
+                                {sectionFolders.map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    📁 {f.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             <a
                               href={`/api/files/${latest.id}/download`}
                               target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}

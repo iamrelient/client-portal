@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { deleteFile } from "@/lib/google-drive";
+import { deleteFile, moveFile } from "@/lib/google-drive";
 
 export async function PATCH(
   req: Request,
@@ -63,6 +63,60 @@ export async function PATCH(
 
       if ("version" in body) {
         data.version = Number(body.version) || 1;
+      }
+
+      // Folder move — update DB + mirror to Drive.
+      if ("folderId" in body) {
+        const nextFolderId: string | null = body.folderId || null;
+        if (nextFolderId !== file.folderId) {
+          // Resolve Drive parent IDs for the move. The "old parent" is the
+          // current folder's Drive ID or the project's Drive folder; same
+          // logic for the "new parent".
+          const [oldFolder, newFolder, project] = await Promise.all([
+            file.folderId
+              ? prisma.projectFolder.findUnique({
+                  where: { id: file.folderId },
+                  select: { driveFolderId: true, projectId: true },
+                })
+              : Promise.resolve(null),
+            nextFolderId
+              ? prisma.projectFolder.findUnique({
+                  where: { id: nextFolderId },
+                  select: { driveFolderId: true, projectId: true },
+                })
+              : Promise.resolve(null),
+            file.projectId
+              ? prisma.project.findUnique({
+                  where: { id: file.projectId },
+                  select: { driveFolderId: true },
+                })
+              : Promise.resolve(null),
+          ]);
+
+          // Reject cross-project moves
+          if (newFolder && file.projectId && newFolder.projectId !== file.projectId) {
+            return NextResponse.json(
+              { error: "Cannot move a file to a folder in a different project" },
+              { status: 400 }
+            );
+          }
+
+          const projectDriveId = project?.driveFolderId ?? null;
+          const oldParent = oldFolder?.driveFolderId ?? projectDriveId;
+          const newParent = newFolder?.driveFolderId ?? projectDriveId;
+
+          // Drive ID is stored on either driveFileId or legacy-style path
+          const driveId = file.driveFileId || file.path;
+          if (driveId && oldParent && newParent && oldParent !== newParent) {
+            try {
+              await moveFile(driveId, oldParent, newParent);
+            } catch (err) {
+              console.error("Drive move failed, DB only:", err);
+            }
+          }
+
+          data.folderId = nextFolderId;
+        }
       }
     }
 

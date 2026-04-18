@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileX, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, FileX, Folder as FolderIcon, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FilePreviewModal } from "@/components/file-preview-modal";
@@ -42,9 +42,18 @@ interface ProjectFile {
   isCurrent: boolean;
   version: number;
   fileGroupId: string | null;
+  folderId: string | null;
   syncedFromDrive?: boolean;
   createdAt: string;
   uploadedBy: { id: string; name: string; role: string };
+}
+
+interface ProjectFolder {
+  id: string;
+  name: string;
+  category: FileCategory;
+  customCategory: string | null;
+  sortOrder: number;
 }
 
 interface ProjectDetail {
@@ -55,6 +64,7 @@ interface ProjectDetail {
   company: string | null;
   companyLogoPath: string | null;
   files: ProjectFile[];
+  folders: ProjectFolder[];
   createdAt: string;
 }
 
@@ -461,6 +471,182 @@ export default function ClientProjectDetailPage() {
     const sectionSomeSelected =
       !sectionAllSelected && sectionIds.some((id) => selectedFileIds.has(id));
 
+    // Split items into loose (no folder) and per-folder buckets.
+    const customCategoryName =
+      label && label !== CATEGORY_LABELS[category] ? label : null;
+    const sectionFolders = (project?.folders || []).filter(
+      (f) =>
+        f.category === category &&
+        (f.customCategory ?? null) === customCategoryName
+    );
+    const looseItems = items.filter((i) => !i.latest.folderId);
+    const folderItemsByFolder = new Map<
+      string,
+      { latest: ProjectFile; versionCount: number }[]
+    >();
+    for (const item of items) {
+      if (item.latest.folderId) {
+        const arr = folderItemsByFolder.get(item.latest.folderId) || [];
+        arr.push(item);
+        folderItemsByFolder.set(item.latest.folderId, arr);
+      }
+    }
+
+    // Render a group of file rows (reused for loose items and each folder's items).
+    const renderFileRows = (
+      groupItems: { latest: ProjectFile; versionCount: number }[]
+    ) =>
+      groupItems.map(({ latest, versionCount }) => {
+        const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
+        const fileName = latest.displayName || latest.originalName;
+        const previewable = canPreview(latest.mimeType, latest.originalName);
+
+        return (
+          <>
+            <tr
+              key={latest.id}
+              onClick={() => {
+                if (isUrlShortcut(latest.originalName)) {
+                  window.open(`/api/files/${latest.id}/download`, "_blank");
+                } else if (previewable) {
+                  setPreviewFile(latest);
+                }
+              }}
+              className={`transition-colors hover:bg-white/[0.03] ${
+                previewable || isUrlShortcut(latest.originalName) ? "cursor-pointer" : ""
+              } ${selectedFileIds.has(latest.id) ? "bg-brand-500/[0.06]" : ""}`}
+            >
+              <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selectedFileIds.has(latest.id)}
+                  onChange={() => toggleFileSelected(latest.id)}
+                  aria-label={`Select ${fileName}`}
+                  className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                />
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-100">
+                    {fileName}
+                  </span>
+                  {latest.version > 1 && (
+                    <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
+                      v{latest.version}
+                    </span>
+                  )}
+                  {versionCount > 1 && (
+                    <>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleVersionHistory(latest.id, latest.fileGroupId); }}
+                        className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-brand-600"
+                      >
+                        {expandedGroup === latest.id ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        )}
+                        {versionCount} versions
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCompare(latest.id, latest.fileGroupId); }}
+                        className="inline-flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300"
+                      >
+                        <Columns className="h-3.5 w-3.5" />
+                        Compare
+                      </button>
+                    </>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-4 text-slate-400 truncate">{formatSize(latest.size)}</td>
+              <td className="px-4 py-4 text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                  <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
+                </span>
+              </td>
+              <td className="px-4 py-4 text-slate-400 truncate">
+                {formatRelativeDate(latest.createdAt)}
+              </td>
+              <td className="px-4 py-4">
+                <a
+                  href={`/api/files/${latest.id}/download`}
+                  target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}
+                  rel={isUrlShortcut(latest.originalName) ? "noopener noreferrer" : undefined}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-100"
+                >
+                  <Download className="h-4 w-4" />
+                  {isUrlShortcut(latest.originalName) ? "Open Link" : "Download"}
+                </a>
+              </td>
+            </tr>
+            {/* Version history expansion */}
+            {expandedGroup === latest.id && versionCount > 1 && (
+              <tr key={`${latest.id}-versions`}>
+                <td colSpan={6} className="bg-white/[0.02] px-6 py-3">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                      Version History
+                    </p>
+                    {(versionHistory[latest.id] || []).map((v) => (
+                      <div
+                        key={v.id}
+                        className={`flex items-center justify-between rounded-lg px-4 py-2 border border-white/[0.06] ${
+                          selectedFileIds.has(v.id) ? "bg-brand-500/[0.08]" : "bg-white/[0.03]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedFileIds.has(v.id)}
+                            onChange={() => toggleFileSelected(v.id)}
+                            aria-label={`Select version ${v.version}`}
+                            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
+                          />
+                          <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
+                            v{v.version}
+                          </span>
+                          <span className="text-sm text-slate-300">
+                            {formatSize(v.size)}
+                          </span>
+                          <span className="text-sm text-slate-400">
+                            {formatRelativeDate(v.createdAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {canPreview(v.mimeType, v.originalName || latest.originalName) && (
+                            <button
+                              onClick={() => setPreviewFile(v as ProjectFile)}
+                              className="text-xs font-medium text-brand-400 hover:text-brand-300"
+                            >
+                              View
+                            </button>
+                          )}
+                          <a
+                            href={`/api/files/${v.id}/download`}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-100"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                    {!versionHistory[latest.id] && (
+                      <div className="flex justify-center py-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )}
+          </>
+        );
+      });
+
     return (
       <div key={label || category} className="mb-6">
         <h2 className="mb-3 text-lg font-semibold text-slate-100">
@@ -499,152 +685,39 @@ export default function ClientProjectDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.06]">
-                {items.map(({ latest, versionCount }) => {
-                  const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
-                  const fileName = latest.displayName || latest.originalName;
-                  const previewable = canPreview(latest.mimeType, latest.originalName);
-
+                {renderFileRows(looseItems)}
+                {sectionFolders.map((folder) => {
+                  const folderItems = folderItemsByFolder.get(folder.id) || [];
                   return (
                     <>
                       <tr
-                        key={latest.id}
-                        onClick={() => {
-                          if (isUrlShortcut(latest.originalName)) {
-                            window.open(`/api/files/${latest.id}/download`, "_blank");
-                          } else if (previewable) {
-                            setPreviewFile(latest);
-                          }
-                        }}
-                        className={`transition-colors hover:bg-white/[0.03] ${
-                          previewable || isUrlShortcut(latest.originalName) ? "cursor-pointer" : ""
-                        } ${selectedFileIds.has(latest.id) ? "bg-brand-500/[0.06]" : ""}`}
+                        key={`folder-divider-${folder.id}`}
+                        className="bg-white/[0.03]"
                       >
-                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedFileIds.has(latest.id)}
-                            onChange={() => toggleFileSelected(latest.id)}
-                            aria-label={`Select ${fileName}`}
-                            className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-slate-100">
-                              {fileName}
+                        <td
+                          colSpan={6}
+                          className="px-4 py-2.5 text-sm font-medium text-slate-200"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <FolderIcon className="h-4 w-4 text-brand-400" />
+                            {folder.name}
+                            <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-normal text-slate-400">
+                              {folderItems.length}
                             </span>
-                            {latest.version > 1 && (
-                              <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
-                                v{latest.version}
-                              </span>
-                            )}
-                            {versionCount > 1 && (
-                              <>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); toggleVersionHistory(latest.id, latest.fileGroupId); }}
-                                  className="inline-flex items-center gap-0.5 text-xs text-slate-400 hover:text-brand-600"
-                                >
-                                  {expandedGroup === latest.id ? (
-                                    <ChevronDown className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <ChevronRight className="h-3.5 w-3.5" />
-                                  )}
-                                  {versionCount} versions
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleCompare(latest.id, latest.fileGroupId); }}
-                                  className="inline-flex items-center gap-0.5 text-xs text-brand-400 hover:text-brand-300"
-                                >
-                                  <Columns className="h-3.5 w-3.5" />
-                                  Compare
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-slate-400 truncate">{formatSize(latest.size)}</td>
-                        <td className="px-4 py-4 text-slate-400">
-                          <span className="inline-flex items-center gap-1.5">
-                            <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                            <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-slate-400 truncate">
-                          {formatRelativeDate(latest.createdAt)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <a
-                            href={`/api/files/${latest.id}/download`}
-                            target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}
-                            rel={isUrlShortcut(latest.originalName) ? "noopener noreferrer" : undefined}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-100"
-                          >
-                            <Download className="h-4 w-4" />
-                            {isUrlShortcut(latest.originalName) ? "Open Link" : "Download"}
-                          </a>
-                        </td>
                       </tr>
-                      {/* Version history expansion */}
-                      {expandedGroup === latest.id && versionCount > 1 && (
-                        <tr key={`${latest.id}-versions`}>
-                          <td colSpan={6} className="bg-white/[0.02] px-6 py-3">
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                                Version History
-                              </p>
-                              {(versionHistory[latest.id] || []).map((v) => (
-                                <div
-                                  key={v.id}
-                                  className={`flex items-center justify-between rounded-lg px-4 py-2 border border-white/[0.06] ${
-                                    selectedFileIds.has(v.id) ? "bg-brand-500/[0.08]" : "bg-white/[0.03]"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedFileIds.has(v.id)}
-                                      onChange={() => toggleFileSelected(v.id)}
-                                      aria-label={`Select version ${v.version}`}
-                                      className="h-4 w-4 cursor-pointer rounded border-slate-600 bg-slate-800 accent-brand-500"
-                                    />
-                                    <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-slate-400">
-                                      v{v.version}
-                                    </span>
-                                    <span className="text-sm text-slate-300">
-                                      {formatSize(v.size)}
-                                    </span>
-                                    <span className="text-sm text-slate-400">
-                                      {formatRelativeDate(v.createdAt)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    {canPreview(v.mimeType, v.originalName || latest.originalName) && (
-                                      <button
-                                        onClick={() => setPreviewFile(v as ProjectFile)}
-                                        className="text-xs font-medium text-brand-400 hover:text-brand-300"
-                                      >
-                                        View
-                                      </button>
-                                    )}
-                                    <a
-                                      href={`/api/files/${v.id}/download`}
-                                      className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-100"
-                                    >
-                                      <Download className="h-3.5 w-3.5" />
-                                      Download
-                                    </a>
-                                  </div>
-                                </div>
-                              ))}
-                              {!versionHistory[latest.id] && (
-                                <div className="flex justify-center py-2">
-                                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
-                                </div>
-                              )}
-                            </div>
+                      {folderItems.length === 0 ? (
+                        <tr key={`folder-empty-${folder.id}`}>
+                          <td
+                            colSpan={6}
+                            className="px-6 py-3 text-xs italic text-slate-500"
+                          >
+                            Empty folder
                           </td>
                         </tr>
+                      ) : (
+                        renderFileRows(folderItems)
                       )}
                     </>
                   );

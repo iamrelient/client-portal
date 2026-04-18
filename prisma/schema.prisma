@@ -86,6 +86,8 @@ model File {
   isCurrent       Boolean  @default(false)
   version         Int      @default(1)
   fileGroupId     String?
+  folderId        String?
+  folder          ProjectFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
   fileViews             FileView[]
   presentationSections  PresentationSection[]
@@ -93,9 +95,29 @@ model File {
   @@index([uploadedById])
   @@index([projectId])
   @@index([fileGroupId])
+  @@index([folderId])
   @@index([projectId, originalName])
   @@index([driveFileId])
   @@map("files")
+}
+
+model ProjectFolder {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category       FileCategory
+  customCategory String?
+  name           String
+  driveFolderId  String?
+  sortOrder      Int          @default(0)
+  files          File[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, category])
+  @@unique([projectId, category, customCategory, name])
+  @@map("project_folders")
 }
 
 model Session {
@@ -136,6 +158,7 @@ model Project {
   createdById      String
   createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   files            File[]
+  folders          ProjectFolder[]
   presentations    Presentation[]
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
