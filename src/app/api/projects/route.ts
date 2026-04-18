@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
+import { hasStudioAccess } from "@/lib/roles";
 import {
   findOrCreateRootFolder,
   createFolder,
@@ -38,11 +39,11 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  if (session.user.role === "ADMIN") {
+  if (hasStudioAccess(session.user.role)) {
     return NextResponse.json(allProjects);
   }
 
-  // Filter by email/domain match for non-admin users
+  // Filter by email/domain match for regular client users
   const userEmail = (session.user.email ?? "").toLowerCase();
   const authorized = allProjects
     .filter((p) => isEmailAuthorized(userEmail, p.authorizedEmails))

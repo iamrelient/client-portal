@@ -15,7 +15,7 @@ interface InspirationNotificationParams {
   projectName: string;
   fileName: string;
   uploaderName: string;
-  uploaderRole: "ADMIN" | "USER";
+  uploaderRole: "ADMIN" | "STAFF" | "USER";
   notes?: string | null;
   projectId: string;
 }
@@ -33,7 +33,8 @@ export async function sendInspirationNotification({
     return;
   }
 
-  const roleBadge = uploaderRole === "ADMIN" ? "Studio" : "Client";
+  const isStudio = uploaderRole === "ADMIN" || uploaderRole === "STAFF";
+  const roleBadge = isStudio ? "Studio" : "Client";
   const portalUrl = process.env.NEXTAUTH_URL || "https://portal.rayrenders.com";
 
   try {
@@ -57,7 +58,7 @@ export async function sendInspirationNotification({
             <p style="margin: 0 0 ${notes ? "16px" : "0"}; font-size: 16px; color: #1a1a2e;">
               ${uploaderName}
               <span style="display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; ${
-                uploaderRole === "ADMIN"
+                isStudio
                   ? "background: #fce7f3; color: #be185d;"
                   : "background: #dbeafe; color: #1d4ed8;"
               }">${roleBadge}</span>

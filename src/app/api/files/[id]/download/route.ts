@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
+import { hasStudioAccess } from "@/lib/roles";
 import { downloadFile } from "@/lib/google-drive";
 
 export async function GET(
@@ -27,7 +28,7 @@ export async function GET(
 
     if (
       file.project &&
-      session.user.role !== "ADMIN" &&
+      !hasStudioAccess(session.user.role) &&
       !isEmailAuthorized(
         session.user.email ?? "",
         file.project.authorizedEmails

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToFolder } from "@/lib/google-drive";
+import { hasStudioAccess } from "@/lib/roles";
 import { randomBytes } from "crypto";
 
 export async function GET(
@@ -11,7 +12,7 @@ export async function GET(
 ) {
   const session = await getServerSession(authOptions);
 
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session || !hasStudioAccess(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

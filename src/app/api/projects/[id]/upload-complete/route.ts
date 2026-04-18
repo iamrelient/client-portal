@@ -87,7 +87,7 @@ export async function POST(
           projectName: project.name,
           fileName: domain,
           uploaderName: session.user.name || session.user.email || "Unknown",
-          uploaderRole: session.user.role as "ADMIN" | "USER",
+          uploaderRole: session.user.role as "ADMIN" | "STAFF" | "USER",
           notes: notes || null,
           projectId: params.id,
         }).catch(() => {});
@@ -197,7 +197,7 @@ export async function POST(
           projectName: project.name,
           fileName: displayName || fileName,
           uploaderName: session.user.name || session.user.email || "Unknown",
-          uploaderRole: session.user.role as "ADMIN" | "USER",
+          uploaderRole: session.user.role as "ADMIN" | "STAFF" | "USER",
           notes: notes || null,
           projectId: params.id,
         }).catch(() => {});
@@ -295,7 +295,7 @@ export async function POST(
         projectName: project.name,
         fileName: displayName || fileName,
         uploaderName: session.user.name || session.user.email || "Unknown",
-        uploaderRole: session.user.role as "ADMIN" | "USER",
+        uploaderRole: session.user.role as "ADMIN" | "STAFF" | "USER",
         notes: notes || null,
         projectId: params.id,
       }).catch(() => {}); // fire-and-forget

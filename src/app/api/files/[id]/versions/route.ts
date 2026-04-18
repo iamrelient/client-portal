@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
+import { hasStudioAccess } from "@/lib/roles";
 
 export async function GET(
   _req: Request,
@@ -23,8 +24,8 @@ export async function GET(
     return NextResponse.json({ error: "No version history" }, { status: 404 });
   }
 
-  // Check authorization: admin or authorized for the project
-  if (session.user.role !== "ADMIN" && file.projectId) {
+  // Studio staff (ADMIN or STAFF) bypass the per-project authorizedEmails list
+  if (!hasStudioAccess(session.user.role) && file.projectId) {
     const project = await prisma.project.findUnique({
       where: { id: file.projectId },
       select: { authorizedEmails: true },

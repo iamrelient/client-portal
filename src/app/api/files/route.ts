@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
+import { hasStudioAccess } from "@/lib/roles";
 import {
   findOrCreateRootFolder,
   createFolder,
@@ -32,7 +33,7 @@ export async function GET() {
     },
   } as const;
 
-  if (session.user.role === "ADMIN") {
+  if (hasStudioAccess(session.user.role)) {
     const files = await prisma.file.findMany({
       where: { projectId: null },
       select: fileSelect,

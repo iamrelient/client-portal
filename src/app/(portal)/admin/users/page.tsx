@@ -27,6 +27,7 @@ export default function AdminUsersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null);
 
   function loadUsers() {
     fetch("/api/admin/users")
@@ -41,6 +42,30 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  async function handleChangeRole(user: UserRow, nextRole: string) {
+    if (nextRole === user.role) return;
+    setRoleUpdatingId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: nextRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Something went wrong");
+      } else {
+        toast.success(`${user.name} is now ${nextRole}`);
+        setUsers((prev) =>
+          prev.map((u) => (u.id === user.id ? { ...u, role: nextRole } : u))
+        );
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setRoleUpdatingId(null);
+  }
 
   async function handleDeleteUser(user: UserRow) {
     const confirmed = confirm(
@@ -235,15 +260,29 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        user.role === "ADMIN"
-                          ? "bg-purple-500/10 text-purple-400"
-                          : "bg-brand-500/10 text-brand-400"
-                      }`}
-                    >
-                      {user.role}
-                    </span>
+                    <div className="relative inline-flex items-center">
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleChangeRole(user, e.target.value)}
+                        disabled={roleUpdatingId === user.id}
+                        className={`appearance-none rounded-full px-2.5 py-0.5 pr-7 text-xs font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/20 disabled:opacity-50 ${
+                          user.role === "ADMIN"
+                            ? "bg-purple-500/10 text-purple-400"
+                            : user.role === "STAFF"
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "bg-brand-500/10 text-brand-400"
+                        }`}
+                      >
+                        <option value="USER">USER</option>
+                        <option value="STAFF">STAFF</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+                      {roleUpdatingId === user.id ? (
+                        <Loader2 className="pointer-events-none absolute right-1.5 h-3 w-3 animate-spin text-slate-400" />
+                      ) : (
+                        <ChevronDown className="pointer-events-none absolute right-1.5 h-3 w-3 text-slate-400" />
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-slate-400">
                     {user.company || "--"}

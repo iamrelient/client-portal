@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { hasStudioAccess } from "@/lib/roles";
 
 export async function POST(
   req: Request,
   { params }: { params: { token: string } }
 ) {
   try {
-    // Skip logging for admin users
+    // Skip logging for internal studio users (admin + staff)
     const session = await getServerSession(authOptions);
-    if (session?.user?.role === "ADMIN") {
+    if (hasStudioAccess(session?.user?.role)) {
       return NextResponse.json({ success: true });
     }
 

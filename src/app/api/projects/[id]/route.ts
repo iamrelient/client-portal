@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isEmailAuthorized } from "@/lib/auth-utils";
+import { hasStudioAccess } from "@/lib/roles";
 import {
   uploadFileToFolder,
   deleteFile,
@@ -57,7 +58,7 @@ export async function GET(
   }
 
   if (
-    session.user.role !== "ADMIN" &&
+    !hasStudioAccess(session.user.role) &&
     !isEmailAuthorized(session.user.email ?? "", project.authorizedEmails)
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
