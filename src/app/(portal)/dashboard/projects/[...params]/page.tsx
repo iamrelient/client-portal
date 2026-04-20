@@ -984,14 +984,46 @@ export default function ClientProjectDetailPage() {
         </>
       )}
 
-      {previewFile && (
-        <FilePreviewModal
-          file={previewFile}
-          onClose={() => setPreviewFile(null)}
-          files={project.files}
-          onNavigate={(f) => setPreviewFile(f as ProjectFile)}
-        />
-      )}
+      {previewFile && (() => {
+        // Arrow keys / swipe should stay within the same folder+category+
+        // customCategory as the file that was clicked, and should only
+        // surface the latest version per fileGroupId. The clicked file
+        // itself is kept even if it's an old version (user clicked it
+        // explicitly from the version-history list).
+        const sameScope = project.files.filter(
+          (f) =>
+            f.category === previewFile.category &&
+            (f.customCategory ?? null) === (previewFile.customCategory ?? null) &&
+            (f.folderId ?? null) === (previewFile.folderId ?? null)
+        );
+        const latestByGroup = new Map<string, ProjectFile>();
+        for (const f of sameScope) {
+          const key = f.fileGroupId || f.id;
+          const existing = latestByGroup.get(key);
+          if (!existing || f.version > existing.version) {
+            latestByGroup.set(key, f);
+          }
+        }
+        const navFiles = Array.from(latestByGroup.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        // If the open file is an old version, swap it in so the modal knows
+        // where in the list it sits — arrows will leave it when navigated.
+        if (!navFiles.some((f) => f.id === previewFile.id)) {
+          const key = previewFile.fileGroupId || previewFile.id;
+          const idx = navFiles.findIndex((f) => (f.fileGroupId || f.id) === key);
+          if (idx >= 0) navFiles[idx] = previewFile;
+          else navFiles.push(previewFile);
+        }
+        return (
+          <FilePreviewModal
+            file={previewFile}
+            onClose={() => setPreviewFile(null)}
+            files={navFiles}
+            onNavigate={(f) => setPreviewFile(f as ProjectFile)}
+          />
+        );
+      })()}
 
       {/* Download options modal */}
       {showDownloadModal && project && (
