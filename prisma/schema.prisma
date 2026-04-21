@@ -84,6 +84,7 @@ model File {
   boardType       BoardType?
   thumbnailUrl    String?
   isCurrent       Boolean  @default(false)
+  isOutdated      Boolean  @default(false)
   version         Int      @default(1)
   fileGroupId     String?
   folderId        String?

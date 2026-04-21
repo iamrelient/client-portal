@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, FileX, Folder as FolderIcon, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Download, FileX, Folder as FolderIcon, Loader2, Archive, Columns, Eye, Star } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { FilePreviewModal } from "@/components/file-preview-modal";
@@ -40,6 +40,7 @@ interface ProjectFile {
   boardType?: "INTERIOR" | "EXTERIOR" | null;
   thumbnailUrl: string | null;
   isCurrent: boolean;
+  isOutdated: boolean;
   version: number;
   fileGroupId: string | null;
   folderId: string | null;
@@ -168,7 +169,11 @@ function getLatestFiles(files: ProjectFile[]) {
   }
 
   result.sort((a, b) => {
-    // Current files always come first
+    // Outdated files always fall to the bottom
+    if (a.latest.isOutdated !== b.latest.isOutdated) {
+      return a.latest.isOutdated ? 1 : -1;
+    }
+    // Current files always come first (among non-outdated)
     if (a.latest.isCurrent !== b.latest.isCurrent) {
       return a.latest.isCurrent ? -1 : 1;
     }
@@ -460,7 +465,7 @@ export default function ClientProjectDetailPage() {
   const categorized = groupByCategory(project.files);
   const featuredFiles = (() => {
     const currentFiles = project.files.filter(
-      (f) => f.isCurrent && f.category !== "DESIGN_INSPIRATION"
+      (f) => f.isCurrent && !f.isOutdated && f.category !== "DESIGN_INSPIRATION"
     );
     const groups = new Map<string, ProjectFile>();
     for (const file of currentFiles) {
@@ -524,7 +529,9 @@ export default function ClientProjectDetailPage() {
               }}
               className={`transition-colors hover:bg-white/[0.03] ${
                 previewable || isUrlShortcut(latest.originalName) ? "cursor-pointer" : ""
-              } ${selectedFileIds.has(latest.id) ? "bg-brand-500/[0.06]" : ""}`}
+              } ${selectedFileIds.has(latest.id) ? "bg-brand-500/[0.06]" : ""} ${
+                latest.isOutdated ? "opacity-60" : ""
+              }`}
             >
               <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                 <input
@@ -540,6 +547,12 @@ export default function ClientProjectDetailPage() {
                   <span className="font-medium text-slate-100">
                     {fileName}
                   </span>
+                  {latest.isOutdated && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                      <Clock className="h-3 w-3" />
+                      Outdated
+                    </span>
+                  )}
                   {latest.version > 1 && (
                     <span className="inline-flex items-center rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400">
                       v{latest.version}
@@ -994,7 +1007,9 @@ export default function ClientProjectDetailPage() {
           (f) =>
             f.category === previewFile.category &&
             (f.customCategory ?? null) === (previewFile.customCategory ?? null) &&
-            (f.folderId ?? null) === (previewFile.folderId ?? null)
+            (f.folderId ?? null) === (previewFile.folderId ?? null) &&
+            // Skip outdated files unless the open file is itself outdated
+            (!f.isOutdated || f.id === previewFile.id)
         );
         const latestByGroup = new Map<string, ProjectFile>();
         for (const f of sameScope) {

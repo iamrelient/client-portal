@@ -49,6 +49,14 @@ export async function PATCH(
         }
       }
 
+      if ("isOutdated" in body) {
+        const next = Boolean(body.isOutdated);
+        data.isOutdated = next;
+        // Outdated files can't also be featured — clear isCurrent when
+        // marking outdated to keep state consistent.
+        if (next) data.isCurrent = false;
+      }
+
       if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "DESIGN_INSPIRATION", "OTHER"].includes(body.category)) {
         data.category = body.category;
       }

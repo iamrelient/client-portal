@@ -41,6 +41,7 @@ export async function GET(
           boardType: true,
           thumbnailUrl: true,
           isCurrent: true,
+          isOutdated: true,
           version: true,
           fileGroupId: true,
           folderId: true,

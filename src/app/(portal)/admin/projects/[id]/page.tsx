@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronDown, ChevronRight, Download, Eye, FileX, Folder as FolderIcon, FolderPlus, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Download, Eye, FileX, Folder as FolderIcon, FolderPlus, Globe, Loader2, Pencil, Plus, Trash2, X, Upload, Archive, Activity, Columns, Star, Unlink } from "lucide-react";
 import { ProjectDetailSkeleton } from "@/components/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmModal } from "@/components/confirm-modal";
@@ -45,6 +45,7 @@ interface ProjectFile {
   boardType?: "INTERIOR" | "EXTERIOR" | null;
   thumbnailUrl: string | null;
   isCurrent: boolean;
+  isOutdated: boolean;
   version: number;
   fileGroupId: string | null;
   folderId: string | null;
@@ -183,7 +184,11 @@ function getLatestFiles(files: ProjectFile[]) {
   }
 
   result.sort((a, b) => {
-    // Current files always come first
+    // Outdated files always fall to the bottom
+    if (a.latest.isOutdated !== b.latest.isOutdated) {
+      return a.latest.isOutdated ? 1 : -1;
+    }
+    // Current files always come first (among non-outdated)
     if (a.latest.isCurrent !== b.latest.isCurrent) {
       return a.latest.isCurrent ? -1 : 1;
     }
@@ -794,6 +799,50 @@ export default function AdminProjectDetailPage() {
     setBulkUpdating(false);
   }
 
+  const [togglingOutdated, setTogglingOutdated] = useState<string | null>(null);
+
+  async function handleToggleOutdated(fileId: string, currentValue: boolean) {
+    setTogglingOutdated(fileId);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isOutdated: !currentValue }),
+      });
+      if (res.ok) {
+        loadProject();
+      } else {
+        toast.error("Failed to update file");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setTogglingOutdated(null);
+  }
+
+  async function handleBulkMarkOutdated(outdated: boolean) {
+    const ids = Array.from(selectedFileIds);
+    if (ids.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      const { failures } = await bulkPatchFiles(ids, { isOutdated: outdated });
+      if (failures > 0) {
+        toast.error(`${failures} file${failures === 1 ? "" : "s"} failed to update`);
+      } else {
+        toast.success(
+          outdated
+            ? `Marked ${ids.length} file${ids.length === 1 ? "" : "s"} outdated`
+            : `Cleared outdated on ${ids.length} file${ids.length === 1 ? "" : "s"}`
+        );
+      }
+      clearSelection();
+      loadProject();
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setBulkUpdating(false);
+  }
+
   async function handleToggleCurrent(fileId: string, currentValue: boolean) {
     setTogglingCurrent(fileId);
     try {
@@ -1077,7 +1126,7 @@ export default function AdminProjectDetailPage() {
   const categorized = groupByCategory(project.files);
   const featuredFiles = (() => {
     const currentFiles = project.files.filter(
-      (f) => f.isCurrent && f.category !== "DESIGN_INSPIRATION"
+      (f) => f.isCurrent && !f.isOutdated && f.category !== "DESIGN_INSPIRATION"
     );
     const groups = new Map<string, ProjectFile>();
     for (const file of currentFiles) {
@@ -1375,7 +1424,7 @@ export default function AdminProjectDetailPage() {
                             : isDragOver
                               ? "bg-brand-500/10 ring-2 ring-inset ring-brand-400"
                               : "hover:bg-white/[0.03]"
-                        }`}
+                        } ${latest.isOutdated ? "opacity-60" : ""}`}
                         onClick={(e) => {
                           const tag = (e.target as HTMLElement).closest("input, select, button, a");
                           if (tag) return;
@@ -1484,6 +1533,12 @@ export default function AdminProjectDetailPage() {
                             {latest.isCurrent && (
                               <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                                 Featured
+                              </span>
+                            )}
+                            {latest.isOutdated && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                Outdated
                               </span>
                             )}
                             {latest.folderId && (() => {
@@ -1599,6 +1654,22 @@ export default function AdminProjectDetailPage() {
                                 ))}
                               </select>
                             )}
+                            <button
+                              onClick={() => handleToggleOutdated(latest.id, latest.isOutdated)}
+                              disabled={togglingOutdated === latest.id}
+                              title={latest.isOutdated ? "Clear outdated" : "Mark as outdated"}
+                              className={`inline-flex items-center rounded-lg p-1.5 transition-colors disabled:opacity-50 ${
+                                latest.isOutdated
+                                  ? "text-amber-400 hover:bg-amber-500/10"
+                                  : "text-slate-500 hover:bg-white/[0.06] hover:text-amber-400"
+                              }`}
+                            >
+                              {togglingOutdated === latest.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Clock className="h-4 w-4" />
+                              )}
+                            </button>
                             <a
                               href={`/api/files/${latest.id}/download`}
                               target={isUrlShortcut(latest.originalName) ? "_blank" : undefined}
@@ -1889,7 +1960,9 @@ export default function AdminProjectDetailPage() {
           (f) =>
             f.category === previewFile.category &&
             (f.customCategory ?? null) === (previewFile.customCategory ?? null) &&
-            (f.folderId ?? null) === (previewFile.folderId ?? null)
+            (f.folderId ?? null) === (previewFile.folderId ?? null) &&
+            // Skip outdated files unless the open file is itself outdated
+            (!f.isOutdated || f.id === previewFile.id)
         );
         const latestByGroup = new Map<string, ProjectFile>();
         for (const f of sameScope) {
@@ -2518,6 +2591,21 @@ export default function AdminProjectDetailPage() {
                   </optgroup>
                 )}
               </select>
+              <button
+                onClick={() => handleBulkMarkOutdated(true)}
+                disabled={bulkUpdating}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-1.5 text-sm text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+                Mark outdated
+              </button>
+              <button
+                onClick={() => handleBulkMarkOutdated(false)}
+                disabled={bulkUpdating}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.1] bg-[#1a1d2e] px-3 py-1.5 text-sm text-slate-300 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
+              >
+                Clear outdated
+              </button>
               {bulkUpdating && (
                 <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
               )}
