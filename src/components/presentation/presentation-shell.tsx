@@ -121,10 +121,39 @@ export function PresentationShell({
     }
   }, []);
 
+  /* ---- Expand image-section carousels into individual slides ----
+     An image section with metadata.fileIds (or carouselFiles) holding 2+
+     files is authored as a single "carousel section" in the editor. The
+     viewer — which renders image sections through ChapterStrip's
+     scroll-linked slide flow — needs one entry per image so each shows
+     up as its own slide in the chapter. Each virtual section keeps the
+     original section's chapter/title/transition but gets a synthetic id
+     (origId__fileId) so React keys and navigation indexes stay unique. */
+  const expandedSections = useMemo(() => {
+    const out: SectionData[] = [];
+    for (const s of data.sections) {
+      const hasCarousel =
+        s.type === "image" && s.carouselFiles && s.carouselFiles.length >= 2;
+      if (hasCarousel) {
+        for (const f of s.carouselFiles!) {
+          out.push({
+            ...s,
+            id: `${s.id}__${f.id}`,
+            fileId: f.id,
+            file: f,
+          });
+        }
+      } else {
+        out.push(s);
+      }
+    }
+    return out;
+  }, [data.sections]);
+
   /* ---- Build segments from flat sections ---- */
   const segments = useMemo(
-    () => buildSegments(data.sections),
-    [data.sections]
+    () => buildSegments(expandedSections),
+    [expandedSections]
   );
 
   /* ---- Scroll progress tracking ---- */
@@ -165,9 +194,9 @@ export function PresentationShell({
     }).catch(() => {});
   }, [data.accessToken, viewerName]);
 
-  /* ---- Preload all images ---- */
+  /* ---- Preload all images (including every carousel slide) ---- */
   useEffect(() => {
-    data.sections.forEach((section) => {
+    expandedSections.forEach((section) => {
       if (
         section.file &&
         (section.type === "image" || section.type === "panorama")
@@ -176,7 +205,7 @@ export function PresentationShell({
         img.src = `/api/present/${data.accessToken}/asset/${section.file.id}`;
       }
     });
-  }, [data.sections, data.accessToken]);
+  }, [expandedSections, data.accessToken]);
 
   /* ---- Navigate to section by flat index (scroll-based) ---- */
   const handleNavigate = useCallback(
@@ -248,7 +277,7 @@ export function PresentationShell({
     (targetChapter: string) => {
       if (fadeCutActive) return;
 
-      const targetIndex = data.sections.findIndex(
+      const targetIndex = expandedSections.findIndex(
         (s) => s.chapter === targetChapter
       );
       if (targetIndex === -1) return;
@@ -266,7 +295,7 @@ export function PresentationShell({
         });
       }, 350);
     },
-    [data.sections, handleNavigate, fadeCutActive]
+    [expandedSections, handleNavigate, fadeCutActive]
   );
 
   /* ---- Render ---- */
@@ -321,7 +350,7 @@ export function PresentationShell({
       {/* Timeline navigator — hidden during walkthrough */}
       {!walkthroughActive && (
         <TimelineNavigator
-          sections={data.sections}
+          sections={expandedSections}
           activeSectionIndex={scrollData.activeSectionIndex}
           overallProgress={scrollData.overallProgress}
           onNavigate={handleNavigate}

@@ -33,11 +33,28 @@ export async function GET(
         thumbnailUrl: true,
         isOutdated: true,
         isPanorama: true,
+        version: true,
+        fileGroupId: true,
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(files);
+    // Dedupe versioned files: keep only the highest `version` per
+    // fileGroupId. Files with no fileGroupId pass through unchanged
+    // (single-version files). Every caller wants this — the picker and
+    // presentation-editor dropdown should never offer an outdated version.
+    const maxVersionByGroup = new Map<string, number>();
+    for (const f of files) {
+      if (!f.fileGroupId) continue;
+      const prev = maxVersionByGroup.get(f.fileGroupId) ?? 0;
+      if (f.version > prev) maxVersionByGroup.set(f.fileGroupId, f.version);
+    }
+    // Preserve the original createdAt-desc ordering by filtering in place.
+    const deduped = files.filter((f) =>
+      f.fileGroupId ? f.version === maxVersionByGroup.get(f.fileGroupId) : true
+    );
+
+    return NextResponse.json(deduped);
   } catch (error) {
     console.error("Project files fetch error:", error);
     return NextResponse.json(
