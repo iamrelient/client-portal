@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Maximize, Minimize } from "lucide-react";
 import { TimelineNavigator } from "./chapter-menu";
 import { ChapterStrip } from "./chapter-strip";
 import { RayRendersLogo } from "@/components/ui/ray-renders-logo";
@@ -95,6 +96,30 @@ export function PresentationShell({
   const [walkthroughActive, setWalkthroughActive] = useState(false);
   const [fadeCutActive, setFadeCutActive] = useState(false);
   const [model3DSnapshot, setModel3DSnapshot] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  /* ---- Fullscreen toggle (uses browser Fullscreen API so the address
+     bar and tabs disappear — real fullscreen, not just CSS) ---- */
+  useEffect(() => {
+    function onChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // Some browsers block fullscreen without a user gesture; the click
+      // handler satisfies that so failures here are effectively silent.
+    }
+  }, []);
 
   /* ---- Build segments from flat sections ---- */
   const segments = useMemo(
@@ -311,6 +336,23 @@ export function PresentationShell({
           onNavigate={handleNavigate}
           snapshotUrl={model3DSnapshot}
         />
+      )}
+
+      {/* Fullscreen toggle — hidden during walkthrough */}
+      {!walkthroughActive && (
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          className="fixed bottom-6 right-6 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white/70 backdrop-blur-md transition-colors hover:bg-black/60 hover:text-white"
+        >
+          {isFullscreen ? (
+            <Minimize className="h-4 w-4" />
+          ) : (
+            <Maximize className="h-4 w-4" />
+          )}
+        </button>
       )}
 
       {/* Fade-cut transition overlay (3D model hotspot navigation) */}

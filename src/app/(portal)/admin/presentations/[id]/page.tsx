@@ -112,11 +112,13 @@ export default function EditPresentationPage() {
   // File upload
   const [uploading, setUploading] = useState(false);
   /** Active file-picker target. When set, the FilePickerModal is open;
-   *  onPick delivers the selected fileId to this callback. */
+   *  onPick delivers one or more selected fileIds (single- or multi-
+   *  select depending on the `multiSelect` flag). */
   const [picker, setPicker] = useState<{
     accept: string;
     title: string;
-    onPick: (fileId: string) => void;
+    multiSelect: boolean;
+    onPick: (fileIds: string[]) => void;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
@@ -181,13 +183,16 @@ export default function EditPresentationPage() {
     fileInputRef.current.click();
   }
 
-  /** Open the thumbnail picker to re-use an existing project file. */
+  /** Open the thumbnail picker to re-use an existing project file.
+   *  Pass `{ multiSelect: true }` to let the admin choose several at
+   *  once — useful for building a carousel. */
   function triggerPicker(
     accept: string,
     title: string,
-    onPick: (fileId: string) => void
+    onPick: (fileIds: string[]) => void,
+    opts?: { multiSelect?: boolean }
   ) {
-    setPicker({ accept, title, onPick });
+    setPicker({ accept, title, onPick, multiSelect: opts?.multiSelect ?? false });
   }
 
   async function handleFileUpload(file: File) {
@@ -379,22 +384,19 @@ export default function EditPresentationPage() {
   }
 
   async function appendImageToSection(section: SectionRow, fileId: string) {
-    const current = sectionImageIds(section);
-    if (current.includes(fileId)) return; // no dupes
-    const next = [...current, fileId];
-    await handleUpdateSection(section.id, {
-      fileId: next[0],
-      metadata: { ...(section.metadata || {}), fileIds: next },
-    });
+    await appendImagesToSection(section, [fileId]);
+  }
+
+  // Use server-side atomic appendFileIds so fast successive clicks can't
+  // race. The server reads the fresh section, merges the new ids, and
+  // keeps section.fileId in sync with the first id in the list.
+  async function appendImagesToSection(section: SectionRow, fileIds: string[]) {
+    if (fileIds.length === 0) return;
+    await handleUpdateSection(section.id, { appendFileIds: fileIds });
   }
 
   async function removeImageFromSection(section: SectionRow, fileId: string) {
-    const current = sectionImageIds(section);
-    const next = current.filter((id) => id !== fileId);
-    await handleUpdateSection(section.id, {
-      fileId: next[0] ?? null,
-      metadata: { ...(section.metadata || {}), fileIds: next },
-    });
+    await handleUpdateSection(section.id, { removeFileIds: [fileId] });
   }
 
   async function handleUpdateSection(
@@ -586,8 +588,8 @@ export default function EditPresentationPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                triggerPicker("image/*", "Pick a hero image", (fileId) =>
-                                  handleUpdateSection(section.id, { fileId })
+                                triggerPicker("image/*", "Pick a hero image", (ids) =>
+                                  handleUpdateSection(section.id, { fileId: ids[0] })
                                 )
                               }
                               className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
@@ -658,12 +660,15 @@ export default function EditPresentationPage() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      triggerPicker("image/*", "Pick an image", (fileId) =>
-                                        appendImageToSection(section, fileId)
+                                      triggerPicker(
+                                        "image/*",
+                                        "Pick images for this carousel",
+                                        (ids) => appendImagesToSection(section, ids),
+                                        { multiSelect: true }
                                       )
                                     }
                                     className="h-14 w-20 flex-shrink-0 rounded-lg border border-dashed border-white/[0.15] bg-white/[0.02] text-slate-400 hover:border-brand-500/50 hover:text-brand-300 transition-colors flex flex-col items-center justify-center gap-0.5"
-                                    title="Browse project images"
+                                    title="Browse project images (multi-select)"
                                   >
                                     <Images className="h-3.5 w-3.5" />
                                     <span className="text-[10px]">Browse</span>
@@ -727,8 +732,8 @@ export default function EditPresentationPage() {
                                   const title = section.type === "video"
                                     ? "Pick a video"
                                     : "Pick a 360° image";
-                                  triggerPicker(accept, title, (fileId) =>
-                                    handleUpdateSection(section.id, { fileId })
+                                  triggerPicker(accept, title, (ids) =>
+                                    handleUpdateSection(section.id, { fileId: ids[0] })
                                   );
                                 }}
                                 className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
@@ -902,8 +907,8 @@ export default function EditPresentationPage() {
                                 triggerPicker(
                                   "model/*",
                                   "Pick a 3D model",
-                                  (fileId) =>
-                                    handleUpdateSection(section.id, { fileId })
+                                  (ids) =>
+                                    handleUpdateSection(section.id, { fileId: ids[0] })
                                 )
                               }
                               className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
@@ -1309,6 +1314,7 @@ export default function EditPresentationPage() {
           projectId={pres.project.id}
           accept={picker.accept}
           title={picker.title}
+          multiSelect={picker.multiSelect}
           onPick={picker.onPick}
           onClose={() => setPicker(null)}
         />

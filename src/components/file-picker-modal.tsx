@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, X } from "lucide-react";
+import { Check, FileText, Loader2, X } from "lucide-react";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 
 interface PickerFile {
@@ -20,7 +20,13 @@ interface FilePickerModalProps {
   accept: string;
   /** Optional title override. */
   title?: string;
-  onPick: (fileId: string) => void;
+  /** When true, show checkboxes and a confirm button so the caller can
+   *  pick multiple files at once. Defaults to single-select (clicking a
+   *  tile immediately closes and returns that one id). */
+  multiSelect?: boolean;
+  /** Receives an array of selected file ids. In single-select mode it
+   *  has exactly one element. */
+  onPick: (fileIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -44,12 +50,30 @@ export function FilePickerModal({
   projectId,
   accept,
   title,
+  multiSelect = false,
   onPick,
   onClose,
 }: FilePickerModalProps) {
   const [files, setFiles] = useState<PickerFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function confirmMulti() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    onPick(ids);
+    onClose();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -150,14 +174,23 @@ export function FilePickerModal({
                 const label = getFileLabel(f.mimeType, f.originalName, {
                   isPanorama: !!f.isPanorama,
                 });
+                const isSelected = selected.has(f.id);
                 return (
                   <button
                     key={f.id}
                     onClick={() => {
-                      onPick(f.id);
-                      onClose();
+                      if (multiSelect) {
+                        toggleSelected(f.id);
+                      } else {
+                        onPick([f.id]);
+                        onClose();
+                      }
                     }}
-                    className="group relative flex flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] text-left transition-colors hover:border-brand-500/40 hover:bg-white/[0.05] focus:border-brand-500 focus:outline-none"
+                    className={`group relative flex flex-col overflow-hidden rounded-xl border text-left transition-colors focus:border-brand-500 focus:outline-none ${
+                      isSelected
+                        ? "border-brand-500 bg-brand-500/10"
+                        : "border-white/[0.08] bg-white/[0.03] hover:border-brand-500/40 hover:bg-white/[0.05]"
+                    }`}
                   >
                     <div className="relative aspect-video bg-black/30">
                       {isImage ? (
@@ -178,6 +211,18 @@ export function FilePickerModal({
                           Outdated
                         </span>
                       )}
+                      {multiSelect && (
+                        <span
+                          className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${
+                            isSelected
+                              ? "border-brand-500 bg-brand-500 text-white"
+                              : "border-white/50 bg-black/50 text-transparent"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between gap-2 px-3 py-2">
                       <span className="truncate text-sm text-slate-200">
@@ -193,6 +238,33 @@ export function FilePickerModal({
             </div>
           )}
         </div>
+        {multiSelect && (
+          <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-4 py-3">
+            <span className="text-sm text-slate-400">
+              {selected.size === 0
+                ? "Select one or more files"
+                : `${selected.size} selected`}
+            </span>
+            <div className="flex items-center gap-2">
+              {selected.size > 0 && (
+                <button
+                  onClick={() => setSelected(new Set())}
+                  className="rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-white/[0.05] hover:text-slate-200 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={confirmMulti}
+                disabled={selected.size === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              >
+                Add {selected.size > 0 ? selected.size : ""}{" "}
+                {selected.size === 1 ? "file" : "files"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

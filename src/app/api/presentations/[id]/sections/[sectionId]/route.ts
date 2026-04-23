@@ -26,7 +26,16 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { fileId, title, description, chapter, transitionStyle, metadata } = body;
+    const {
+      fileId,
+      title,
+      description,
+      chapter,
+      transitionStyle,
+      metadata,
+      appendFileIds,
+      removeFileIds,
+    } = body;
 
     const data: Record<string, unknown> = {};
 
@@ -37,6 +46,42 @@ export async function PATCH(
     if (transitionStyle !== undefined)
       data.transitionStyle = transitionStyle || null;
     if (metadata !== undefined) data.metadata = metadata;
+
+    // Atomic carousel list mutations: compute the next fileIds list on the
+    // server from the freshly-read section, so rapid clicks can't race.
+    const appends = Array.isArray(appendFileIds)
+      ? (appendFileIds as unknown[]).filter((v): v is string => typeof v === "string")
+      : null;
+    const removes = Array.isArray(removeFileIds)
+      ? (removeFileIds as unknown[]).filter((v): v is string => typeof v === "string")
+      : null;
+    if (appends || removes) {
+      const currentMeta = (section.metadata as Record<string, unknown> | null) || {};
+      const currentIdsRaw = Array.isArray(currentMeta.fileIds)
+        ? (currentMeta.fileIds as unknown[]).filter(
+            (v): v is string => typeof v === "string"
+          )
+        : [];
+      // Fold in the legacy single-file id if this is the first transition
+      // into carousel mode, so the existing hero image isn't lost.
+      if (currentIdsRaw.length === 0 && section.fileId) {
+        currentIdsRaw.push(section.fileId);
+      }
+      let next = currentIdsRaw;
+      if (appends) {
+        const toAdd = appends.filter((id) => !next.includes(id));
+        next = [...next, ...toAdd];
+      }
+      if (removes) {
+        const removeSet = new Set(removes);
+        next = next.filter((id) => !removeSet.has(id));
+      }
+      // Keep section.fileId in sync with the list (first id, or null).
+      data.metadata = { ...currentMeta, fileIds: next };
+      if (!("fileId" in body)) {
+        data.fileId = next[0] ?? null;
+      }
+    }
 
     const updated = await prisma.presentationSection.update({
       where: { id: params.sectionId },
