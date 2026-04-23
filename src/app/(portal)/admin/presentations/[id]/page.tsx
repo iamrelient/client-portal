@@ -17,7 +17,9 @@ import {
   Eye,
   Upload,
   Settings2,
+  Images,
 } from "lucide-react";
+import { FilePickerModal } from "@/components/file-picker-modal";
 import { PanoramaEditor } from "@/components/admin/panorama-editor";
 import type { PanoramaMetadata } from "@/types/panorama";
 import { Model3DEditor } from "@/components/admin/model-3d-editor";
@@ -108,6 +110,13 @@ export default function EditPresentationPage() {
 
   // File upload
   const [uploading, setUploading] = useState(false);
+  /** Active file-picker target. When set, the FilePickerModal is open;
+   *  onPick delivers the selected fileId to this callback. */
+  const [picker, setPicker] = useState<{
+    accept: string;
+    title: string;
+    onPick: (fileId: string) => void;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
 
@@ -171,6 +180,15 @@ export default function EditPresentationPage() {
     fileInputRef.current.click();
   }
 
+  /** Open the thumbnail picker to re-use an existing project file. */
+  function triggerPicker(
+    accept: string,
+    title: string,
+    onPick: (fileId: string) => void
+  ) {
+    setPicker({ accept, title, onPick });
+  }
+
   async function handleFileUpload(file: File) {
     if (!pres) return;
     setUploading(true);
@@ -178,6 +196,9 @@ export default function EditPresentationPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      // Flag so the project's file tree / carousel stays clean —
+      // this upload is for the presentation only.
+      formData.append("isPresentationAsset", "true");
 
       const res = await fetch(`/api/projects/${pres.project.id}/files`, {
         method: "POST",
@@ -531,6 +552,18 @@ export default function EditPresentationPage() {
                             </select>
                             <button
                               type="button"
+                              onClick={() =>
+                                triggerPicker("image/*", "Pick a hero image", (fileId) =>
+                                  handleUpdateSection(section.id, { fileId })
+                                )
+                              }
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Browse project images"
+                            >
+                              <Images className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               disabled={uploading}
                               onClick={() =>
                                 triggerUpload("image/*", (fileId) =>
@@ -538,7 +571,7 @@ export default function EditPresentationPage() {
                                 )
                               }
                               className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                              title="Upload hero image"
+                              title="Upload a new hero image (stays private to this presentation)"
                             >
                               {uploading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -548,7 +581,7 @@ export default function EditPresentationPage() {
                             </button>
                           </div>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            Background image for the hero slide
+                            Background image for the hero slide · Browse project · Upload new (presentation-only)
                           </p>
                         </div>
                       )}
@@ -583,6 +616,24 @@ export default function EditPresentationPage() {
                             </select>
                             <button
                               type="button"
+                              onClick={() => {
+                                const accept = section.type === "video" ? "video/*" : "image/*";
+                                const title = section.type === "video"
+                                  ? "Pick a video"
+                                  : section.type === "panorama"
+                                    ? "Pick a 360° image"
+                                    : "Pick an image";
+                                triggerPicker(accept, title, (fileId) =>
+                                  handleUpdateSection(section.id, { fileId })
+                                );
+                              }}
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Browse project files"
+                            >
+                              <Images className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               disabled={uploading}
                               onClick={() =>
                                 triggerUpload(
@@ -592,7 +643,7 @@ export default function EditPresentationPage() {
                                 )
                               }
                               className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                              title="Upload from computer"
+                              title="Upload new (presentation-only)"
                             >
                               {uploading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -742,6 +793,21 @@ export default function EditPresentationPage() {
                             </select>
                             <button
                               type="button"
+                              onClick={() =>
+                                triggerPicker(
+                                  "model/*",
+                                  "Pick a 3D model",
+                                  (fileId) =>
+                                    handleUpdateSection(section.id, { fileId })
+                                )
+                              }
+                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                              title="Browse project files"
+                            >
+                              <Images className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               disabled={uploading}
                               onClick={() =>
                                 triggerUpload(
@@ -751,7 +817,7 @@ export default function EditPresentationPage() {
                                 )
                               }
                               className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                              title="Upload 3D model"
+                              title="Upload new (presentation-only)"
                             >
                               {uploading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1132,6 +1198,16 @@ export default function EditPresentationPage() {
           </div>
         </div>
       </div>
+
+      {picker && pres && (
+        <FilePickerModal
+          projectId={pres.project.id}
+          accept={picker.accept}
+          title={picker.title}
+          onPick={picker.onPick}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   );
 }

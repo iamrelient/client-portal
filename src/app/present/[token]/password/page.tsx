@@ -127,7 +127,7 @@ export default function PasswordGatePage() {
             <LogoShelf
               src={`/api/present/${params.token}/asset/${clientLogo}`}
               mode={(logoDisplay as "auto" | "white" | "light-bg" | "transparent") || "auto"}
-              baseHeight="clamp(36px, 5vw, 60px)"
+              baseHeight="clamp(48px, 7vw, 96px)"
               size={(logoSize as "small" | "medium" | "large") || "medium"}
             />
           </div>

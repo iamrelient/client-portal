@@ -27,7 +27,11 @@ export async function GET(
     include: {
       files: {
         where: {
-          presentationSections: { none: {} },
+          // Presentation-only uploads are stored under the project for
+          // cascade-delete convenience but should never appear in the
+          // project's file tree or carousel. Project files referenced by
+          // a presentation section stay visible in both places.
+          isPresentationAsset: false,
         },
         select: {
           id: true,

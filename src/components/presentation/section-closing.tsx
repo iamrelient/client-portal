@@ -75,7 +75,7 @@ export function SectionClosing({ data }: SectionClosingProps) {
             <LogoShelf
               src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
               mode={(data.logoDisplay as "auto" | "white" | "light-bg" | "transparent") || "auto"}
-              baseHeight="clamp(32px, 5vw, 56px)"
+              baseHeight="clamp(48px, 7vw, 96px)"
               size={(data.logoSize as "small" | "medium" | "large") || "medium"}
             />
           </div>

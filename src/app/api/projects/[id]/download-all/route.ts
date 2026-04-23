@@ -51,7 +51,7 @@ export async function GET(
 
     // Build file filter
     const fileWhere: Record<string, unknown> = {
-      presentationSections: { none: {} },
+      isPresentationAsset: false,
     };
 
     // Explicit fileIds take precedence: user selected specific files, zip exactly those.

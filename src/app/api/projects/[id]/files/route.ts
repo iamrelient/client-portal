@@ -18,8 +18,22 @@ export async function GET(
 
   try {
     const files = await prisma.file.findMany({
-      where: { projectId: params.id },
-      select: { id: true, originalName: true, mimeType: true, size: true },
+      where: {
+        projectId: params.id,
+        // Presentation-only uploads live on the same project but should be
+        // hidden from the project's file list.
+        isPresentationAsset: false,
+      },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        size: true,
+        category: true,
+        thumbnailUrl: true,
+        isOutdated: true,
+        isPanorama: true,
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -64,6 +78,7 @@ export async function POST(
 
     const formData = await req.formData();
     const file = formData.get("file") as globalThis.File | null;
+    const isPresentationAsset = formData.get("isPresentationAsset") === "true";
 
     if (!file) {
       return NextResponse.json(
@@ -129,6 +144,7 @@ export async function POST(
           version,
           fileGroupId,
           isCurrent: true,
+          isPresentationAsset,
         },
       });
     });

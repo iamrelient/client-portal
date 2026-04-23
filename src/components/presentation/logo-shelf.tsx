@@ -15,7 +15,10 @@ interface LogoShelfProps {
  *  concatenation for non-clamp values (the caller can pass a plain
  *  pixel string too). */
 function scaleHeight(baseHeight: string, size: LogoSize): string {
-  const scale = size === "small" ? 0.75 : size === "large" ? 1.5 : 1;
+  // "large" is meant to read as a dominant brand moment (hero uses this
+  // scale factor against a bumped base, so on a 1920-wide screen the hero
+  // logo ends up approaching half the viewport).
+  const scale = size === "small" ? 0.6 : size === "large" ? 3 : 1;
   if (scale === 1) return baseHeight;
   const match = baseHeight.match(
     /^clamp\(\s*([0-9.]+)px\s*,\s*([0-9.]+)vw\s*,\s*([0-9.]+)px\s*\)$/
