@@ -10,6 +10,7 @@ import { SectionClosing } from "./section-closing";
 import { SectionImage } from "./section-image";
 import { SectionVideo } from "./section-video";
 import { SectionText } from "./section-text";
+import { SectionDivider } from "./section-divider";
 import { SectionPanorama } from "./section-panorama";
 import { Section3DModel } from "./section-3d-model";
 import { PresentationCursor } from "./presentation-cursor";
@@ -501,15 +502,11 @@ function FullscreenSection({
       );
 
     case "divider":
-      // Standalone divider (edge case: consecutive dividers with no content)
       return (
-        <div className="h-full flex items-center justify-center bg-neutral-50">
-          {section.title && (
-            <h2 className="text-neutral-900 text-center px-8 text-2xl md:text-4xl lg:text-5xl font-light tracking-[0.12em] uppercase leading-tight animate-slide-up-fade">
-              {section.title}
-            </h2>
-          )}
-        </div>
+        <SectionDivider
+          section={section}
+          accentColor={data.clientAccentColor}
+        />
       );
 
     default:

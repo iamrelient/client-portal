@@ -34,14 +34,6 @@ export function buildSegments(sections: SectionData[]): Segment[] {
       });
       pendingChapter = [];
       pendingDivider = null;
-    } else if (pendingDivider) {
-      // Consecutive dividers or divider with no content — render as fullscreen
-      segments.push({
-        kind: "fullscreen",
-        section: pendingDivider,
-        sectionIndex: sections.indexOf(pendingDivider),
-      });
-      pendingDivider = null;
     }
     currentChapterName = undefined;
   };
@@ -58,7 +50,13 @@ export function buildSegments(sections: SectionData[]): Segment[] {
         break;
 
       case "divider":
+        // Dividers now always render as their own standalone slide with
+        // an animated ambient backdrop. Flush whatever's pending, emit
+        // the divider fullscreen, and remember it so the *next* chapter
+        // can still use its title for the "chapter heading" that floats
+        // above images in the chapter-strip.
         flushChapter();
+        segments.push({ kind: "fullscreen", section, sectionIndex: i });
         pendingDivider = section;
         break;
 

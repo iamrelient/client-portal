@@ -68,9 +68,8 @@ const SECTION_TYPES = [
   { value: "image", label: "Image" },
   { value: "video", label: "Video" },
   { value: "panorama", label: "360° Panorama" },
-  { value: "text", label: "Text" },
   { value: "3d-model", label: "3D Model" },
-  { value: "divider", label: "Divider" },
+  { value: "divider", label: "Divider / Title slide" },
 ];
 
 const TRANSITIONS = [
@@ -854,7 +853,29 @@ export default function EditPresentationPage() {
                       )}
 
                       {section.type === "divider" && (
-                        <div className="mt-2">
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <input
+                            type="text"
+                            defaultValue={section.title || ""}
+                            placeholder="Title (e.g. Chapter II — The Conservatory)"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                title: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none sm:col-span-2"
+                          />
+                          <input
+                            type="text"
+                            defaultValue={section.description || ""}
+                            placeholder="Description (optional) — a sentence or two"
+                            onBlur={(e) =>
+                              handleUpdateSection(section.id, {
+                                description: e.target.value || null,
+                              })
+                            }
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none sm:col-span-2"
+                          />
                           <select
                             value={
                               (section.metadata as Record<string, string>)
@@ -867,11 +888,11 @@ export default function EditPresentationPage() {
                                 },
                               })
                             }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none sm:w-48"
+                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none sm:col-span-2"
                           >
                             {AMBIENT_STYLES.map((s) => (
                               <option key={s.value} value={s.value}>
-                                {s.label}
+                                Ambient: {s.label}
                               </option>
                             ))}
                           </select>
