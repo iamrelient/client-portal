@@ -52,6 +52,14 @@ export interface SectionData {
     mimeType: string;
     size: number;
   } | null;
+  /** For image sections with metadata.fileIds set, this is the full
+   *  list of files resolved server-side so the carousel can render. */
+  carouselFiles?: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+  }[];
 }
 
 /* ------------------------------------------------------------------ */

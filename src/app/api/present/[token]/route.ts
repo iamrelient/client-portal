@@ -71,7 +71,54 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _pw, ...data } = presentation;
 
-    return NextResponse.json(data);
+    // Image sections can carry a carousel — a list of fileIds in
+    // metadata.fileIds. Resolve those files here so the viewer doesn't
+    // need to make a second request.
+    const carouselIds = new Set<string>();
+    for (const s of presentation.sections) {
+      const meta = s.metadata as Record<string, unknown> | null;
+      const ids = meta && Array.isArray(meta.fileIds)
+        ? (meta.fileIds as unknown[]).filter(
+            (x): x is string => typeof x === "string"
+          )
+        : [];
+      for (const id of ids) carouselIds.add(id);
+    }
+    const carouselFileMap = new Map<
+      string,
+      { id: string; originalName: string; mimeType: string; size: number }
+    >();
+    if (carouselIds.size > 0) {
+      const carouselFiles = await prisma.file.findMany({
+        where: {
+          id: { in: Array.from(carouselIds) },
+          // Only files belonging to the same project may be rendered.
+          projectId: presentation.projectId,
+        },
+        select: {
+          id: true,
+          originalName: true,
+          mimeType: true,
+          size: true,
+        },
+      });
+      for (const f of carouselFiles) carouselFileMap.set(f.id, f);
+    }
+
+    const enrichedSections = presentation.sections.map((s) => {
+      const meta = s.metadata as Record<string, unknown> | null;
+      const ids = meta && Array.isArray(meta.fileIds)
+        ? (meta.fileIds as unknown[]).filter(
+            (x): x is string => typeof x === "string"
+          )
+        : [];
+      const carouselFiles = ids
+        .map((id) => carouselFileMap.get(id))
+        .filter((f): f is NonNullable<typeof f> => !!f);
+      return { ...s, carouselFiles };
+    });
+
+    return NextResponse.json({ ...data, sections: enrichedSections });
   } catch (error) {
     console.error("Get presentation (public) error:", error);
     return NextResponse.json(

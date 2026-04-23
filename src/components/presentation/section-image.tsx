@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { PresentationData, SectionData } from "./presentation-shell";
 
 interface SectionImageProps {
@@ -73,10 +74,53 @@ export function SectionImage({
     return () => observer.disconnect();
   }, []);
 
+  // Resolve the effective list of files: metadata.fileIds (carousel) wins
+  // over section.file (single). If both are empty the section renders its
+  // "No image assigned" placeholder.
+  const files = useMemo(() => {
+    if (section.carouselFiles && section.carouselFiles.length > 0) {
+      return section.carouselFiles;
+    }
+    return section.file ? [section.file] : [];
+  }, [section.carouselFiles, section.file]);
+  const isCarousel = files.length > 1;
+
+  const [activeIdx, setActiveIdx] = useState(0);
+  useEffect(() => {
+    // Reset when the underlying file list changes.
+    setActiveIdx(0);
+  }, [files]);
+
+  const goNext = useCallback(() => {
+    setActiveIdx((i) => (files.length ? (i + 1) % files.length : 0));
+  }, [files.length]);
+  const goPrev = useCallback(() => {
+    setActiveIdx((i) =>
+      files.length ? (i - 1 + files.length) % files.length : 0
+    );
+  }, [files.length]);
+
+  // Touch swipe for mobile carousels.
+  const touchStartXRef = useRef<number | null>(null);
+  function handleTouchStart(e: React.TouchEvent) {
+    if (!isCarousel || e.touches.length !== 1) return;
+    touchStartXRef.current = e.touches[0].clientX;
+  }
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (!isCarousel || touchStartXRef.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (Math.abs(dx) > 50) {
+      if (dx < 0) goNext();
+      else goPrev();
+    }
+  }
+
   const transition = transitionRef.current;
   const active = visible && loaded;
-  const assetUrl = section.file
-    ? `/api/present/${data.accessToken}/asset/${section.file.id}`
+  const activeFile = files[activeIdx];
+  const assetUrl = activeFile
+    ? `/api/present/${data.accessToken}/asset/${activeFile.id}`
     : null;
 
   // Transition styles for the image wrapper
@@ -139,6 +183,8 @@ export function SectionImage({
   return (
     <div
       ref={ref}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       style={{
         height: "100%",
         width: "100%",
@@ -149,8 +195,10 @@ export function SectionImage({
     >
       {assetUrl && (
         <>
-          {/* Image wrapper with entrance transition */}
+          {/* Image wrapper with entrance transition — keyed on the active
+             file so the entrance animation re-runs on slide changes. */}
           <div
+            key={activeFile?.id}
             style={{
               position: "absolute",
               inset: 0,
@@ -192,6 +240,126 @@ export function SectionImage({
               zIndex: 1,
             }}
           />
+
+          {/* Carousel controls (prev/next buttons + slide dots) */}
+          {isCarousel && (
+            <>
+              <button
+                type="button"
+                onClick={goPrev}
+                aria-label="Previous image"
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "clamp(0.75rem, 2vw, 1.5rem)",
+                  transform: "translateY(-50%)",
+                  zIndex: 3,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 44,
+                  height: 44,
+                  borderRadius: 9999,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(6,6,8,0.45)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  opacity: active ? 0.85 : 0,
+                  transition: reduced ? "none" : "opacity 0.6s ease",
+                }}
+              >
+                <ChevronLeft size={22} />
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                aria-label="Next image"
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  right: "clamp(0.75rem, 2vw, 1.5rem)",
+                  transform: "translateY(-50%)",
+                  zIndex: 3,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 44,
+                  height: 44,
+                  borderRadius: 9999,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(6,6,8,0.45)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  color: "#fff",
+                  cursor: "pointer",
+                  opacity: active ? 0.85 : 0,
+                  transition: reduced ? "none" : "opacity 0.6s ease",
+                }}
+              >
+                <ChevronRight size={22} />
+              </button>
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: "clamp(1rem, 2vw, 1.5rem)",
+                  zIndex: 3,
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: 6,
+                  pointerEvents: "none",
+                  opacity: active ? 1 : 0,
+                  transition: reduced ? "none" : "opacity 0.6s ease",
+                }}
+              >
+                {files.map((f, i) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setActiveIdx(i)}
+                    aria-label={`Go to image ${i + 1}`}
+                    style={{
+                      pointerEvents: "auto",
+                      width: i === activeIdx ? 24 : 8,
+                      height: 8,
+                      borderRadius: 9999,
+                      border: "none",
+                      background:
+                        i === activeIdx
+                          ? "rgba(255,255,255,0.9)"
+                          : "rgba(255,255,255,0.35)",
+                      cursor: "pointer",
+                      padding: 0,
+                      transition: reduced ? "none" : "width 0.4s ease, background 0.4s ease",
+                    }}
+                  />
+                ))}
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  right: "clamp(1rem, 2vw, 1.5rem)",
+                  top: "clamp(1rem, 2vw, 1.5rem)",
+                  zIndex: 3,
+                  padding: "0.25rem 0.6rem",
+                  borderRadius: 9999,
+                  background: "rgba(6,6,8,0.45)",
+                  backdropFilter: "blur(6px)",
+                  WebkitBackdropFilter: "blur(6px)",
+                  fontSize: "0.75rem",
+                  color: "rgba(255,255,255,0.8)",
+                  letterSpacing: "0.05em",
+                  opacity: active ? 1 : 0,
+                  transition: reduced ? "none" : "opacity 0.6s ease",
+                }}
+              >
+                {activeIdx + 1} / {files.length}
+              </div>
+            </>
+          )}
 
           {/* Caption overlay */}
           {(section.title || section.description) && (

@@ -18,6 +18,7 @@ import {
   Upload,
   Settings2,
   Images,
+  X,
 } from "lucide-react";
 import { FilePickerModal } from "@/components/file-picker-modal";
 import { PanoramaEditor } from "@/components/admin/panorama-editor";
@@ -364,6 +365,38 @@ export default function EditPresentationPage() {
     }
   }
 
+  /** Effective list of image fileIds for an image section. Falls back to
+   *  the legacy single `fileId` when metadata.fileIds hasn't been seeded. */
+  function sectionImageIds(section: SectionRow): string[] {
+    const meta = section.metadata as Record<string, unknown> | null;
+    if (meta && Array.isArray(meta.fileIds)) {
+      const ids = (meta.fileIds as unknown[]).filter(
+        (x): x is string => typeof x === "string"
+      );
+      if (ids.length > 0) return ids;
+    }
+    return section.fileId ? [section.fileId] : [];
+  }
+
+  async function appendImageToSection(section: SectionRow, fileId: string) {
+    const current = sectionImageIds(section);
+    if (current.includes(fileId)) return; // no dupes
+    const next = [...current, fileId];
+    await handleUpdateSection(section.id, {
+      fileId: next[0],
+      metadata: { ...(section.metadata || {}), fileIds: next },
+    });
+  }
+
+  async function removeImageFromSection(section: SectionRow, fileId: string) {
+    const current = sectionImageIds(section);
+    const next = current.filter((id) => id !== fileId);
+    await handleUpdateSection(section.id, {
+      fileId: next[0] ?? null,
+      metadata: { ...(section.metadata || {}), fileIds: next },
+    });
+  }
+
   async function handleUpdateSection(
     sectionId: string,
     updates: Record<string, unknown>
@@ -591,67 +624,139 @@ export default function EditPresentationPage() {
                         section.type === "video" ||
                         section.type === "panorama") && (
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <div className="flex gap-1.5">
-                            <select
-                              value={section.fileId || ""}
-                              onChange={(e) =>
-                                handleUpdateSection(section.id, {
-                                  fileId: e.target.value || null,
-                                })
-                              }
-                              className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
-                            >
-                              <option value="">Select file...</option>
-                              {projectFiles
-                                .filter((f) => {
-                                  if (section.type === "video")
-                                    return f.mimeType.startsWith("video/");
-                                  return f.mimeType.startsWith("image/");
-                                })
-                                .map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    {f.originalName}
-                                  </option>
-                                ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const accept = section.type === "video" ? "video/*" : "image/*";
-                                const title = section.type === "video"
-                                  ? "Pick a video"
-                                  : section.type === "panorama"
-                                    ? "Pick a 360° image"
-                                    : "Pick an image";
-                                triggerPicker(accept, title, (fileId) =>
-                                  handleUpdateSection(section.id, { fileId })
-                                );
-                              }}
-                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                              title="Browse project files"
-                            >
-                              <Images className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={uploading}
-                              onClick={() =>
-                                triggerUpload(
-                                  section.type === "video" ? "video/*" : "image/*",
-                                  (fileId) =>
+                          {section.type === "image" ? (() => {
+                            const ids = sectionImageIds(section);
+                            return (
+                              <div className="sm:col-span-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {ids.map((id) => {
+                                    const f = projectFiles.find((pf) => pf.id === id);
+                                    return (
+                                      <div
+                                        key={id}
+                                        title={f?.originalName || ""}
+                                        className="group relative h-14 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-white/[0.1] bg-white/[0.05]"
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={`/api/files/${id}/download?inline=true`}
+                                          alt=""
+                                          loading="lazy"
+                                          className="h-full w-full object-cover"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => removeImageFromSection(section, id)}
+                                          className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/80"
+                                          title="Remove"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      triggerPicker("image/*", "Pick an image", (fileId) =>
+                                        appendImageToSection(section, fileId)
+                                      )
+                                    }
+                                    className="h-14 w-20 flex-shrink-0 rounded-lg border border-dashed border-white/[0.15] bg-white/[0.02] text-slate-400 hover:border-brand-500/50 hover:text-brand-300 transition-colors flex flex-col items-center justify-center gap-0.5"
+                                    title="Browse project images"
+                                  >
+                                    <Images className="h-3.5 w-3.5" />
+                                    <span className="text-[10px]">Browse</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={uploading}
+                                    onClick={() =>
+                                      triggerUpload("image/*", (fileId) =>
+                                        appendImageToSection(section, fileId)
+                                      )
+                                    }
+                                    className="h-14 w-20 flex-shrink-0 rounded-lg border border-dashed border-white/[0.15] bg-white/[0.02] text-slate-400 hover:border-brand-500/50 hover:text-brand-300 transition-colors flex flex-col items-center justify-center gap-0.5 disabled:opacity-50"
+                                    title="Upload new (presentation-only)"
+                                  >
+                                    {uploading ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Upload className="h-3.5 w-3.5" />
+                                    )}
+                                    <span className="text-[10px]">Upload</span>
+                                  </button>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1">
+                                  {ids.length >= 2
+                                    ? `${ids.length} images — renders as a carousel`
+                                    : ids.length === 1
+                                      ? "1 image — add more to make this a carousel"
+                                      : "No images yet — Browse or Upload to add"}
+                                </p>
+                              </div>
+                            );
+                          })() : (
+                            <div className="flex gap-1.5">
+                              <select
+                                value={section.fileId || ""}
+                                onChange={(e) =>
+                                  handleUpdateSection(section.id, {
+                                    fileId: e.target.value || null,
+                                  })
+                                }
+                                className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                              >
+                                <option value="">Select file...</option>
+                                {projectFiles
+                                  .filter((f) =>
+                                    section.type === "video"
+                                      ? f.mimeType.startsWith("video/")
+                                      : f.mimeType.startsWith("image/")
+                                  )
+                                  .map((f) => (
+                                    <option key={f.id} value={f.id}>
+                                      {f.originalName}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const accept = section.type === "video" ? "video/*" : "image/*";
+                                  const title = section.type === "video"
+                                    ? "Pick a video"
+                                    : "Pick a 360° image";
+                                  triggerPicker(accept, title, (fileId) =>
                                     handleUpdateSection(section.id, { fileId })
-                                )
-                              }
-                              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                              title="Upload new (presentation-only)"
-                            >
-                              {uploading ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Upload className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </div>
+                                  );
+                                }}
+                                className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                                title="Browse project files"
+                              >
+                                <Images className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={uploading}
+                                onClick={() =>
+                                  triggerUpload(
+                                    section.type === "video" ? "video/*" : "image/*",
+                                    (fileId) =>
+                                      handleUpdateSection(section.id, { fileId })
+                                  )
+                                }
+                                className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                                title="Upload new (presentation-only)"
+                              >
+                                {uploading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Upload className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          )}
                           {section.type === "image" && (
                             <select
                               value={section.transitionStyle || ""}
