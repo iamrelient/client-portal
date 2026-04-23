@@ -272,6 +272,32 @@ export function PresentationShell({
     [segments]
   );
 
+  /* ---- Arrow-key navigation across the whole presentation ----
+     Left / Right step through every expanded section in order, so the
+     viewer can cruise from the hero all the way to the closing slide
+     without scrolling. Ignored during walkthrough (panorama owns the
+     keys there) or when the user is typing in a focusable field. */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (walkthroughActive) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+      const dir = e.key === "ArrowRight" ? 1 : -1;
+      const last = expandedSections.length - 1;
+      const next = Math.max(0, Math.min(last, scrollData.activeSectionIndex + dir));
+      if (next !== scrollData.activeSectionIndex) {
+        e.preventDefault();
+        handleNavigate(next);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedSections.length, scrollData.activeSectionIndex, handleNavigate, walkthroughActive]);
+
   /* ---- Chapter-name navigation with fade-cut (for 3D model hotspots) ---- */
   const handleChapterNavigate = useCallback(
     (targetChapter: string) => {

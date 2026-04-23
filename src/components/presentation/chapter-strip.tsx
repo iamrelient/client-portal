@@ -95,23 +95,11 @@ export const ChapterStrip = memo(function ChapterStrip({
     [segmentIndex, totalItems]
   );
 
-  // Keyboard: ArrowLeft/Right to cycle items
-  useEffect(() => {
-    if (lightboxImageId) return; // Lightbox handles its own keys
-
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "ArrowRight") {
-        const next = Math.min(activeIndex + 1, totalItems - 1);
-        if (next !== activeIndex) navigateToItem(next);
-      }
-      if (e.key === "ArrowLeft") {
-        const prev = Math.max(activeIndex - 1, 0);
-        if (prev !== activeIndex) navigateToItem(prev);
-      }
-    }
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [activeIndex, totalItems, navigateToItem, lightboxImageId]);
+  // Arrow-key navigation is handled globally in PresentationShell so it
+  // can walk through every section — across chapter boundaries and into
+  // fullscreen sections (hero, closing, 3D). The per-chapter handler
+  // that used to live here would have fought the global one.
+  void navigateToItem;
 
   // Measure rendered image left offset within hero container
   const measureImageOffset = useCallback((img: HTMLImageElement | null) => {
