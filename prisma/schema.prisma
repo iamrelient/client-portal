@@ -212,6 +212,7 @@ model Presentation {
   subtitle          String?
   clientLogo        String?
   logoDisplay       String?                 @default("auto")
+  logoSize          String?                 @default("medium")
   clientAccentColor String?
   password          String?
   expiresAt         DateTime?

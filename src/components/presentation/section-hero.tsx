@@ -168,8 +168,9 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
         >
           <LogoShelf
             src={`/api/present/${data.accessToken}/asset/${data.clientLogo}`}
-            mode={(data.logoDisplay as "auto" | "white" | "light-bg") || "auto"}
-            height="clamp(40px, 6vw, 72px)"
+            mode={(data.logoDisplay as "auto" | "white" | "light-bg" | "transparent") || "auto"}
+            baseHeight="clamp(40px, 6vw, 72px)"
+            size={(data.logoSize as "small" | "medium" | "large") || "medium"}
           />
         </div>
       )}

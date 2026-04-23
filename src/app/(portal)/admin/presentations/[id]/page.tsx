@@ -49,6 +49,7 @@ interface PresentationDetail {
   subtitle: string | null;
   clientLogo: string | null;
   logoDisplay: string | null;
+  logoSize: string | null;
   clientAccentColor: string | null;
   password: string | null;
   expiresAt: string | null;
@@ -99,6 +100,7 @@ export default function EditPresentationPage() {
   const [subtitle, setSubtitle] = useState("");
   const [clientLogo, setClientLogo] = useState("");
   const [logoDisplay, setLogoDisplay] = useState("auto");
+  const [logoSize, setLogoSize] = useState("medium");
   const [accentColor, setAccentColor] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
@@ -128,6 +130,7 @@ export default function EditPresentationPage() {
         setSubtitle(data.subtitle || "");
         setClientLogo(data.clientLogo || "");
         setLogoDisplay(data.logoDisplay || "auto");
+        setLogoSize(data.logoSize || "medium");
         setAccentColor(data.clientAccentColor || "");
         setExpiresAt(
           data.expiresAt
@@ -219,6 +222,7 @@ export default function EditPresentationPage() {
         subtitle: subtitle || null,
         clientLogo: clientLogo || null,
         logoDisplay: logoDisplay || null,
+        logoSize: logoSize || null,
         clientAccentColor: accentColor || null,
         expiresAt: expiresAt || null,
         watermarkEnabled,
@@ -983,20 +987,37 @@ export default function EditPresentationPage() {
                 </div>
               </div>
               {clientLogo && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">
-                    Logo Display
-                  </label>
-                  <select
-                    value={logoDisplay}
-                    onChange={(e) => setLogoDisplay(e.target.value)}
-                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
-                  >
-                    <option value="auto">Auto (frosted backdrop)</option>
-                    <option value="white">White version</option>
-                    <option value="light-bg">Light background</option>
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Logo Display
+                    </label>
+                    <select
+                      value={logoDisplay}
+                      onChange={(e) => setLogoDisplay(e.target.value)}
+                      className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                    >
+                      <option value="auto">Auto (frosted backdrop)</option>
+                      <option value="white">White version</option>
+                      <option value="light-bg">Light background</option>
+                      <option value="transparent">Transparent (no background)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      Logo Size
+                    </label>
+                    <select
+                      value={logoSize}
+                      onChange={(e) => setLogoSize(e.target.value)}
+                      className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                    >
+                      <option value="small">Small</option>
+                      <option value="medium">Medium</option>
+                      <option value="large">Large</option>
+                    </select>
+                  </div>
+                </>
               )}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">

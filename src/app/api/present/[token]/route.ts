@@ -60,6 +60,7 @@ export async function GET(
             title: presentation.title,
             clientLogo: presentation.clientLogo,
             logoDisplay: presentation.logoDisplay,
+            logoSize: presentation.logoSize,
           },
           { status: 401 }
         );

@@ -28,6 +28,7 @@ export interface PresentationData {
   subtitle: string | null;
   clientLogo: string | null;
   logoDisplay: string | null;
+  logoSize: string | null;
   clientAccentColor: string | null;
   watermarkEnabled: boolean;
   accessToken: string;

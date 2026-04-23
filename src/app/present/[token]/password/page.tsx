@@ -15,6 +15,7 @@ export default function PasswordGatePage() {
   const [title, setTitle] = useState<string | null>(null);
   const [clientLogo, setClientLogo] = useState<string | null>(null);
   const [logoDisplay, setLogoDisplay] = useState<string | null>(null);
+  const [logoSize, setLogoSize] = useState<string | null>(null);
   const [accentColor] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [reduced, setReduced] = useState(false);
@@ -36,6 +37,7 @@ export default function PasswordGatePage() {
           setTitle(data.title || null);
           setClientLogo(data.clientLogo || null);
           setLogoDisplay(data.logoDisplay || null);
+          setLogoSize(data.logoSize || null);
         }
         // Also try to get accent color from a separate check
         // The password_required response includes limited data
@@ -124,8 +126,9 @@ export default function PasswordGatePage() {
           <div style={{ marginBottom: "2rem" }}>
             <LogoShelf
               src={`/api/present/${params.token}/asset/${clientLogo}`}
-              mode={(logoDisplay as "auto" | "white" | "light-bg") || "auto"}
-              height="clamp(36px, 5vw, 60px)"
+              mode={(logoDisplay as "auto" | "white" | "light-bg" | "transparent") || "auto"}
+              baseHeight="clamp(36px, 5vw, 60px)"
+              size={(logoSize as "small" | "medium" | "large") || "medium"}
             />
           </div>
         )}

@@ -80,6 +80,7 @@ export async function PATCH(
       subtitle,
       clientLogo,
       logoDisplay,
+      logoSize,
       clientAccentColor,
       password,
       removePassword,
@@ -94,6 +95,7 @@ export async function PATCH(
     if (subtitle !== undefined) data.subtitle = subtitle || null;
     if (clientLogo !== undefined) data.clientLogo = clientLogo || null;
     if (logoDisplay !== undefined) data.logoDisplay = logoDisplay || null;
+    if (logoSize !== undefined) data.logoSize = logoSize || null;
     if (clientAccentColor !== undefined)
       data.clientAccentColor = clientAccentColor || null;
     if (expiresAt !== undefined)
