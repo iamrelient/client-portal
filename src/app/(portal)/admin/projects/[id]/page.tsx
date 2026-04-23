@@ -250,6 +250,10 @@ export default function AdminProjectDetailPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
   const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
+  /** Where the preview was opened from. Controls what the arrow-key
+   *  navigation cycles through: "carousel" → all Featured Deliverables,
+   *  anything else → files in the same folder/category. */
+  const [previewSource, setPreviewSource] = useState<"carousel" | "table">("table");
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [versionHistory, setVersionHistory] = useState<Record<string, ProjectFile[]>>({});
   const [togglingCurrent, setTogglingCurrent] = useState<string | null>(null);
@@ -1460,6 +1464,7 @@ export default function AdminProjectDetailPage() {
                           if (isUrlShortcut(latest.originalName)) {
                             window.open(`/api/files/${latest.id}/download`, "_blank");
                           } else if (canPreview(latest.mimeType, latest.originalName)) {
+                            setPreviewSource("table");
                             setPreviewFile(latest);
                           }
                         }}
@@ -1535,7 +1540,7 @@ export default function AdminProjectDetailPage() {
                               </a>
                             ) : canPreview(latest.mimeType, latest.originalName) ? (
                               <button
-                                onClick={() => setPreviewFile(latest)}
+                                onClick={() => { setPreviewSource("table"); setPreviewFile(latest); }}
                                 className="font-medium text-brand-400 hover:text-brand-300 text-left"
                               >
                                 {fileName}
@@ -1766,7 +1771,7 @@ export default function AdminProjectDetailPage() {
                                   <div className="flex items-center gap-3">
                                     {canPreview(v.mimeType, v.originalName || latest.originalName) && (
                                       <button
-                                        onClick={() => setPreviewFile(v as ProjectFile)}
+                                        onClick={() => { setPreviewSource("table"); setPreviewFile(v as ProjectFile); }}
                                         className="inline-flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300"
                                       >
                                         <Eye className="h-3.5 w-3.5" />
@@ -1869,7 +1874,11 @@ export default function AdminProjectDetailPage() {
               return (
                 <div
                   key={file.id}
-                  onClick={() => previewable ? setPreviewFile(file) : undefined}
+                  onClick={() => {
+                    if (!previewable) return;
+                    setPreviewSource("carousel");
+                    setPreviewFile(file);
+                  }}
                   className={`group relative w-96 flex-shrink-0 snap-start overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl transition-all duration-200 hover:-translate-y-1 hover:border-white/[0.15] hover:shadow-lg hover:shadow-black/20 ${
                     previewable ? "cursor-pointer" : ""
                   }`}
@@ -1989,37 +1998,45 @@ export default function AdminProjectDetailPage() {
               userRole="ADMIN"
               userId={session?.user?.id || ""}
               onRefresh={loadProject}
-              onPreview={(f) => setPreviewFile(f as ProjectFile)}
+              onPreview={(f) => { setPreviewSource("table"); setPreviewFile(f as ProjectFile); }}
             />
           )}
         </>
       )}
 
       {previewFile && (() => {
-        // Arrow keys / swipe should stay within the same folder+category+
-        // customCategory as the file that was clicked, and should only
-        // surface the latest version per fileGroupId. The clicked file
-        // itself is kept even if it's an old version (admin clicked it
-        // explicitly from the version-history list).
-        const sameScope = project.files.filter(
-          (f) =>
-            f.category === previewFile.category &&
-            (f.customCategory ?? null) === (previewFile.customCategory ?? null) &&
-            (f.folderId ?? null) === (previewFile.folderId ?? null) &&
-            // Skip outdated files unless the open file is itself outdated
-            (!f.isOutdated || f.id === previewFile.id)
-        );
-        const latestByGroup = new Map<string, ProjectFile>();
-        for (const f of sameScope) {
-          const key = f.fileGroupId || f.id;
-          const existing = latestByGroup.get(key);
-          if (!existing || f.version > existing.version) {
-            latestByGroup.set(key, f);
+        // Pick the navigation set based on where the preview was opened.
+        let navFiles: ProjectFile[];
+        if (previewSource === "carousel") {
+          // Arrow through every Featured Deliverable, in the order they
+          // appear in the carousel (list is already de-duped to the
+          // latest version per group and excludes outdated files).
+          navFiles = [...featuredFiles];
+        } else {
+          // Table / version-history / inspiration click: stay within the
+          // same folder + category + customCategory, latest version per
+          // fileGroupId. Old versions the admin clicked explicitly are
+          // spliced back in so the modal can still show/arrow them.
+          const sameScope = project.files.filter(
+            (f) =>
+              f.category === previewFile.category &&
+              (f.customCategory ?? null) === (previewFile.customCategory ?? null) &&
+              (f.folderId ?? null) === (previewFile.folderId ?? null) &&
+              // Skip outdated files unless the open file is itself outdated
+              (!f.isOutdated || f.id === previewFile.id)
+          );
+          const latestByGroup = new Map<string, ProjectFile>();
+          for (const f of sameScope) {
+            const key = f.fileGroupId || f.id;
+            const existing = latestByGroup.get(key);
+            if (!existing || f.version > existing.version) {
+              latestByGroup.set(key, f);
+            }
           }
+          navFiles = Array.from(latestByGroup.values()).sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
         }
-        const navFiles = Array.from(latestByGroup.values()).sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
         if (!navFiles.some((f) => f.id === previewFile.id)) {
           const key = previewFile.fileGroupId || previewFile.id;
           const idx = navFiles.findIndex((f) => (f.fileGroupId || f.id) === key);
