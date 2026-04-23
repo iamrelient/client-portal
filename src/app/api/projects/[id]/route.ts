@@ -42,6 +42,7 @@ export async function GET(
           thumbnailUrl: true,
           isCurrent: true,
           isOutdated: true,
+          isPanorama: true,
           version: true,
           fileGroupId: true,
           folderId: true,

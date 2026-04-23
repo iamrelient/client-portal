@@ -57,6 +57,10 @@ export async function PATCH(
         if (next) data.isCurrent = false;
       }
 
+      if ("isPanorama" in body) {
+        data.isPanorama = Boolean(body.isPanorama);
+      }
+
       if ("category" in body && ["RENDER", "DRAWING", "CAD_DRAWING", "SUPPORTING", "DESIGN_INSPIRATION", "OTHER"].includes(body.category)) {
         data.category = body.category;
       }

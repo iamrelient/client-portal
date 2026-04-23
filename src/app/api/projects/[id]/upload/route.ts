@@ -42,6 +42,7 @@ export async function POST(
     const category = ((formData.get("category") as string) || "OTHER") as FileCategory;
     const displayName = formData.get("displayName") as string | null;
     const targetFileGroupId = formData.get("targetFileGroupId") as string | null;
+    const isPanoramaFlag = formData.get("isPanorama") === "true";
 
     if (!file) {
       return NextResponse.json(
@@ -132,6 +133,7 @@ export async function POST(
           version,
           fileGroupId,
           isCurrent: true,
+          isPanorama: isPanoramaFlag,
         },
       });
     });

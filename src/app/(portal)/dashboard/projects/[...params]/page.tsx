@@ -41,6 +41,7 @@ interface ProjectFile {
   thumbnailUrl: string | null;
   isCurrent: boolean;
   isOutdated: boolean;
+  isPanorama: boolean;
   version: number;
   fileGroupId: string | null;
   folderId: string | null;
@@ -512,7 +513,7 @@ export default function ClientProjectDetailPage() {
       groupItems: { latest: ProjectFile; versionCount: number }[]
     ) =>
       groupItems.map(({ latest, versionCount }) => {
-        const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
+        const FileIcon = getFileIcon(latest.mimeType, latest.originalName, { isPanorama: latest.isPanorama });
         const fileName = latest.displayName || latest.originalName;
         const previewable = canPreview(latest.mimeType, latest.originalName);
 
@@ -586,7 +587,7 @@ export default function ClientProjectDetailPage() {
               <td className="px-4 py-4 text-slate-400">
                 <span className="inline-flex items-center gap-1.5">
                   <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                  <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
+                  <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName, { isPanorama: latest.isPanorama })}</span>
                 </span>
               </td>
               <td className="px-4 py-4 text-slate-400 truncate">
@@ -830,7 +831,7 @@ export default function ClientProjectDetailPage() {
               className="flex gap-5 overflow-x-auto scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             >
               {featuredFiles.map((file) => {
-                const FileIcon = getFileIcon(file.mimeType, file.originalName);
+                const FileIcon = getFileIcon(file.mimeType, file.originalName, { isPanorama: file.isPanorama });
                 const fileName = file.displayName || file.originalName;
                 const previewable = canPreview(file.mimeType, file.originalName);
                 const accent = CATEGORY_ACCENT[file.category] || CATEGORY_ACCENT.OTHER;
@@ -911,7 +912,7 @@ export default function ClientProjectDetailPage() {
                             <FileIcon className="h-10 w-10 text-slate-300" />
                           </div>
                           <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                            {getFileLabel(file.mimeType, file.originalName)}
+                            {getFileLabel(file.mimeType, file.originalName, { isPanorama: file.isPanorama })}
                           </span>
                         </div>
 

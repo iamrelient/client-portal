@@ -38,7 +38,18 @@ function getExtension(fileName: string): string {
   return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
 }
 
-export function getFileIcon(mimeType: string, fileName?: string): LucideIcon {
+interface LabelOptions {
+  /** When true, the file is a 360° equirectangular panorama and should be
+   *  labeled/icon'd as "360" regardless of its mime type. */
+  isPanorama?: boolean;
+}
+
+export function getFileIcon(
+  mimeType: string,
+  fileName?: string,
+  opts?: LabelOptions
+): LucideIcon {
+  if (opts?.isPanorama) return Globe;
   for (const [pattern, icon] of mimeMap) {
     if (pattern.test(mimeType)) return icon;
   }
@@ -49,7 +60,12 @@ export function getFileIcon(mimeType: string, fileName?: string): LucideIcon {
   return File;
 }
 
-export function getFileLabel(mimeType: string, fileName?: string): string {
+export function getFileLabel(
+  mimeType: string,
+  fileName?: string,
+  opts?: LabelOptions
+): string {
+  if (opts?.isPanorama) return "360";
   for (const [pattern, , label] of mimeMap) {
     if (pattern.test(mimeType)) return label;
   }

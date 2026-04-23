@@ -14,6 +14,7 @@ import { formatRelativeDate } from "@/lib/format-date";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
 import { canPreview3D } from "@/lib/model-utils";
 import { compressImage } from "@/lib/compress-image";
+import { detectPanoramaFromFile } from "@/lib/pano-utils";
 import { StatusTimeline } from "@/components/status-timeline";
 import { FileComparisonModal } from "@/components/file-comparison-modal";
 import { DownloadOptionsModal } from "@/components/download-options-modal";
@@ -46,6 +47,7 @@ interface ProjectFile {
   thumbnailUrl: string | null;
   isCurrent: boolean;
   isOutdated: boolean;
+  isPanorama: boolean;
   version: number;
   fileGroupId: string | null;
   folderId: string | null;
@@ -494,12 +496,18 @@ export default function AdminProjectDetailPage() {
     const { file, category, customCategory, displayName, targetFileGroupId } = entry;
 
     try {
+      // Kick off a 2:1 aspect-ratio check in parallel so a true 360 image
+      // gets auto-flagged the moment it lands in the DB.
+      const panoramaDetectionPromise = detectPanoramaFromFile(file);
+
       // Steps 1 & 2: Chunked upload to Google Drive via server proxy (auto-retry per chunk)
       const { driveFileId, size } = await chunkedUpload({
         file,
         projectId,
         onProgress: (percent) => setUploadProgress(percent),
       });
+
+      const isPanorama = await panoramaDetectionPromise;
 
       // Step 3: Register the file in our database (small JSON request)
       const completeRes = await fetch(`/api/projects/${projectId}/upload-complete`, {
@@ -514,6 +522,7 @@ export default function AdminProjectDetailPage() {
           customCategory: customCategory?.trim() || null,
           displayName: displayName && displayName !== file.name ? displayName : null,
           targetFileGroupId: targetFileGroupId || null,
+          isPanorama,
         }),
       });
 
@@ -800,6 +809,26 @@ export default function AdminProjectDetailPage() {
   }
 
   const [togglingOutdated, setTogglingOutdated] = useState<string | null>(null);
+  const [togglingPanorama, setTogglingPanorama] = useState<string | null>(null);
+
+  async function handleTogglePanorama(fileId: string, currentValue: boolean) {
+    setTogglingPanorama(fileId);
+    try {
+      const res = await fetch(`/api/files/${fileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPanorama: !currentValue }),
+      });
+      if (res.ok) {
+        loadProject();
+      } else {
+        toast.error("Failed to update file");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setTogglingPanorama(null);
+  }
 
   async function handleToggleOutdated(fileId: string, currentValue: boolean) {
     setTogglingOutdated(fileId);
@@ -1408,7 +1437,7 @@ export default function AdminProjectDetailPage() {
                     );
                   }
                   const { latest, versionCount } = entry;
-                  const FileIcon = getFileIcon(latest.mimeType, latest.originalName);
+                  const FileIcon = getFileIcon(latest.mimeType, latest.originalName, { isPanorama: latest.isPanorama });
                   const fileName = latest.displayName || latest.originalName;
                   const isDragOver = dragOverFileId === latest.id;
 
@@ -1586,7 +1615,7 @@ export default function AdminProjectDetailPage() {
                         <td className="px-4 py-4 text-slate-400">
                           <span className="inline-flex items-center gap-1.5">
                             <FileIcon className="h-4 w-4 flex-shrink-0 text-slate-400" />
-                            <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName)}</span>
+                            <span className="truncate">{getFileLabel(latest.mimeType, latest.originalName, { isPanorama: latest.isPanorama })}</span>
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -1668,6 +1697,22 @@ export default function AdminProjectDetailPage() {
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Clock className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleTogglePanorama(latest.id, latest.isPanorama)}
+                              disabled={togglingPanorama === latest.id}
+                              title={latest.isPanorama ? "Unmark 360" : "Mark as 360"}
+                              className={`inline-flex items-center rounded-lg p-1.5 transition-colors disabled:opacity-50 ${
+                                latest.isPanorama
+                                  ? "text-brand-400 hover:bg-brand-500/10"
+                                  : "text-slate-500 hover:bg-white/[0.06] hover:text-brand-400"
+                              }`}
+                            >
+                              {togglingPanorama === latest.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Globe className="h-4 w-4" />
                               )}
                             </button>
                             <a
@@ -1816,7 +1861,7 @@ export default function AdminProjectDetailPage() {
           </div>
           <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
             {featuredFiles.map((file) => {
-              const FileIcon = getFileIcon(file.mimeType, file.originalName);
+              const FileIcon = getFileIcon(file.mimeType, file.originalName, { isPanorama: file.isPanorama });
               const fileName = file.displayName || file.originalName;
               const previewable = canPreview(file.mimeType, file.originalName);
               const accent = CATEGORY_ACCENT[file.category] || CATEGORY_ACCENT.OTHER;
@@ -1880,7 +1925,7 @@ export default function AdminProjectDetailPage() {
                           <FileIcon className="h-10 w-10 text-slate-300" />
                         </div>
                         <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-                          {getFileLabel(file.mimeType, file.originalName)}
+                          {getFileLabel(file.mimeType, file.originalName, { isPanorama: file.isPanorama })}
                         </span>
                       </div>
                       <div className="border-t border-white/[0.06] px-4 py-3">

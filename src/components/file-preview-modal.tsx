@@ -5,12 +5,14 @@ import { Download, X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-
 import { TransformWrapper, TransformComponent, useControls } from "react-zoom-pan-pinch";
 import { canPreview3D, get3DFormat } from "@/lib/model-utils";
 import { ModelViewer } from "@/components/model-viewer";
+import { PanoramaViewer } from "@/components/presentation/panorama-viewer";
 
 interface PreviewFile {
   id: string;
   originalName: string;
   mimeType: string;
   version?: number;
+  isPanorama?: boolean;
 }
 
 interface FilePreviewModalProps {
@@ -105,6 +107,7 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
   const isPdf = file.mimeType === "application/pdf";
   const isImage = file.mimeType.startsWith("image/");
   const isVideo = file.mimeType.startsWith("video/");
+  const isPanorama = !!file.isPanorama && isImage;
 
   return (
     <div
@@ -170,6 +173,10 @@ export function FilePreviewModal({ file, onClose, files, onNavigate }: FilePrevi
                 className="max-h-full max-w-full rounded-lg"
                 style={{ maxWidth: "calc(95vw - 3rem)", maxHeight: "calc(95vh - 6rem)" }}
               />
+            </div>
+          ) : isPanorama ? (
+            <div className="min-h-0 flex-1">
+              <PanoramaViewer key={file.id} imageUrl={inlineUrl} autoRotate={-2} />
             </div>
           ) : isImage ? (
             <TransformWrapper

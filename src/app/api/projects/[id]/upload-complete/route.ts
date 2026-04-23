@@ -100,7 +100,7 @@ export async function POST(
     }
 
     // ── Standard file upload (client already uploaded to Drive) ──
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType } = body;
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType, isPanorama: bodyIsPanorama } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -277,6 +277,7 @@ export async function POST(
           version,
           fileGroupId,
           isCurrent: true,
+          isPanorama: Boolean(bodyIsPanorama),
         },
       });
     });
