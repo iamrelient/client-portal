@@ -21,7 +21,7 @@ export function PageHeader({ title, description, action, logo }: PageHeaderProps
           <img
             src={logo}
             alt=""
-            className="h-20 w-20 flex-shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.05] object-contain p-2"
+            className="max-h-32 max-w-[280px] flex-shrink-0 object-contain"
           />
         )}
       </div>
