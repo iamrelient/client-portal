@@ -35,6 +35,25 @@ function getWatermarkBuffer(): Buffer | null {
   }
 }
 
+let cachedFloorWatermark: Buffer | null = null;
+let floorWatermarkMissing = false;
+
+function getFloorWatermarkBuffer(): Buffer | null {
+  if (floorWatermarkMissing) return null;
+  if (cachedFloorWatermark) return cachedFloorWatermark;
+  const watermarkPath = path.join(process.cwd(), "public", "floor-watermark.png");
+  try {
+    cachedFloorWatermark = fs.readFileSync(watermarkPath);
+    return cachedFloorWatermark;
+  } catch {
+    console.warn(
+      `Floor watermark file not found at ${watermarkPath} — skipping`
+    );
+    floorWatermarkMissing = true;
+    return null;
+  }
+}
+
 /**
  * Returns true if the given MIME type is a watermarkable image.
  */
@@ -105,6 +124,96 @@ export async function applyWatermark(
     return await pipeline.toBuffer();
   } catch (err) {
     console.error("Watermark processing failed, returning original:", err);
+    return buffer;
+  }
+}
+
+/** Floor watermark opacity — softer than the corner stamp because it's
+ *  meant to read like a projection on the ground, not a label. */
+const FLOOR_WATERMARK_OPACITY = 0.32;
+
+/**
+ * Composites the pre-warped floor watermark (`public/floor-watermark.png`)
+ * onto the bottom-center of an equirectangular panorama image. When
+ * unwrapped onto the sphere by Pannellum, the warped overlay reads as a
+ * flat logo printed on the floor.
+ *
+ * The floor watermark PNG is generated once by `scripts/generate-floor-
+ * watermark.ts` and lives in `public/`. Composite size scales with the
+ * panorama width so the logo's apparent size stays the same regardless
+ * of the source resolution.
+ *
+ * Returns the original buffer unchanged if the mime type isn't a
+ * watermarkable image, the floor watermark is missing, or processing
+ * throws.
+ */
+export async function applyFloorWatermark(
+  buffer: Buffer,
+  mimeType: string
+): Promise<Buffer> {
+  if (!isWatermarkable(mimeType)) return buffer;
+
+  const watermarkBuf = getFloorWatermarkBuffer();
+  if (!watermarkBuf) return buffer;
+
+  try {
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
+    const imgWidth = metadata.width || 0;
+    const imgHeight = metadata.height || 0;
+    if (!imgWidth || !imgHeight) return buffer;
+
+    // The pre-warped overlay is authored to span the bottom strip of an
+    // equirectangular image. We render it at the panorama's full width so
+    // the warping math matches the original assumptions exactly. The
+    // overlay's natural aspect (4:1) sets the height.
+    const targetWidth = imgWidth;
+    const watermark = await sharp(watermarkBuf)
+      .resize({ width: targetWidth, withoutEnlargement: false })
+      .ensureAlpha()
+      .composite([
+        {
+          // Pull the alpha channel down to the floor opacity so the logo
+          // reads as a soft projection rather than a stamp.
+          input: Buffer.from([
+            255,
+            255,
+            255,
+            Math.round(255 * FLOOR_WATERMARK_OPACITY),
+          ]),
+          raw: { width: 1, height: 1, channels: 4 },
+          tile: true,
+          blend: "dest-in",
+        },
+      ])
+      // Soft blur so the projection edge isn't crisp — looks more like
+      // light bouncing off the floor.
+      .blur(0.6)
+      .toBuffer();
+
+    const wmMeta = await sharp(watermark).metadata();
+    const wmWidth = wmMeta.width || targetWidth;
+    const wmHeight = wmMeta.height || Math.round(targetWidth / 4);
+
+    // Anchor the overlay so its bottom edge aligns with the panorama's
+    // bottom edge, horizontally centered. The pre-warp already accounts
+    // for the south-pole singularity at the bottom row.
+    const left = Math.max(0, Math.round((imgWidth - wmWidth) / 2));
+    const top = Math.max(0, imgHeight - wmHeight);
+
+    let pipeline = image.composite([{ input: watermark, left, top }]);
+
+    if (mimeType === "image/jpeg") {
+      pipeline = pipeline.jpeg({ quality: 90, mozjpeg: true });
+    } else if (mimeType === "image/png") {
+      pipeline = pipeline.png({ compressionLevel: 6 });
+    } else if (mimeType === "image/webp") {
+      pipeline = pipeline.webp({ quality: 90 });
+    }
+
+    return await pipeline.toBuffer();
+  } catch (err) {
+    console.error("Floor watermark processing failed, returning original:", err);
     return buffer;
   }
 }

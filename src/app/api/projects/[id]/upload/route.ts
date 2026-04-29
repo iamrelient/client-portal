@@ -56,8 +56,14 @@ export async function POST(
     const bytes = await file.arrayBuffer();
     const rawBuffer = Buffer.from(bytes);
 
-    // Apply watermark to images before uploading
-    const buffer = await applyWatermark(rawBuffer, mimeType);
+    // Apply watermark to images before uploading. 360° panoramas skip
+    // this corner watermark — they get a floor-projected watermark
+    // composited at serve time by the presentation asset route, because
+    // a corner stamp on an equirectangular image looks badly distorted
+    // when wrapped onto a sphere.
+    const buffer = isPanoramaFlag
+      ? rawBuffer
+      : await applyWatermark(rawBuffer, mimeType);
 
     // Upload to Google Drive server-side
     const driveResult = await uploadFileToFolder(

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { downloadFile } from "@/lib/google-drive";
+import { applyFloorWatermark, isWatermarkable } from "@/lib/watermark";
+
+// Floor-watermarking buffers the entire image in memory and runs sharp,
+// which can take a few seconds on a 8K panorama. Lift the default 10s
+// Vercel timeout to the 60s Hobby ceiling.
+export const maxDuration = 60;
 
 export async function GET(
   _req: Request,
@@ -81,6 +87,43 @@ export async function GET(
     }
 
     const { stream } = await downloadFile(file.path);
+
+    // Floor-projected watermark: when the file is a 360° panorama and the
+    // presentation has watermarking + the panorama floor watermark turned
+    // on, buffer the bytes, composite the pre-warped logo onto the bottom
+    // of the equirectangular image, and stream the result. Skip otherwise
+    // so non-panorama files keep streaming without buffering.
+    const shouldFloorWatermark =
+      presentation.watermarkEnabled &&
+      presentation.panoramaFloorWatermark &&
+      file.isPanorama &&
+      isWatermarkable(file.mimeType);
+
+    if (shouldFloorWatermark) {
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) chunks.push(value);
+      }
+      const original = Buffer.concat(chunks);
+      const watermarked = await applyFloorWatermark(original, file.mimeType);
+      // NextResponse expects a BodyInit; hand it the underlying ArrayBuffer.
+      const body = watermarked.buffer.slice(
+        watermarked.byteOffset,
+        watermarked.byteOffset + watermarked.byteLength
+      ) as ArrayBuffer;
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": file.mimeType,
+          "Content-Disposition": `inline; filename="${file.originalName}"`,
+          "Content-Length": String(watermarked.length),
+          "Cache-Control": "private, max-age=3600, immutable",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
 
     return new NextResponse(stream, {
       headers: {

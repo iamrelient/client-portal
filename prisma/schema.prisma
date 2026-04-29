@@ -220,6 +220,7 @@ model Presentation {
   isActive          Boolean                 @default(true)
   accessToken       String                  @unique
   watermarkEnabled  Boolean                 @default(true)
+  panoramaFloorWatermark Boolean            @default(true)
   createdById       String
   createdBy         User                    @relation(fields: [createdById], references: [id])
   sections          PresentationSection[]

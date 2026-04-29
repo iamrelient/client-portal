@@ -59,6 +59,7 @@ interface PresentationDetail {
   isActive: boolean;
   accessToken: string;
   watermarkEnabled: boolean;
+  panoramaFloorWatermark: boolean;
   project: { id: string; name: string };
   sections: SectionRow[];
   _count: { accessLogs: number };
@@ -106,6 +107,7 @@ export default function EditPresentationPage() {
   const [accentColor, setAccentColor] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
+  const [panoramaFloorWatermark, setPanoramaFloorWatermark] = useState(true);
   const [newPassword, setNewPassword] = useState("");
 
   // File upload
@@ -149,6 +151,7 @@ export default function EditPresentationPage() {
             : ""
         );
         setWatermarkEnabled(data.watermarkEnabled);
+        setPanoramaFloorWatermark(data.panoramaFloorWatermark ?? true);
         setLoading(false);
 
         // Load project files
@@ -252,6 +255,7 @@ export default function EditPresentationPage() {
         clientAccentColor: accentColor || null,
         expiresAt: expiresAt || null,
         watermarkEnabled,
+        panoramaFloorWatermark,
       };
 
       if (newPassword) {
@@ -1278,6 +1282,29 @@ export default function EditPresentationPage() {
                   Watermark enabled
                 </label>
               </div>
+              {watermarkEnabled && (
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    id="panorama-floor-watermark"
+                    checked={panoramaFloorWatermark}
+                    onChange={(e) =>
+                      setPanoramaFloorWatermark(e.target.checked)
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-600 focus:ring-brand-500"
+                  />
+                  <label
+                    htmlFor="panorama-floor-watermark"
+                    className="text-sm text-slate-300"
+                  >
+                    Floor watermark on 360° panoramas
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Composites the logo onto the floor at view-time so it
+                      reads flat — no distorted corner stamp on the sphere.
+                    </span>
+                  </label>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={saving}

@@ -87,6 +87,7 @@ export async function PATCH(
       expiresAt,
       isActive,
       watermarkEnabled,
+      panoramaFloorWatermark,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -102,6 +103,8 @@ export async function PATCH(
       data.expiresAt = expiresAt ? new Date(expiresAt) : null;
     if (isActive !== undefined) data.isActive = isActive;
     if (watermarkEnabled !== undefined) data.watermarkEnabled = watermarkEnabled;
+    if (panoramaFloorWatermark !== undefined)
+      data.panoramaFloorWatermark = panoramaFloorWatermark;
 
     if (removePassword) {
       data.password = null;
