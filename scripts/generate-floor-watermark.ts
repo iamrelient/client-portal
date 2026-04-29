@@ -43,26 +43,31 @@ import fs from "fs";
 const SOURCE_LOGO = path.join(process.cwd(), "public", "logo-horizontal.png");
 const OUTPUT = path.join(process.cwd(), "public", "floor-watermark.png");
 
-/** Final overlay size, in equirectangular pixels. The watermark composites
- *  onto a panorama at this exact size — pick something that scales well to
- *  typical 4K (4096×2048) and 8K (8192×4096) panoramas. We aim for ~25% of
- *  a 4K width. The asset route picks a smaller scale at composite time. */
-const OUT_W = 1024;
-const OUT_H = 256;
+/** Final overlay size, in equirectangular pixels. The asset route resizes
+ *  to the served panorama's width while preserving aspect, so the strip's
+ *  pixel-density at composite time scales with the source. 2048×800 is
+ *  oversized enough that 8K panoramas don't lose detail. */
+const OUT_W = 2048;
+const OUT_H = 800;
 
 /** Where on the floor the logo lives, in metres. Camera at origin, eye at
- *  height h, looking along +z. The logo's center sits at (0, -h, z0).
- *  These pick a "comfortable, embossed-on-the-floor" feel. */
+ *  height h, looking along +z. We center the logo directly under the camera
+ *  (LOGO_FORWARD = 0) so it stays visible regardless of which direction the
+ *  viewer is looking — the user always sees a "rug" of branding when they
+ *  tilt down. Width is wider than depth (logos are horizontal). */
 const CAMERA_HEIGHT = 1.6;     // metres
-const LOGO_FORWARD = 1.6;      // metres in front of the camera
-const LOGO_HALF_WIDTH = 1.0;   // half the world-space width of the logo
-const LOGO_HALF_DEPTH = 0.25;  // half the world-space depth of the logo (front-to-back on floor)
+const LOGO_FORWARD = 0;        // logo centered directly under the camera
+const LOGO_HALF_WIDTH = 1.0;   // half the world-space width of the logo "rug"
+const LOGO_HALF_DEPTH = 0.28;  // half the world-space depth (skinny — text logos are wide)
 
 /** Latitude range covered by the overlay strip (radians from the equator).
  *  φ_top should be < π. We carve the bottom strip of an equirectangular —
- *  the slice from φ_top down to (just shy of) the south pole. */
-const PHI_TOP = Math.PI * 0.78;     // ~140° from north pole
-const PHI_BOTTOM = Math.PI * 0.995; // stop just before the singular south pole
+ *  the slice from φ_top down to (just shy of) the south pole. The logo's
+ *  visible range with the geometry above is roughly φ ∈ [0.81π, 0.998π],
+ *  so PHI_TOP = 0.6π gives plenty of headroom and renders well below the
+ *  horizon. */
+const PHI_TOP = Math.PI * 0.6;
+const PHI_BOTTOM = Math.PI * 0.998;
 
 // ────────────────────────────────────────────────────────────────────────
 

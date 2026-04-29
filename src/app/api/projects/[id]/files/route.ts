@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToFolder } from "@/lib/google-drive";
 import { hasStudioAccess } from "@/lib/roles";
+import { isPanoramaAspect } from "@/lib/pano-utils";
+import sharp from "sharp";
 import { randomBytes } from "crypto";
 
 export async function GET(
@@ -107,6 +109,22 @@ export async function POST(
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // Detect 360° panoramas from the image's aspect ratio so isPanorama
+    // can drive serve-time floor-watermarking. Failures here are
+    // non-fatal — non-images / non-decodable files just fall through
+    // with isPanorama = false.
+    let isPanorama = false;
+    if ((file.type || "").startsWith("image/")) {
+      try {
+        const meta = await sharp(buffer).metadata();
+        if (meta.width && meta.height) {
+          isPanorama = isPanoramaAspect(meta.width, meta.height);
+        }
+      } catch {
+        /* not an image we can read — leave isPanorama false */
+      }
+    }
+
     const result = await uploadFileToFolder(
       project.driveFolderId,
       file.name,
@@ -162,6 +180,7 @@ export async function POST(
           fileGroupId,
           isCurrent: true,
           isPresentationAsset,
+          isPanorama,
         },
       });
     });
