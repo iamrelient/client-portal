@@ -18,6 +18,7 @@ export async function GET(
   try {
     const presentation = await prisma.presentation.findUnique({
       where: { accessToken: params.token },
+      include: { project: { select: { watermarkEnabled: true } } },
     });
 
     if (!presentation || !presentation.isActive) {
@@ -95,7 +96,11 @@ export async function GET(
     // the bytes (cheap for an image) so we can both confirm the aspect
     // ratio and run sharp's compositor; non-watermark-eligible files
     // and non-image mime types still pass straight through Drive.
+    // A project-level kill-switch overrides the per-presentation flags.
+    // If the project has watermarking turned off, every file from that
+    // project serves clean regardless of presentation settings.
     const watermarkingPossible =
+      presentation.project.watermarkEnabled &&
       presentation.watermarkEnabled &&
       presentation.panoramaFloorWatermark &&
       isWatermarkable(file.mimeType);

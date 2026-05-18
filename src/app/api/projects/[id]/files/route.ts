@@ -125,6 +125,11 @@ export async function POST(
       }
     }
 
+    // Note: this endpoint doesn't bake watermarks at upload time —
+    // the chunked upload-complete and direct upload paths do that.
+    // The project.watermarkEnabled flag is enforced there (and at
+    // serve time by the presentation asset route).
+
     const result = await uploadFileToFolder(
       project.driveFolderId,
       file.name,

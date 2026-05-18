@@ -23,7 +23,7 @@ export async function POST(
   try {
     const project = await prisma.project.findUnique({
       where: { id: params.id },
-      select: { id: true, name: true, driveFolderId: true },
+      select: { id: true, name: true, driveFolderId: true, watermarkEnabled: true },
     });
 
     if (!project) {
@@ -56,12 +56,13 @@ export async function POST(
     const bytes = await file.arrayBuffer();
     const rawBuffer = Buffer.from(bytes);
 
-    // Apply watermark to images before uploading. 360° panoramas skip
-    // this corner watermark — they get a floor-projected watermark
-    // composited at serve time by the presentation asset route, because
-    // a corner stamp on an equirectangular image looks badly distorted
-    // when wrapped onto a sphere.
-    const buffer = isPanoramaFlag
+    // Apply watermark to images before uploading. Two skip cases:
+    //  • The project has watermarking turned off entirely.
+    //  • The file is a 360° panorama — it gets a floor-projected
+    //    watermark composited at serve time by the presentation
+    //    asset route, because a corner stamp on an equirectangular
+    //    image looks badly distorted when wrapped onto a sphere.
+    const buffer = !project.watermarkEnabled || isPanoramaFlag
       ? rawBuffer
       : await applyWatermark(rawBuffer, mimeType);
 

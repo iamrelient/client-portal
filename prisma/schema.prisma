@@ -158,6 +158,7 @@ model Project {
   driveFolderId    String?
   lastSyncedAt     DateTime?
   deletedDriveIds  String[]  @default([])
+  watermarkEnabled Boolean   @default(true)
   createdById      String
   createdBy        User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   files            File[]

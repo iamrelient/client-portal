@@ -281,6 +281,7 @@ export default function AdminProjectDetailPage() {
 
   const [editName, setEditName] = useState("");
   const [editEmails, setEditEmails] = useState("");
+  const [editWatermarkEnabled, setEditWatermarkEnabled] = useState(true);
   const [editCompanyId, setEditCompanyId] = useState("");
   const [editStatus, setEditStatus] = useState("concept");
   const [companies, setCompanies] = useState<{ id: string; name: string; logoPath: string | null }[]>([]);
@@ -318,6 +319,7 @@ export default function AdminProjectDetailPage() {
         setEditName(data.name);
         setEditEmails(data.authorizedEmails?.join(", ") || "");
         setEditStatus(data.status || "concept");
+        setEditWatermarkEnabled(data.watermarkEnabled ?? true);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -384,6 +386,7 @@ export default function AdminProjectDetailPage() {
     formData.set("emails", editEmails);
     formData.set("companyId", editCompanyId);
     formData.set("status", editStatus);
+    formData.set("watermarkEnabled", editWatermarkEnabled ? "true" : "false");
 
     // Compress images before uploading
     const thumbnail = formData.get("thumbnail") as File | null;
@@ -2399,6 +2402,24 @@ export default function AdminProjectDetailPage() {
                 className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 placeholder="client@example.com, @acmecorp.com"
               />
+            </div>
+
+            <div className="sm:col-span-2 flex items-start gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+              <input
+                id="edit-watermark"
+                type="checkbox"
+                checked={editWatermarkEnabled}
+                onChange={(e) => setEditWatermarkEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-600 focus:ring-brand-500"
+              />
+              <label htmlFor="edit-watermark" className="text-sm text-slate-300">
+                Watermark this project&apos;s files
+                <span className="block text-[11px] text-slate-500 mt-0.5">
+                  Off = nothing gets stamped on upload and presentations
+                  serve every file clean — overrides per-presentation
+                  watermark settings for files in this project.
+                </span>
+              </label>
             </div>
           </div>
 

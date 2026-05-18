@@ -89,6 +89,7 @@ export async function GET(
     company: project.company,
     companyLogoPath: project.companyLogoPath,
     driveFolderId: project.driveFolderId,
+    watermarkEnabled: project.watermarkEnabled,
     files: project.files,
     folders: project.folders,
     createdBy: project.createdBy,
@@ -155,6 +156,13 @@ export async function PATCH(
 
     if (name?.trim()) {
       data.name = name.trim();
+    }
+
+    // Project-level watermark toggle. The field only appears in the
+    // FormData when the admin actually edits it in the project settings,
+    // so an unrelated PATCH (status, thumbnail, etc.) leaves it alone.
+    if (formData.has("watermarkEnabled")) {
+      data.watermarkEnabled = formData.get("watermarkEnabled") === "true";
     }
 
     if (formData.has("companyId")) {

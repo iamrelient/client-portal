@@ -20,7 +20,7 @@ export async function POST(
   try {
     const project = await prisma.project.findUnique({
       where: { id: params.id },
-      select: { id: true, name: true, driveFolderId: true },
+      select: { id: true, name: true, driveFolderId: true, watermarkEnabled: true },
     });
 
     if (!project) {
@@ -140,11 +140,17 @@ export async function POST(
 
     // Apply watermark to images (chunked uploads already landed on Drive)
     const resolvedMimeType = mimeType || "application/octet-stream";
-    // Skip the corner watermark for 360° panoramas — those get a floor-
-    // projected watermark composited at serve time by the asset route.
-    // A baked-in corner watermark on an equirectangular image gets badly
-    // distorted when wrapped onto a sphere.
-    if (isWatermarkable(resolvedMimeType) && !bodyIsPanorama) {
+    // Skip corner watermark when:
+    //  • The project has watermarking turned off entirely.
+    //  • The file is a 360° panorama — it gets a floor-projected
+    //    watermark composited at serve time. A baked-in corner
+    //    watermark on an equirectangular image gets badly distorted
+    //    when wrapped onto a sphere.
+    if (
+      project.watermarkEnabled &&
+      isWatermarkable(resolvedMimeType) &&
+      !bodyIsPanorama
+    ) {
       try {
         const { stream } = await downloadFile(driveFileId);
         const chunks: Uint8Array[] = [];
