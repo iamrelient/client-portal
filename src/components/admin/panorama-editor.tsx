@@ -37,6 +37,10 @@ interface SectionOption {
   type: string;
   order: number;
   metadata: Record<string, unknown> | null;
+  /** Used as a friendly fallback label in the Target Room dropdown so
+   *  panoramas without a roomLabel / title don't read as the
+   *  unrecognizable "Panorama cmpy0j". */
+  file?: { originalName: string } | null;
 }
 
 interface PanoramaEditorProps {
@@ -218,6 +222,16 @@ export function PanoramaEditor({
       const pannellum = (window as unknown as { pannellum: PannellumGlobal })
         .pannellum;
 
+      // Build the initial hotspot configs from current meta so they
+      // appear the instant the panorama image finishes loading — no
+      // race between Pannellum init and our sync useEffect.
+      const initialHotspots = (meta.hotspots ?? []).map(
+        buildEditorHotspotConfig
+      );
+      mountedHotspotIdsRef.current = new Set(
+        (meta.hotspots ?? []).map((h) => h.id)
+      );
+
       viewerRef.current = pannellum.viewer(containerRef.current!, {
         type: "equirectangular",
         panorama: imageUrl,
@@ -231,9 +245,20 @@ export function PanoramaEditor({
         draggable: true,
         pitch: meta.initialView?.pitch || 0,
         yaw: meta.initialView?.yaw || 180,
+        hotSpots: initialHotspots,
       });
 
-      setReady(true);
+      // Wait for the image to actually finish loading before flagging
+      // ready — addHotSpot calls before "load" can silently no-op.
+      viewerRef.current.on("load", () => {
+        if (!destroyed) setReady(true);
+      });
+      // Fallback: if for some reason "load" never fires (cached image,
+      // synchronous decode), make sure ready still flips eventually.
+      setTimeout(() => {
+        if (!destroyed && !viewerRef.current) return;
+        if (!destroyed) setReady(true);
+      }, 1500);
     });
 
     return () => {

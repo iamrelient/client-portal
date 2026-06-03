@@ -20,6 +20,8 @@ interface SectionOption {
   title: string | null;
   type: string;
   metadata: Record<string, unknown> | null;
+  /** Friendly fallback when roomLabel / title are unset. */
+  file?: { originalName: string } | null;
 }
 
 interface PanoramaHotspotFormProps {
@@ -227,13 +229,22 @@ export function PanoramaHotspotForm({
               required
             >
               <option value="">Select panorama...</option>
-              {panoramaSections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {(s.metadata as Record<string, string>)?.roomLabel ||
-                    s.title ||
-                    `Panorama ${s.id.slice(0, 6)}`}
-                </option>
-              ))}
+              {panoramaSections.map((s) => {
+                const roomLabel = (s.metadata as Record<string, string>)
+                  ?.roomLabel;
+                // Strip the extension for a tidier filename fallback.
+                const fromFile = s.file?.originalName?.replace(/\.[^.]+$/, "");
+                const label =
+                  roomLabel ||
+                  s.title ||
+                  fromFile ||
+                  `Panorama ${s.id.slice(0, 6)}`;
+                return (
+                  <option key={s.id} value={s.id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
             {onAddPanorama && (
               <button
