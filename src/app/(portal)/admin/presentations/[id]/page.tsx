@@ -142,6 +142,9 @@ export default function EditPresentationPage() {
   // Add section
   const [addingType, setAddingType] = useState("");
   const [addingSectionLoading, setAddingSectionLoading] = useState(false);
+  /** True while a batch of "add panoramas" sections is being POSTed.
+   *  Disables the bulk button so spam-clicks can't double-create. */
+  const [bulkAddingPanoramas, setBulkAddingPanoramas] = useState(false);
 
   const load = useCallback(() => {
     fetch(`/api/presentations/${params.id}`)
@@ -236,6 +239,33 @@ export default function EditPresentationPage() {
         accept,
         title,
         multiSelect: false,
+        onPick: (ids) => {
+          if (resolved) return;
+          resolved = true;
+          resolve(ids);
+        },
+        onCancel: () => {
+          if (resolved) return;
+          resolved = true;
+          resolve(null);
+        },
+      });
+    });
+  }
+
+  /** Multi-select Promise-wrapped picker — same semantics as
+   *  triggerPickerAsync but returns every checked fileId. Used by the
+   *  bulk-add-panoramas flow to batch-create sections. */
+  function triggerPickerAsyncMulti(
+    accept: string,
+    title: string
+  ): Promise<string[] | null> {
+    let resolved = false;
+    return new Promise((resolve) => {
+      setPicker({
+        accept,
+        title,
+        multiSelect: true,
         onPick: (ids) => {
           if (resolved) return;
           resolved = true;
@@ -373,6 +403,81 @@ export default function EditPresentationPage() {
       toast.error("Something went wrong");
     }
     setAddingSectionLoading(false);
+  }
+
+  /** One-shot "give me a tour-ready deck" flow. Opens the picker in
+   *  multi-select + upload mode; whatever the admin uploads / picks
+   *  becomes one panorama section each, all in parallel. Mirrors the
+   *  3D-Vista workflow where you batch-import your shots and only
+   *  then start wiring hotspots between them. */
+  async function handleBulkAddPanoramas() {
+    if (!pres || bulkAddingPanoramas) return;
+    setBulkAddingPanoramas(true);
+    try {
+      const ids = await triggerPickerAsyncMulti(
+        "image/*",
+        "Upload or pick panoramas to add"
+      );
+      if (!ids || ids.length === 0) return;
+
+      // Skip files that already back a panorama section in this deck
+      // so re-running the flow with the same shots doesn't pile up
+      // duplicates. (The single-add path uses the same guard.)
+      const existingFileIds = new Set(
+        pres.sections
+          .filter((s) => s.type === "panorama" && s.fileId)
+          .map((s) => s.fileId as string)
+      );
+      const fresh = ids.filter((id) => !existingFileIds.has(id));
+      const skipped = ids.length - fresh.length;
+
+      if (fresh.length === 0) {
+        toast.success(
+          `All ${ids.length} panoramas were already in this presentation`
+        );
+        return;
+      }
+
+      // Parallel POST — the server assigns order based on the current
+      // section count, so racing creates can end up with the same
+      // order. To keep the ordering predictable, do them sequentially.
+      let added = 0;
+      let failed = 0;
+      for (const fileId of fresh) {
+        try {
+          const res = await fetch(
+            `/api/presentations/${params.id}/sections`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "panorama", fileId }),
+            }
+          );
+          if (res.ok) {
+            added += 1;
+          } else {
+            failed += 1;
+          }
+        } catch {
+          failed += 1;
+        }
+      }
+
+      await load();
+
+      if (failed === 0) {
+        const skipMsg = skipped > 0 ? ` (${skipped} already in deck)` : "";
+        toast.success(`Added ${added} panorama${added === 1 ? "" : "s"}${skipMsg}`);
+      } else if (added > 0) {
+        toast.error(
+          `Added ${added}, but ${failed} failed — try those again`
+        );
+      } else {
+        toast.error("Failed to add panoramas");
+      }
+    } finally {
+      setBulkAddingPanoramas(false);
+    }
   }
 
   async function handleDeleteSection(sectionId: string, type: string) {
@@ -1343,7 +1448,7 @@ export default function EditPresentationPage() {
             </div>
 
             {/* Add section */}
-            <div className="px-6 py-3 border-t border-white/[0.06] flex items-center gap-2">
+            <div className="px-6 py-3 border-t border-white/[0.06] flex flex-wrap items-center gap-2">
               <select
                 value={addingType}
                 onChange={(e) => setAddingType(e.target.value)}
@@ -1367,6 +1472,26 @@ export default function EditPresentationPage() {
                   <Plus className="h-3 w-3" />
                 )}
                 Add
+              </button>
+
+              <div className="h-4 w-px bg-white/[0.1] mx-1" />
+
+              {/* Bulk panorama add — opens the picker in multi-select +
+                  upload mode and creates one panorama section per file
+                  in one shot. Designed for the "load all my shots in
+                  before wiring hotspots" workflow. */}
+              <button
+                onClick={handleBulkAddPanoramas}
+                disabled={bulkAddingPanoramas}
+                title="Upload or pick multiple 360° images at once. Each one becomes its own panorama section."
+                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.15] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/[0.25] disabled:opacity-50 transition-colors"
+              >
+                {bulkAddingPanoramas ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Upload className="h-3 w-3" />
+                )}
+                Bulk add panoramas
               </button>
             </div>
           </div>
