@@ -6,6 +6,9 @@ interface RoomData {
   sectionId: string;
   imageUrl: string;
   metadata: PanoramaMetadata;
+  /** Friendly room name resolved upstream (roomLabel → title →
+   *  filename). The list just renders it. */
+  label: string;
 }
 
 interface PanoramaRoomListProps {
@@ -30,10 +33,9 @@ export function PanoramaRoomList({
         WebkitOverflowScrolling: "touch",
       }}
     >
-      {rooms.map((room, idx) => {
+      {rooms.map((room) => {
         const isCurrent = room.sectionId === currentRoomId;
-        const label =
-          room.metadata.roomLabel || `Room ${idx + 1}`;
+        const label = room.label;
 
         return (
           <button

@@ -119,17 +119,38 @@ export function SectionPanorama({
   // its scenes memo would invalidate, the viewer's useEffect would
   // tear down Pannellum, and mid-navigation loadScene calls would
   // hit a freshly-rebuilt viewer pointed back at the entry room.
+  //
+  // We compute the room's friendly `label` here, where we have access
+  // to both the section's `title` (admin-set Room Name) and the
+  // backing file. Downstream components (minimap, room list, top
+  // bar) just read room.label — no more "Room cmpy" fallbacks
+  // because the old Tour-tab roomLabel field is gone.
   const tourRooms = useMemo(
     () =>
       walkthroughActive
         ? data.sections
             .filter((s) => s.type === "panorama" && s.file)
             .sort((a, b) => a.order - b.order)
-            .map((s) => ({
-              sectionId: s.id,
-              imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
-              metadata: (s.metadata || {}) as PanoramaMetadata,
-            }))
+            .map((s, idx) => {
+              const meta = (s.metadata || {}) as PanoramaMetadata;
+              // Preference chain: legacy metadata.roomLabel (kept for
+              // backwards compat) → section title (admin's Room Name)
+              // → filename without extension → "Room N" as a last
+              // resort. The slice-of-id fallback that produced "Room
+              // cmpy" is gone.
+              const fromFile = s.file!.originalName.replace(/\.[^.]+$/, "");
+              const label =
+                meta.roomLabel?.trim() ||
+                s.title?.trim() ||
+                fromFile ||
+                `Room ${idx + 1}`;
+              return {
+                sectionId: s.id,
+                imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
+                metadata: meta,
+                label,
+              };
+            })
         : [],
     [walkthroughActive, data.sections, data.accessToken]
   );

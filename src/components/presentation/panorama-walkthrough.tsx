@@ -14,6 +14,10 @@ interface RoomData {
   sectionId: string;
   imageUrl: string;
   metadata: PanoramaMetadata;
+  /** Friendly name for the room — already resolved by section-
+   *  panorama from metadata.roomLabel → section.title → filename.
+   *  Children (minimap, room list, top bar) just render this. */
+  label: string;
 }
 
 interface PanoramaWalkthroughProps {
@@ -204,8 +208,7 @@ export function PanoramaWalkthrough({
   }, [onExit, infoHotspot]);
 
   const currentRoom = rooms.find((r) => r.sectionId === currentRoomId);
-  const currentLabel =
-    currentRoom?.metadata.roomLabel || currentRoom?.metadata.roomLabel || "Room";
+  const currentLabel = currentRoom?.label ?? "Room";
 
   return (
     <div

@@ -8,6 +8,9 @@ interface RoomData {
   sectionId: string;
   imageUrl: string;
   metadata: PanoramaMetadata;
+  /** Friendly room name resolved upstream (roomLabel → title →
+   *  filename). Already correct — the minimap just renders it. */
+  label: string;
 }
 
 interface PanoramaMinimapProps {
@@ -18,13 +21,6 @@ interface PanoramaMinimapProps {
   onNavigate: (sectionId: string) => void;
 }
 
-/** Friendly label for a room — mirrors the editor's helper so the
- *  expanded minimap reads with the same names admins see. */
-function roomLabel(room: RoomData): string {
-  const m = room.metadata;
-  if (m.roomLabel?.trim()) return m.roomLabel.trim();
-  return `Room ${room.sectionId.slice(0, 4)}`;
-}
 
 /** Floor-plan minimap with grow-from-corner expansion.
  *
@@ -286,7 +282,7 @@ export function PanoramaMinimap({
               data-cursor-label={
                 expanded ? (isCurrent ? "Current" : "Jump") : undefined
               }
-              title={roomLabel(room)}
+              title={room.label}
               style={{
                 position: "absolute",
                 left: `${fp.markerX * 100}%`,
@@ -394,7 +390,7 @@ export function PanoramaMinimap({
                     opacity: 0,
                   }}
                 >
-                  {roomLabel(room)}
+                  {room.label}
                 </span>
               )}
             </button>
