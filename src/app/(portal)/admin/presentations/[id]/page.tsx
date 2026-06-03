@@ -26,6 +26,7 @@ import type { PanoramaMetadata } from "@/types/panorama";
 import { Model3DEditor } from "@/components/admin/model-3d-editor";
 import type { Model3DMetadata } from "@/types/model3d";
 import { canPreview3D } from "@/lib/model-utils";
+import { PresentationFloorPlanMap } from "@/components/admin/presentation-floor-plan-map";
 
 interface FileOption {
   id: string;
@@ -535,6 +536,36 @@ export default function EditPresentationPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left column: Sections */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Floor Plan map — 3D Vista style. Reuses each panorama's
+              metadata.floorPlan, so dropping a thumbnail onto the plan
+              writes that pano's marker. Only shows if there's at least
+              one panorama in the deck. */}
+          {sections.some((s) => s.type === "panorama" && s.fileId) && (
+            <PresentationFloorPlanMap
+              sections={sections.map((s) => ({
+                id: s.id,
+                type: s.type,
+                title: s.title,
+                fileId: s.fileId,
+                metadata: s.metadata,
+                file: s.file
+                  ? { id: s.file.id, originalName: s.file.originalName }
+                  : null,
+              }))}
+              projectFiles={projectFiles}
+              onUpdateSectionMetadata={async (sectionId, metadata) => {
+                await handleUpdateSection(sectionId, { metadata });
+              }}
+              onPickFloorPlan={async () => {
+                const ids = await triggerPickerAsync(
+                  "image/*",
+                  "Pick a floor plan image"
+                );
+                return ids?.[0] ?? null;
+              }}
+            />
+          )}
+
           {/* Section list */}
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/[0.06]">
