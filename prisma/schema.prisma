@@ -87,6 +87,20 @@ model File {
   isOutdated      Boolean  @default(false)
   isPanorama      Boolean  @default(false)
   isPresentationAsset Boolean @default(false)
+  // Viewer-optimized derivative — a downscaled, watermarked JPEG
+  // built at upload time. Lets the presentation viewer load 4K/8K
+  // panoramas as ~1–3 MB JPEGs instead of streaming 50–100 MB
+  // originals through serve-time Sharp. The original Drive file is
+  // never touched; viewerDriveFileId points to a sibling JPEG.
+  // viewerHasWatermark records whether watermarking was baked in so
+  // the asset route can fall back to the original if a presentation
+  // disables watermarks after upload.
+  viewerDriveFileId   String?
+  viewerMimeType      String?
+  viewerSize          Int?
+  viewerWidth         Int?
+  viewerHeight        Int?
+  viewerHasWatermark  Boolean @default(false)
   version         Int      @default(1)
   fileGroupId     String?
   folderId        String?

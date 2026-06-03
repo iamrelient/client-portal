@@ -90,23 +90,7 @@ export async function GET(
       );
     }
 
-    const { stream } = await downloadFile(file.path);
-
-    // Floor-projected watermark: only kicks in for 360° equirectangular
-    // panoramas served as part of a watermarked presentation. We buffer
-    // the bytes (cheap for an image) so we can both confirm the aspect
-    // ratio and run sharp's compositor; non-watermark-eligible files
-    // and non-image mime types still pass straight through Drive.
-    // A project-level kill-switch overrides the per-presentation flags.
-    // If the project has watermarking turned off, every file from that
-    // project serves clean regardless of presentation settings.
-    const watermarkingPossible =
-      presentation.project.watermarkEnabled &&
-      presentation.watermarkEnabled &&
-      presentation.panoramaFloorWatermark &&
-      isWatermarkable(file.mimeType);
-
-    // Build the Cache-Control header once for reuse on both serve paths.
+    // Build the Cache-Control header once for reuse on all serve paths.
     // For password-protected presentations we keep things private — the
     // password is a real access control and shared edge caches would
     // bypass it. Everything else is safe to cache on Vercel's edge
@@ -118,6 +102,51 @@ export async function GET(
     const cacheControl = presentation.password
       ? "private, max-age=3600, immutable"
       : "public, s-maxage=86400, max-age=3600, immutable";
+
+    // ── Fast path: serve the pre-baked viewer derivative ──
+    // Built at upload time (see lib/image-derivatives.ts): downscaled
+    // to ≤4K wide, watermark already composited in, re-encoded as a
+    // tight JPEG. Zero Sharp work at serve time, ~1-3 MB instead of
+    // 50-100 MB for an 8K panorama. We respect the presentation's
+    // watermark kill switches by falling back to the original (slow
+    // path) when the admin wants the clean version of a file whose
+    // derivative carries a baked-in watermark.
+    const wantsWatermark =
+      presentation.project.watermarkEnabled &&
+      presentation.watermarkEnabled &&
+      (file.isPanorama ? presentation.panoramaFloorWatermark : true);
+    const derivativeMatchesIntent =
+      file.viewerHasWatermark === wantsWatermark;
+
+    if (file.viewerDriveFileId && derivativeMatchesIntent) {
+      const { stream: viewerStream } = await downloadFile(
+        file.viewerDriveFileId
+      );
+      return new NextResponse(viewerStream, {
+        headers: {
+          "Content-Type": file.viewerMimeType || file.mimeType,
+          "Content-Disposition": `inline; filename="${file.originalName}"`,
+          "Cache-Control": cacheControl,
+          "X-Content-Type-Options": "nosniff",
+          // Tag so we can see in network panel which path was hit.
+          "X-Asset-Path": "viewer-derivative",
+        },
+      });
+    }
+
+    const { stream } = await downloadFile(file.path);
+
+    // ── Slow path: per-serve floor watermark for legacy files ──
+    // Only kicks in for files without a baked derivative — older
+    // uploads, or fresh ones whose derivative-build failed. We
+    // buffer the bytes, run Sharp, and return. For 8K panoramas
+    // this can take 5–15 s on cold start; the CDN cache amortizes
+    // it across subsequent viewers.
+    const watermarkingPossible =
+      presentation.project.watermarkEnabled &&
+      presentation.watermarkEnabled &&
+      presentation.panoramaFloorWatermark &&
+      isWatermarkable(file.mimeType);
 
     if (watermarkingPossible) {
       const reader = stream.getReader();
@@ -162,6 +191,7 @@ export async function GET(
           "Content-Length": String(outBuf.length),
           "Cache-Control": cacheControl,
           "X-Content-Type-Options": "nosniff",
+          "X-Asset-Path": "serve-time-watermark",
         },
       });
     }
@@ -170,8 +200,9 @@ export async function GET(
       headers: {
         "Content-Type": file.mimeType,
         "Content-Disposition": `inline; filename="${file.originalName}"`,
-        "Cache-Control": "private, max-age=3600, immutable",
+        "Cache-Control": cacheControl,
         "X-Content-Type-Options": "nosniff",
+        "X-Asset-Path": "passthrough",
       },
     });
   } catch (error) {
