@@ -160,13 +160,19 @@ export function PanoramaMinimap({
         zIndex: expanded ? 40 : 20,
         borderRadius: expanded ? 12 : 8,
         overflow: "hidden",
-        border: `1px solid rgba(255,255,255,${expanded ? 0.18 : 0.14})`,
-        background: `rgba(6,6,8,${expanded ? 0.92 : 0.82})`,
-        backdropFilter: `blur(${expanded ? 16 : 8}px)`,
+        // Subtle outline so the map's edge reads against the
+        // panorama, but NO opaque fill — the floor plan image
+        // often has a transparent background and we want the
+        // panorama to show through those areas (admin's intent
+        // when they exported a PNG with transparency).
+        border: `1px solid rgba(255,255,255,${expanded ? 0.22 : 0.18})`,
+        background: "transparent",
         cursor: expanded ? "default" : "pointer",
+        // Drop shadow gives the panel "lift" without a fill —
+        // still reads as a discrete element floating over the room.
         boxShadow: expanded
-          ? "0 30px 80px rgba(0,0,0,0.6)"
-          : "0 2px 10px rgba(0,0,0,0.3)",
+          ? "0 20px 60px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4)"
+          : "0 4px 14px rgba(0,0,0,0.5)",
         // Animate every property that differs between states. The
         // bezier matches the cinematic transition's curve so map
         // expansion + scene transition share a visual language.
@@ -176,7 +182,6 @@ export function PanoramaMinimap({
           "bottom 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
           "left 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
           "border-radius 250ms ease, " +
-          "background 250ms ease, " +
           "box-shadow 250ms ease",
       }}
     >
@@ -185,10 +190,16 @@ export function PanoramaMinimap({
         <div
           style={{
             padding: "0.75rem 1rem",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            // Localized backdrop — container is transparent so the
+            // header would otherwise float against whatever panorama
+            // is behind. Subtle blur + tint keeps the text legible
+            // without bringing back the full dark panel.
+            background: "rgba(6,6,8,0.72)",
+            backdropFilter: "blur(14px)",
             // Fade in slightly after the size animation begins so
             // the text doesn't pop while the panel is still narrow.
             animation: "minimap-fade-in 350ms ease forwards",
@@ -239,12 +250,16 @@ export function PanoramaMinimap({
           draggable={false}
           style={{
             width: "100%",
-            height: expanded ? "auto" : "auto",
+            height: "auto",
             maxHeight: expanded ? "calc(80vh - 50px)" : "none",
             objectFit: "contain",
             display: "block",
-            opacity: expanded ? 0.92 : 0.7,
-            transition: "opacity 300ms ease",
+            // No opacity dim — the floor plan may be a PNG with a
+            // transparent background, and dimming would multiply
+            // the panorama color through the transparent areas.
+            // Plain image with the panorama showing through naturally
+            // gives the cleanest look.
+            opacity: 1,
           }}
         />
 
@@ -330,7 +345,15 @@ export function PanoramaMinimap({
                     left: "50%",
                     width: expanded ? 24 : 18,
                     height: expanded ? 24 : 18,
-                    transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
+                    // Calibrated heading: subtract the panorama's
+                    // northYaw so the arrow points relative to
+                    // "north on the floor plan" instead of relative
+                    // to wherever Pannellum's yaw 0 happens to land.
+                    // If the admin hasn't calibrated yet, northYaw
+                    // is undefined → fall back to raw yaw.
+                    transform: `translate(-50%, -50%) rotate(${
+                      yaw - (fp.northYaw ?? 0)
+                    }deg)`,
                     pointerEvents: "none",
                   }}
                 >

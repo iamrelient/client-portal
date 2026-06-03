@@ -878,6 +878,15 @@ export function PanoramaEditor({
                 projectFiles={projectFiles}
                 onChange={(fp) => setMeta((prev) => ({ ...prev, floorPlan: fp }))}
                 onAddFloorPlan={onAddFloorPlan}
+                onCaptureNorth={() => {
+                  // Pull the current yaw straight from the Pannellum
+                  // viewer on the left. Round to one decimal — more
+                  // precision than that is meaningless for a heading
+                  // indicator and just clutters the metadata.
+                  const viewer = viewerRef.current;
+                  if (!viewer) return null;
+                  return Math.round(viewer.getYaw() * 10) / 10;
+                }}
               />
             )}
 
