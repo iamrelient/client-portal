@@ -47,6 +47,33 @@ export function PanoramaWalkthrough({
     return () => mql.removeEventListener("change", handler);
   }, []);
 
+  // Preload every scene image as soon as the walkthrough opens. By
+  // the time the client clicks a nav hotspot, the target panorama is
+  // already in the browser cache and loadScene resolves instantly —
+  // no loading hiccup mid-transition that breaks the "flying into
+  // the next room" illusion.
+  //
+  // Asset route serves the pre-baked viewer derivative (≤4K JPEG,
+  // typically 1–3 MB), so preloading even a 10-room tour is ~20 MB
+  // — comfortable on broadband, runs concurrently while the entry
+  // room is fading in. Browser handles the parallelism + caching.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const preloads: HTMLImageElement[] = [];
+    for (const room of rooms) {
+      const img = new Image();
+      img.src = room.imageUrl;
+      preloads.push(img);
+    }
+    return () => {
+      // Release references so the GC can free the decoded bitmaps
+      // once the walkthrough closes.
+      for (const img of preloads) {
+        img.src = "";
+      }
+    };
+  }, [rooms]);
+
   // Has floor plan?
   const hasFloorPlan = rooms.some((r) => r.metadata.floorPlan?.imageFileId);
 
@@ -105,10 +132,20 @@ export function PanoramaWalkthrough({
 
       if (useCinematic) {
         // Phase 1 (0-550 ms): camera dollies toward the doorway.
-        // HFOV 40° gives a noticeable perspective compression without
-        // looking like a telephoto crop. Pannellum's lookAt with a
-        // numeric duration uses an ease-out tween internally.
-        viewer.lookAt(fromPitch!, fromYaw!, 40, 550);
+        //
+        // We only use the hotspot's YAW (horizontal direction). For
+        // the pitch we hold roughly eye-level — most nav hotspots
+        // sit on the floor near the doorway, and looking down into
+        // the floor while "walking through" the door looks wrong.
+        // Eye level keeps the illusion of striding forward.
+        //
+        // Easing toward (not all the way to) eye level lets a
+        // doorway-above hotspot still tilt the head up a little.
+        const targetPitch = fromPitch! * 0.2; // most of the way to 0
+        // HFOV 72° gives a gentle perspective lean — feels like
+        // leaning forward through a doorway, not the telephoto crop
+        // we had at 40°.
+        viewer.lookAt(targetPitch, fromYaw!, 72, 550);
       }
 
       // Phase 2 — scene swap. We do this slightly before the zoom
