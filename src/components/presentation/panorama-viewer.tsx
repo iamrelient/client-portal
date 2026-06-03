@@ -160,14 +160,17 @@ function buildHotspotConfigs(
     pitch: hs.pitch,
     yaw: hs.yaw,
     type: "info",
-    createTooltipFunc: () => {
-      if (hs.type === "navigation") {
-        return createNavigationTooltip(hs, () =>
-          onNav?.(hs.targetSectionId)
-        );
-      } else {
-        return createInfoTooltip(hs, () => onInfo?.(hs));
-      }
+    // Pannellum invokes this as `createTooltipFunc(hotSpotDiv, args)`
+    // and expects us to *modify* hotSpotDiv. Returning a wrapper that
+    // never gets attached anywhere is why hotspots have been silently
+    // invisible — Pannellum's default hotspot sprite image isn't in
+    // /public/pannellum so the fallback shows nothing either.
+    createTooltipFunc: (hotSpotDiv: HTMLElement) => {
+      const el =
+        hs.type === "navigation"
+          ? createNavigationTooltip(hs, () => onNav?.(hs.targetSectionId))
+          : createInfoTooltip(hs, () => onInfo?.(hs));
+      hotSpotDiv.appendChild(el);
     },
     createTooltipArgs: "",
   }));

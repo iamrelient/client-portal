@@ -82,7 +82,11 @@ function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> 
     yaw: hs.yaw,
     type: "info",
     cssClass: "editor-hotspot",
-    createTooltipFunc: () => {
+    // Pannellum invokes this as `createTooltipFunc(hotSpotDiv, args)` and
+    // expects us to *modify* hotSpotDiv directly. Returning a new
+    // element doesn't attach it to anything (that mistake is why the
+    // markers were invisible). We append our custom content here.
+    createTooltipFunc: (hotSpotDiv: HTMLElement) => {
       const wrapper = document.createElement("div");
       wrapper.style.cssText = `
         display: flex;
@@ -122,7 +126,7 @@ function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> 
           text-overflow: ellipsis;
         ">${hs.label.replace(/[<>&]/g, "")}</span>
       `;
-      return wrapper;
+      hotSpotDiv.appendChild(wrapper);
     },
     createTooltipArgs: "",
   };

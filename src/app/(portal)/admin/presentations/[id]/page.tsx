@@ -1092,16 +1092,31 @@ export default function EditPresentationPage() {
                         }}
                         onAddPanorama={async () => {
                           // Open the picker, let the admin browse or
-                          // upload, then create a new panorama section
-                          // pointing at the chosen file. Returns the
-                          // new section's id so the hotspot dropdown
-                          // can auto-select it.
+                          // upload. If a panorama section for this file
+                          // already exists in the presentation, reuse
+                          // it (auto-select in the dropdown) instead of
+                          // creating a duplicate. Otherwise, create a
+                          // new panorama section and return its id.
                           const ids = await triggerPickerAsync(
                             "image/*",
                             "Pick a 360° panorama for the new room"
                           );
                           const fileId = ids?.[0];
                           if (!fileId) return null;
+
+                          // Look for an existing panorama section in
+                          // this presentation backed by the same file.
+                          const existing = pres?.sections.find(
+                            (s) =>
+                              s.type === "panorama" && s.fileId === fileId
+                          );
+                          if (existing) {
+                            toast.success(
+                              "That panorama is already in this presentation — selected it for you"
+                            );
+                            return existing.id;
+                          }
+
                           try {
                             const res = await fetch(
                               `/api/presentations/${params.id}/sections`,
