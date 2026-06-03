@@ -112,6 +112,11 @@ export function PanoramaEditor({
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("hotspots");
   const [saving, setSaving] = useState(false);
+  /** Snapshot of the last persisted metadata so we can tell when there
+   *  are unsaved local edits and prompt the admin to hit Save. */
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() =>
+    JSON.stringify(initialMetadata)
+  );
 
   // Local editable metadata
   const [meta, setMeta] = useState<PanoramaMetadata>({
@@ -257,8 +262,13 @@ export function PanoramaEditor({
     if (!cleaned.floorPlan) delete cleaned.floorPlan;
     if (cleaned.hotspots?.length === 0) delete cleaned.hotspots;
     await onSave(cleaned);
+    setLastSavedSnapshot(JSON.stringify(cleaned));
     setSaving(false);
   }
+
+  // True whenever local meta diverges from the last persisted snapshot —
+  // drives the "Unsaved changes" pill so admins can't miss it.
+  const dirty = JSON.stringify(meta) !== lastSavedSnapshot;
 
   const editingHotspot = editingHotspotId
     ? (meta.hotspots || []).find((h) => h.id === editingHotspotId) || null
@@ -502,19 +512,28 @@ export function PanoramaEditor({
             )}
           </div>
 
-          {/* Save button */}
-          <div className="border-t border-white/[0.06] px-4 py-3">
+          {/* Save button — pulses + colour-shifts when there are local
+             edits that haven't been persisted yet, so admins notice. */}
+          <div
+            className={`border-t border-white/[0.06] px-4 py-3 transition-colors ${
+              dirty ? "bg-amber-500/[0.05]" : ""
+            }`}
+          >
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+              disabled={saving || !dirty}
+              className={`w-full inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-white transition-colors disabled:opacity-50 ${
+                dirty
+                  ? "bg-amber-500 hover:bg-amber-600 ring-2 ring-amber-400/40 animate-pulse"
+                  : "bg-brand-600 hover:bg-brand-700"
+              }`}
             >
               {saving ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              Save Configuration
+              {dirty ? "Save Configuration (unsaved changes)" : "Save Configuration"}
             </button>
           </div>
         </div>
