@@ -130,6 +130,11 @@ export default function EditPresentationPage() {
 
   // Panorama editor
   const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
+  /** Section id we just *programmatically* switched to via the drag-
+   *  to-link flow. The render effect uses this to scroll the freshly-
+   *  opened editor into view once it actually mounts (one tick later,
+   *  after `load()` finishes). Cleared after scrolling. */
+  const pendingScrollIdRef = useRef<string | null>(null);
 
   // 3D Model editor
   const [expandedModel3DId, setExpandedModel3DId] = useState<string | null>(null);
@@ -180,6 +185,24 @@ export default function EditPresentationPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** When the drag-to-link flow asked us to switch panoramas, scroll
+   *  the freshly-mounted editor into view once it's actually present
+   *  in the DOM. We key on `pres` so this fires after `load()` brings
+   *  the new metadata in. */
+  useEffect(() => {
+    const target = pendingScrollIdRef.current;
+    if (!target || !pres) return;
+    // Defer one frame so the expanded editor markup has time to render.
+    const timeoutId = window.setTimeout(() => {
+      const el = document.querySelector(`[data-section-id="${target}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      pendingScrollIdRef.current = null;
+    }, 80);
+    return () => window.clearTimeout(timeoutId);
+  }, [pres]);
 
   function triggerUpload(accept: string, onUploaded: (fileId: string) => void) {
     if (!fileInputRef.current || !pres) return;
@@ -455,6 +478,86 @@ export default function EditPresentationPage() {
     }
   }
 
+  /** Friendly label for a panorama section — used as the auto-generated
+   *  navigation hotspot label when the admin drag-links two rooms. */
+  function panoramaLabel(s: SectionRow): string {
+    const meta = (s.metadata || {}) as PanoramaMetadata;
+    const roomLabel = meta.roomLabel?.trim();
+    if (roomLabel) return roomLabel;
+    if (s.title?.trim()) return s.title.trim();
+    const fromFile = s.file?.originalName?.replace(/\.[^.]+$/, "");
+    if (fromFile) return fromFile;
+    return `Panorama ${s.id.slice(0, 6)}`;
+  }
+
+  /** Auto-create a *reverse* navigation hotspot on the dropped-onto
+   *  panorama so the two rooms are wired together in both directions
+   *  — the magic part of the drag-to-link UX from 3D Vista.
+   *
+   *  Heuristic for the reverse hotspot's location: flip the forward
+   *  yaw by 180° (you walked in through that door, you walk out the
+   *  same way). It's a sensible default the admin can nudge later.
+   *  Pitch is preserved so it lines up roughly with floor level. */
+  async function linkPanoramasReverse(args: {
+    fromSectionId: string;
+    toSectionId: string;
+    forwardPitch: number;
+    forwardYaw: number;
+  }) {
+    if (!pres) return;
+    const target = pres.sections.find((s) => s.id === args.toSectionId);
+    const source = pres.sections.find((s) => s.id === args.fromSectionId);
+    if (!target || !source) return;
+
+    const targetMeta = (target.metadata as PanoramaMetadata) || {};
+    const existingReverse = (targetMeta.hotspots ?? []).find(
+      (h) =>
+        h.type === "navigation" && h.targetSectionId === args.fromSectionId
+    );
+    if (existingReverse) {
+      // Already wired the other way — don't add a duplicate. The
+      // forward direction will still get saved (already happened in
+      // the editor), so the cross-link is complete.
+      return;
+    }
+
+    // Normalize yaw flip to (-180, 180] which matches Pannellum's
+    // canonical range and avoids accumulating wraps.
+    const flippedYawRaw = args.forwardYaw + 180;
+    const flippedYaw = ((flippedYawRaw + 180) % 360 + 360) % 360 - 180;
+
+    const reverseHotspot: import("@/types/panorama").NavigationHotspot = {
+      id: crypto.randomUUID(),
+      type: "navigation",
+      pitch: args.forwardPitch,
+      yaw: flippedYaw,
+      label: panoramaLabel(source),
+      targetSectionId: args.fromSectionId,
+    };
+
+    const nextMeta: PanoramaMetadata = {
+      ...targetMeta,
+      hotspots: [...(targetMeta.hotspots ?? []), reverseHotspot],
+    };
+
+    // Use the same PATCH path the editor uses for its own saves.
+    try {
+      const res = await fetch(
+        `/api/presentations/${params.id}/sections/${args.toSectionId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metadata: nextMeta }),
+        }
+      );
+      if (!res.ok) {
+        toast.error("Linked one way, but the return hotspot failed to save");
+      }
+    } catch {
+      toast.error("Linked one way, but the return hotspot failed to save");
+    }
+  }
+
   async function handleRegenerateLink() {
     if (!confirm("Regenerate share link? The old link will stop working."))
       return;
@@ -581,7 +684,7 @@ export default function EditPresentationPage() {
                   !isFixed && idx < sections.length - 2; // Can't go below closing
 
                 return (
-                  <div key={section.id}>
+                  <div key={section.id} data-section-id={section.id}>
                   <div
                     className="px-6 py-3 flex items-start gap-3"
                   >
@@ -1182,6 +1285,36 @@ export default function EditPresentationPage() {
                             "Pick an image for the floor plan"
                           );
                           return ids?.[0] ?? null;
+                        }}
+                        onLinkPanorama={async (args) => {
+                          // Mirror the forward hotspot into the target
+                          // section (one PATCH), then refresh the
+                          // dataset so the now-visible editor for the
+                          // target shows the new reverse hotspot.
+                          await linkPanoramasReverse(args);
+                          await load();
+                          const sourceLabel = pres?.sections.find(
+                            (s) => s.id === args.fromSectionId
+                          );
+                          const targetLabel = pres?.sections.find(
+                            (s) => s.id === args.toSectionId
+                          );
+                          if (sourceLabel && targetLabel) {
+                            toast.success(
+                              `Linked ${panoramaLabel(sourceLabel)} ↔ ${panoramaLabel(targetLabel)}`
+                            );
+                          } else {
+                            toast.success("Rooms linked");
+                          }
+                        }}
+                        onSwitchToPanorama={(targetSectionId) => {
+                          // Mark the target so the scroll effect can
+                          // bring it into view once it mounts. Then
+                          // collapse the current expansion + expand
+                          // the target so the admin lands in the
+                          // freshly-linked room.
+                          pendingScrollIdRef.current = targetSectionId;
+                          setExpandedPanoramaId(targetSectionId);
                         }}
                       />
                     )}

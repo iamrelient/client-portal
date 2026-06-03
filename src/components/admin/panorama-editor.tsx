@@ -36,6 +36,9 @@ interface SectionOption {
   title: string | null;
   type: string;
   order: number;
+  /** Backing file id — used by the drag-to-link rail to pull a real
+   *  panorama thumbnail. Optional so non-file sections still typecheck. */
+  fileId?: string | null;
   metadata: Record<string, unknown> | null;
   /** Used as a friendly fallback label in the Target Room dropdown so
    *  panoramas without a roomLabel / title don't read as the
@@ -61,6 +64,23 @@ interface PanoramaEditorProps {
    *  panorama. Resolves to the file id (auto-selected), or null if
    *  the picker was dismissed. */
   onAddFloorPlan?: () => Promise<string | null>;
+  /** Drag-to-link callback. Called when the admin drops another
+   *  panorama's thumbnail onto the 360° view. The page is responsible
+   *  for PATCHing a *reverse* navigation hotspot into the dropped
+   *  panorama (so both rooms point at each other) — we've already
+   *  saved the forward hotspot via `onSave` before this fires.
+   *  Pitch/Yaw are the forward hotspot's coordinates so the page can
+   *  flip yaw by 180° for a sensible default return location. */
+  onLinkPanorama?: (args: {
+    fromSectionId: string;
+    toSectionId: string;
+    forwardPitch: number;
+    forwardYaw: number;
+  }) => Promise<void>;
+  /** Called after a drag-to-link drop finishes saving on both sides,
+   *  asking the page to switch the expanded editor to the target
+   *  panorama so the admin lands in the room they just walked into. */
+  onSwitchToPanorama?: (sectionId: string) => void;
 }
 
 type Tab = "hotspots" | "initial-view" | "floor-plan" | "tour";
@@ -167,6 +187,18 @@ function loadPannellum(): Promise<void> {
   return pannellumLoadPromise;
 }
 
+/** Friendly label for a panorama section — mirrors the helper in the
+ *  floor plan map so a room's name reads the same everywhere. */
+function panoramaLabel(s: SectionOption): string {
+  const meta = (s.metadata || {}) as PanoramaMetadata;
+  const roomLabel = meta.roomLabel?.trim();
+  if (roomLabel) return roomLabel;
+  if (s.title?.trim()) return s.title.trim();
+  const fromFile = s.file?.originalName?.replace(/\.[^.]+$/, "");
+  if (fromFile) return fromFile;
+  return `Panorama ${s.id.slice(0, 6)}`;
+}
+
 export function PanoramaEditor({
   sectionId,
   imageUrl,
@@ -176,6 +208,8 @@ export function PanoramaEditor({
   onSave,
   onAddPanorama,
   onAddFloorPlan,
+  onLinkPanorama,
+  onSwitchToPanorama,
 }: PanoramaEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PannellumViewer | null>(null);
@@ -207,6 +241,17 @@ export function PanoramaEditor({
     yaw: number;
   } | null>(null);
   const [editingHotspotId, setEditingHotspotId] = useState<string | null>(null);
+
+  /** Drag-to-link state. Tracks which panorama (from the bottom rail)
+   *  is currently being hauled onto the 360° view, so we can show a
+   *  drop indicator and toggle cursor styling on the canvas. */
+  const [draggingLinkTargetId, setDraggingLinkTargetId] = useState<
+    string | null
+  >(null);
+  /** True from "save forward + reverse hotspots" through "switch
+   *  editor" so the canvas can show a brief overlay instead of letting
+   *  the admin start another drag mid-operation. */
+  const [linking, setLinking] = useState(false);
 
   // Panorama sections for navigation targets (exclude self)
   const panoramaSections = allSections.filter(
@@ -396,6 +441,112 @@ export function PanoramaEditor({
     setSaving(false);
   }
 
+  /** Drag-to-link drop on the 360° canvas: creates a forward nav
+   *  hotspot at the drop location pointing at the dragged panorama,
+   *  persists it, then asks the page to mirror a reverse hotspot
+   *  into the target and switch the editor over.
+   *
+   *  We commit synchronously here (not deferred to Save Configuration)
+   *  because the editor is about to unmount on switch — anything held
+   *  in local `meta` state would be lost. */
+  const handleLinkDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const targetId = e.dataTransfer.getData("application/x-pano-link");
+      if (!targetId || targetId === sectionId) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+      const viewer = viewerRef.current;
+      if (!viewer) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+
+      const targetSection = allSections.find((s) => s.id === targetId);
+      if (!targetSection) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+
+      // Pannellum exposes mouseEventToCoords([pitch, yaw]) — drag events
+      // carry the same clientX/Y so this works for drops as well.
+      const coords = viewer.mouseEventToCoords(e.nativeEvent as MouseEvent);
+      if (!coords) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+      const [pitch, yaw] = coords;
+
+      setLinking(true);
+      try {
+        // 1. Forward hotspot — current pano → dropped pano, at drop coords.
+        const forwardHotspot: import("@/types/panorama").NavigationHotspot = {
+          id: crypto.randomUUID(),
+          type: "navigation",
+          pitch,
+          yaw,
+          label: panoramaLabel(targetSection),
+          targetSectionId: targetId,
+        };
+        const nextMeta: PanoramaMetadata = {
+          ...meta,
+          hotspots: [...(meta.hotspots ?? []), forwardHotspot],
+        };
+
+        // Clean before save (same rules as handleSave).
+        const cleaned: PanoramaMetadata = { ...nextMeta };
+        if (!cleaned.roomLabel) delete cleaned.roomLabel;
+        if (!cleaned.tourGroupId) delete cleaned.tourGroupId;
+        if (!cleaned.floorPlan) delete cleaned.floorPlan;
+        if (cleaned.hotspots?.length === 0) delete cleaned.hotspots;
+
+        await onSave(cleaned);
+        setMeta(nextMeta);
+        setLastSavedSnapshot(JSON.stringify(cleaned));
+
+        // 2. Reverse hotspot in target — page handles the cross-section PATCH.
+        if (onLinkPanorama) {
+          await onLinkPanorama({
+            fromSectionId: sectionId,
+            toSectionId: targetId,
+            forwardPitch: pitch,
+            forwardYaw: yaw,
+          });
+        }
+
+        // 3. Switch editor to the freshly-linked room.
+        if (onSwitchToPanorama) {
+          onSwitchToPanorama(targetId);
+        }
+      } finally {
+        setLinking(false);
+        setDraggingLinkTargetId(null);
+      }
+    },
+    [sectionId, allSections, meta, onSave, onLinkPanorama, onSwitchToPanorama]
+  );
+
+  function handleLinkDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (e.dataTransfer.types.includes("application/x-pano-link")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "link";
+    }
+  }
+
+  function handleRailDragStart(
+    e: React.DragEvent<HTMLDivElement>,
+    panoId: string
+  ) {
+    e.dataTransfer.setData("application/x-pano-link", panoId);
+    e.dataTransfer.effectAllowed = "link";
+    setDraggingLinkTargetId(panoId);
+  }
+
+  function handleRailDragEnd() {
+    setDraggingLinkTargetId(null);
+  }
+
   // True whenever local meta diverges from the last persisted snapshot —
   // drives the "Unsaved changes" pill so admins can't miss it.
   const dirty = JSON.stringify(meta) !== lastSavedSnapshot;
@@ -418,7 +569,12 @@ export function PanoramaEditor({
     <div className="border-t border-white/[0.06] bg-white/[0.02]">
       <div className="grid lg:grid-cols-2 gap-0">
         {/* Left: Pannellum preview */}
-        <div className="relative" style={{ minHeight: 320 }}>
+        <div
+          className="relative"
+          style={{ minHeight: 320 }}
+          onDragOver={handleLinkDragOver}
+          onDrop={handleLinkDrop}
+        >
           <div
             ref={containerRef}
             style={{ width: "100%", height: "100%", minHeight: 320 }}
@@ -432,11 +588,119 @@ export function PanoramaEditor({
             </div>
           )}
 
+          {/* Drag-to-link indicator. Bright crosshair-style border +
+              instruction chip so the admin knows the canvas is now a
+              drop target for the panorama they grabbed. */}
+          {draggingLinkTargetId && (
+            <>
+              <div className="pointer-events-none absolute inset-2 z-10 rounded-lg border-2 border-dashed border-emerald-400/70 animate-pulse" />
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-lg bg-emerald-600/90 px-3 py-1.5 text-xs text-white backdrop-blur-sm shadow-lg">
+                <Crosshair className="h-3.5 w-3.5" />
+                Drop where the doorway to{" "}
+                <span className="font-semibold">
+                  {panoramaLabel(
+                    allSections.find((s) => s.id === draggingLinkTargetId) ?? {
+                      id: draggingLinkTargetId,
+                      title: null,
+                      type: "panorama",
+                      order: 0,
+                      metadata: null,
+                      file: null,
+                    }
+                  )}
+                </span>{" "}
+                appears
+              </div>
+            </>
+          )}
+
+          {/* Linking in flight — block re-drops + show a spinner. */}
+          {linking && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+              <div className="flex items-center gap-2 rounded-lg bg-black/70 px-4 py-2 text-xs text-white">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Linking rooms…
+              </div>
+            </div>
+          )}
+
           {/* Hotspot markers overlay */}
           {ready && (meta.hotspots || []).length > 0 && (
             <div className="absolute bottom-3 left-3 z-10 text-[10px] text-slate-400 bg-black/50 rounded px-2 py-1 backdrop-blur-sm">
               {(meta.hotspots || []).length} hotspot
               {(meta.hotspots || []).length !== 1 ? "s" : ""}
+            </div>
+          )}
+
+          {/* Drag-to-link rail. Sits along the bottom edge of the
+              panorama; thumbnails of every *other* panorama in the
+              deck — drag onto the 360° view to wire up a navigation
+              hotspot in both directions at once. */}
+          {panoramaSections.length > 0 && (
+            <div className="absolute inset-x-0 bottom-0 z-10 border-t border-white/[0.1] bg-black/55 backdrop-blur-md">
+              <div className="px-3 py-2 flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 shrink-0">
+                  Drag to link →
+                </span>
+                <div className="flex gap-1.5 overflow-x-auto flex-1 scrollbar-thin">
+                  {panoramaSections
+                    .filter((s) => s.id !== sectionId)
+                    .map((s) => {
+                      const thumbFileId = s.fileId ?? null;
+                      const isDragging = draggingLinkTargetId === s.id;
+                      // Already-linked indicator: greens a thumbnail
+                      // whose pano is already reachable from here via a
+                      // navigation hotspot, so the admin doesn't drop
+                      // a duplicate.
+                      const alreadyLinked = (meta.hotspots ?? []).some(
+                        (h) =>
+                          h.type === "navigation" && h.targetSectionId === s.id
+                      );
+                      return (
+                        <div
+                          key={s.id}
+                          draggable
+                          onDragStart={(e) => handleRailDragStart(e, s.id)}
+                          onDragEnd={handleRailDragEnd}
+                          title={
+                            alreadyLinked
+                              ? `Already linked to ${panoramaLabel(s)} — drag again to add another doorway`
+                              : `Drag onto the 360° view to add a doorway to ${panoramaLabel(s)}`
+                          }
+                          className={`group shrink-0 rounded-md border overflow-hidden cursor-grab active:cursor-grabbing transition-all ${
+                            isDragging
+                              ? "border-emerald-500 opacity-50 scale-95"
+                              : alreadyLinked
+                                ? "border-emerald-500/40 hover:border-emerald-400/70"
+                                : "border-white/[0.15] hover:border-brand-500/60"
+                          }`}
+                          style={{ width: 88 }}
+                        >
+                          <div className="relative w-full" style={{ height: 36 }}>
+                            {thumbFileId ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={`/api/files/${thumbFileId}/download?inline=true`}
+                                alt=""
+                                loading="lazy"
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                draggable={false}
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-white/[0.05]" />
+                            )}
+                            {alreadyLinked && (
+                              <div className="absolute top-0.5 right-0.5 rounded-full bg-emerald-500 w-2 h-2 ring-1 ring-black/60" />
+                            )}
+                          </div>
+                          <div className="px-1 py-0.5 text-[9px] text-slate-200 text-center truncate bg-black/40">
+                            {panoramaLabel(s)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
             </div>
           )}
 
