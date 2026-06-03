@@ -7,7 +7,7 @@ import type {
   InfoHotspot,
   InfoContent,
 } from "@/types/panorama";
-import { Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 
 interface FileOption {
   id: string;
@@ -31,6 +31,11 @@ interface PanoramaHotspotFormProps {
   onSave: (hotspot: PanoramaHotspot) => void;
   onCancel: () => void;
   onDelete?: () => void;
+  /** Optional: lets the admin spin up a brand-new panorama section
+   *  right from the Target Room dropdown (pick a project image or
+   *  upload one). Resolves to the new section's id so we can auto-
+   *  select it, or null if the picker was dismissed. */
+  onAddPanorama?: () => Promise<string | null>;
 }
 
 export function PanoramaHotspotForm({
@@ -42,7 +47,21 @@ export function PanoramaHotspotForm({
   onSave,
   onCancel,
   onDelete,
+  onAddPanorama,
 }: PanoramaHotspotFormProps) {
+  const [addingPanorama, setAddingPanorama] = useState(false);
+
+  async function handleAddPanorama() {
+    if (!onAddPanorama || addingPanorama) return;
+    setAddingPanorama(true);
+    try {
+      const newId = await onAddPanorama();
+      if (newId) setTargetSectionId(newId);
+    } finally {
+      setAddingPanorama(false);
+    }
+  }
+
   const [hsType, setHsType] = useState<"navigation" | "info">(
     hotspot?.type || "navigation"
   );
@@ -200,21 +219,43 @@ export function PanoramaHotspotForm({
           <label className="block text-[10px] font-medium text-slate-400 mb-1">
             Target Room
           </label>
-          <select
-            value={targetSectionId}
-            onChange={(e) => setTargetSectionId(e.target.value)}
-            className={selectClass}
-            required
-          >
-            <option value="">Select panorama...</option>
-            {panoramaSections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {(s.metadata as Record<string, string>)?.roomLabel ||
-                  s.title ||
-                  `Panorama ${s.id.slice(0, 6)}`}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={targetSectionId}
+              onChange={(e) => setTargetSectionId(e.target.value)}
+              className={selectClass}
+              required
+            >
+              <option value="">Select panorama...</option>
+              {panoramaSections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {(s.metadata as Record<string, string>)?.roomLabel ||
+                    s.title ||
+                    `Panorama ${s.id.slice(0, 6)}`}
+                </option>
+              ))}
+            </select>
+            {onAddPanorama && (
+              <button
+                type="button"
+                onClick={handleAddPanorama}
+                disabled={addingPanorama}
+                title="Pick or upload another 360° image and create a new panorama section for it"
+                className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] disabled:opacity-50 transition-colors"
+              >
+                {addingPanorama ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+          {panoramaSections.length === 0 && onAddPanorama && (
+            <p className="mt-1 text-[10px] text-slate-500">
+              No other panoramas yet — click + to add one.
+            </p>
+          )}
         </div>
       )}
 

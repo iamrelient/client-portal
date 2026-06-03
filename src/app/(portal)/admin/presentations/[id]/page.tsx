@@ -120,6 +120,9 @@ export default function EditPresentationPage() {
     title: string;
     multiSelect: boolean;
     onPick: (fileIds: string[]) => void;
+    /** Called when the modal closes without a pick (X / Esc / backdrop)
+     *  so Promise-wrapped callers can resolve to null. */
+    onCancel?: () => void;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
@@ -195,6 +198,32 @@ export default function EditPresentationPage() {
     opts?: { multiSelect?: boolean }
   ) {
     setPicker({ accept, title, onPick, multiSelect: opts?.multiSelect ?? false });
+  }
+
+  /** Promise-wrapped picker — resolves with the picked fileIds, or null
+   *  if the modal was closed without a pick. Single-select for now. */
+  function triggerPickerAsync(
+    accept: string,
+    title: string
+  ): Promise<string[] | null> {
+    let resolved = false;
+    return new Promise((resolve) => {
+      setPicker({
+        accept,
+        title,
+        multiSelect: false,
+        onPick: (ids) => {
+          if (resolved) return;
+          resolved = true;
+          resolve(ids);
+        },
+        onCancel: () => {
+          if (resolved) return;
+          resolved = true;
+          resolve(null);
+        },
+      });
+    });
   }
 
   async function handleFileUpload(file: File) {
@@ -1061,6 +1090,43 @@ export default function EditPresentationPage() {
                         onSave={async (metadata) => {
                           await handleUpdateSection(section.id, { metadata });
                         }}
+                        onAddPanorama={async () => {
+                          // Open the picker, let the admin browse or
+                          // upload, then create a new panorama section
+                          // pointing at the chosen file. Returns the
+                          // new section's id so the hotspot dropdown
+                          // can auto-select it.
+                          const ids = await triggerPickerAsync(
+                            "image/*",
+                            "Pick a 360° panorama for the new room"
+                          );
+                          const fileId = ids?.[0];
+                          if (!fileId) return null;
+                          try {
+                            const res = await fetch(
+                              `/api/presentations/${params.id}/sections`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  type: "panorama",
+                                  fileId,
+                                }),
+                              }
+                            );
+                            if (!res.ok) {
+                              toast.error("Failed to create panorama section");
+                              return null;
+                            }
+                            const created = await res.json();
+                            await load();
+                            toast.success("Panorama added");
+                            return created?.id ?? null;
+                          } catch {
+                            toast.error("Something went wrong");
+                            return null;
+                          }
+                        }}
                       />
                     )}
 
@@ -1364,7 +1430,10 @@ export default function EditPresentationPage() {
           title={picker.title}
           multiSelect={picker.multiSelect}
           onPick={picker.onPick}
-          onClose={() => setPicker(null)}
+          onClose={() => {
+            if (picker.onCancel) picker.onCancel();
+            setPicker(null);
+          }}
         />
       )}
     </div>

@@ -44,6 +44,12 @@ interface PanoramaEditorProps {
   allSections: SectionOption[];
   projectFiles: FileOption[];
   onSave: (metadata: PanoramaMetadata) => Promise<void>;
+  /** Optional: triggered from the "+ Add" button next to a Navigation
+   *  hotspot's Target Room dropdown. Lets the admin pick or upload
+   *  another 360° image and creates a fresh panorama section for it.
+   *  Resolves to the new section's id (auto-selected by the form),
+   *  or null if the picker was dismissed. */
+  onAddPanorama?: () => Promise<string | null>;
 }
 
 type Tab = "hotspots" | "initial-view" | "floor-plan" | "tour";
@@ -93,6 +99,7 @@ export function PanoramaEditor({
   allSections,
   projectFiles,
   onSave,
+  onAddPanorama,
 }: PanoramaEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PannellumViewer | null>(null);
@@ -329,6 +336,7 @@ export function PanoramaEditor({
                     projectFiles={projectFiles}
                     onSave={handleSaveHotspot}
                     onCancel={() => setPendingCoords(null)}
+                    onAddPanorama={onAddPanorama}
                   />
                 )}
 
@@ -342,6 +350,7 @@ export function PanoramaEditor({
                     onSave={handleSaveHotspot}
                     onCancel={() => setEditingHotspotId(null)}
                     onDelete={() => handleDeleteHotspot(editingHotspot.id)}
+                    onAddPanorama={onAddPanorama}
                   />
                 )}
 
