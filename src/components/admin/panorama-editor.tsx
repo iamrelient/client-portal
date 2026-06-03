@@ -17,6 +17,8 @@ interface PannellumViewer {
   destroy: () => void;
   on: (event: string, cb: (...args: unknown[]) => void) => void;
   off: (event: string, cb: (...args: unknown[]) => void) => void;
+  addHotSpot: (config: Record<string, unknown>, sceneId?: string) => void;
+  removeHotSpot: (id: string, sceneId?: string) => boolean;
 }
 
 interface PannellumGlobal {
@@ -61,6 +63,66 @@ type Tab = "hotspots" | "initial-view" | "floor-plan" | "tour";
 
 let pannellumLoaded = false;
 let pannellumLoadPromise: Promise<void> | null = null;
+
+/** Build a Pannellum hot-spot config that draws a simple marker in the
+ *  editor preview — a blue arrow circle for navigation hotspots, an
+ *  amber "i" for info ones, with the label always visible. This is on
+ *  purpose simpler than the production client viewer so admins can
+ *  immediately see *where* a hotspot landed without worrying about
+ *  hover-to-reveal animations. */
+function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> {
+  const isNav = hs.type === "navigation";
+  return {
+    id: hs.id,
+    pitch: hs.pitch,
+    yaw: hs.yaw,
+    type: "info",
+    cssClass: "editor-hotspot",
+    createTooltipFunc: () => {
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translate(-14px, -14px);
+        pointer-events: none;
+      `;
+      wrapper.innerHTML = `
+        <div style="
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 2px solid white;
+          background: ${isNav ? "rgba(59,130,246,0.85)" : "rgba(245,158,11,0.85)"};
+          box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1;
+        ">${isNav ? "↗" : "i"}</div>
+        <span style="
+          margin-top: 4px;
+          font-size: 10px;
+          color: white;
+          background: rgba(0,0,0,0.6);
+          padding: 2px 6px;
+          border-radius: 3px;
+          white-space: nowrap;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          max-width: 160px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        ">${hs.label.replace(/[<>&]/g, "")}</span>
+      `;
+      return wrapper;
+    },
+    createTooltipArgs: "",
+  };
+}
 
 function loadPannellum(): Promise<void> {
   if (pannellumLoaded) return Promise.resolve();
@@ -109,6 +171,9 @@ export function PanoramaEditor({
 }: PanoramaEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PannellumViewer | null>(null);
+  /** IDs of hotspots currently mounted in the Pannellum viewer, so the
+   *  sync effect knows what to remove on the next pass. */
+  const mountedHotspotIdsRef = useRef<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("hotspots");
   const [saving, setSaving] = useState(false);
@@ -177,6 +242,7 @@ export function PanoramaEditor({
         viewerRef.current.destroy();
         viewerRef.current = null;
       }
+      mountedHotspotIdsRef.current = new Set();
       setReady(false);
     };
     // Only re-init when imageUrl changes, not metadata
@@ -203,6 +269,41 @@ export function PanoramaEditor({
     el.addEventListener("click", handleClick);
     return () => el.removeEventListener("click", handleClick);
   }, [ready, placingHotspot]);
+
+  // Sync the editable hotspot list into Pannellum so the admin sees
+  // markers right where they placed them — no need to switch to the
+  // viewer to confirm a hotspot was actually saved.
+  useEffect(() => {
+    if (!ready) return;
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    const previous = mountedHotspotIdsRef.current;
+    const current = new Set<string>();
+
+    // Remove + re-add every hotspot. Simple and correct: an edit (same
+    // id, new pitch/yaw/label) needs a fresh tooltip element anyway,
+    // and the list is small enough that the work is negligible.
+    previous.forEach((id) => {
+      try {
+        viewer.removeHotSpot(id);
+      } catch {
+        /* hotspot may already be gone — fine */
+      }
+    });
+
+    (meta.hotspots ?? []).forEach((hs) => {
+      try {
+        viewer.addHotSpot(buildEditorHotspotConfig(hs));
+        current.add(hs.id);
+      } catch (err) {
+        // Don't let one bad hotspot break the rest.
+        console.warn("Failed to add editor hotspot", hs.id, err);
+      }
+    });
+
+    mountedHotspotIdsRef.current = current;
+  }, [ready, meta.hotspots]);
 
   const handleSaveHotspot = useCallback(
     (hotspot: PanoramaHotspot) => {
