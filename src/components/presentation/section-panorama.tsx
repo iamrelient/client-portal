@@ -113,18 +113,26 @@ export function SectionPanorama({
     : null;
 
   // Every panorama in the deck becomes a scene in the walkthrough.
-  // Sorted by section order so the room list reads top-to-bottom
-  // the way the admin authored it.
-  const tourRooms = walkthroughActive
-    ? data.sections
-        .filter((s) => s.type === "panorama" && s.file)
-        .sort((a, b) => a.order - b.order)
-        .map((s) => ({
-          sectionId: s.id,
-          imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
-          metadata: (s.metadata || {}) as PanoramaMetadata,
-        }))
-    : [];
+  // Sorted by section order so the room list reads top-to-bottom the
+  // way the admin authored it. Memoized so PanoramaWalkthrough's
+  // `rooms` prop reference stays stable across re-renders — otherwise
+  // its scenes memo would invalidate, the viewer's useEffect would
+  // tear down Pannellum, and mid-navigation loadScene calls would
+  // hit a freshly-rebuilt viewer pointed back at the entry room.
+  const tourRooms = useMemo(
+    () =>
+      walkthroughActive
+        ? data.sections
+            .filter((s) => s.type === "panorama" && s.file)
+            .sort((a, b) => a.order - b.order)
+            .map((s) => ({
+              sectionId: s.id,
+              imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
+              metadata: (s.metadata || {}) as PanoramaMetadata,
+            }))
+        : [],
+    [walkthroughActive, data.sections, data.accessToken]
+  );
 
   return (
     <div

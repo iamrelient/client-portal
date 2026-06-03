@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { PanoramaMetadata, PanoramaHotspot } from "@/types/panorama";
 import { isInfoHotspot } from "@/types/panorama";
 import type { PanoramaViewerHandle, PanoramaScene } from "./panorama-viewer";
@@ -38,13 +38,25 @@ export function PanoramaWalkthrough({
   // Has floor plan?
   const hasFloorPlan = rooms.some((r) => r.metadata.floorPlan?.imageFileId);
 
-  // Build scenes for Pannellum multi-scene mode
-  const scenes: PanoramaScene[] = rooms.map((room) => ({
-    id: room.sectionId,
-    imageUrl: room.imageUrl,
-    initialView: room.metadata.initialView,
-    hotspots: room.metadata.hotspots,
-  }));
+  // Build scenes for Pannellum multi-scene mode. MUST be memoized —
+  // PanoramaViewer's init effect depends on `scenes` by reference, so
+  // rebuilding this array on every render (e.g. when `transitioning`
+  // state flips during navigation) tears down and re-inits Pannellum
+  // mid-flight. The new viewer comes up pointed at firstScene =
+  // initialRoomId, so loadScene's request to switch to a different
+  // scene gets clobbered by the fresh init — clients see "click goes
+  // nowhere, stuck on the entry room." Memoizing by `rooms` keeps
+  // the reference stable across state-only re-renders.
+  const scenes: PanoramaScene[] = useMemo(
+    () =>
+      rooms.map((room) => ({
+        id: room.sectionId,
+        imageUrl: room.imageUrl,
+        initialView: room.metadata.initialView,
+        hotspots: room.metadata.hotspots,
+      })),
+    [rooms]
+  );
 
   const handleNavigate = useCallback(
     (targetSectionId: string) => {
