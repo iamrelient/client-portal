@@ -10,6 +10,8 @@ import {
   X,
 } from "lucide-react";
 import { getFileIcon, getFileLabel } from "@/lib/file-icons";
+import { chunkedUpload } from "@/lib/chunked-upload";
+import { detectPanoramaFromFile } from "@/lib/pano-utils";
 
 interface PickerFile {
   id: string;
@@ -68,6 +70,9 @@ interface UploadRow {
   localId: string;
   name: string;
   status: "uploading" | "done" | "error";
+  /** 0-100 from the chunked uploader's onProgress. Stays null for the
+   *  brief initial state before the first chunk lands. */
+  progress?: number;
   /** Server-assigned file id once the POST resolves. */
   fileId?: string;
   errorMessage?: string;
@@ -162,26 +167,62 @@ export function FilePickerModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  /** Upload a single file to the project, returning the server-assigned
-   *  file id (or null on failure). Mirrors the page's handleFileUpload
-   *  shape; kept self-contained here so the picker can run uploads in
-   *  parallel without the page having to orchestrate. */
+  /** Upload a single file via the chunked path — splits into 3.5 MB
+   *  chunks so even 4K / RAW panoramas (10–50 MB) sail past Vercel's
+   *  4.5 MB request-body limit. Streams progress back into the upload
+   *  row so the strip shows real % instead of an indeterminate spinner.
+   *
+   *  Three round-trips per file:
+   *    1. /upload-start         → opens a Google Drive resumable session
+   *    2. /upload-chunk × N     → forwards each slice to Drive
+   *    3. /upload-complete      → registers the File row in our DB
+   *  All wrapped by chunkedUpload() in lib/chunked-upload.ts; we just
+   *  add the finalize call here so isPresentationAsset / isPanorama
+   *  metadata gets persisted with the row. */
   async function uploadOne(
     localId: string,
     file: globalThis.File
   ): Promise<string | null> {
-    const fd = new FormData();
-    fd.append("file", file);
-    if (uploadIsPresentationAsset) {
-      fd.append("isPresentationAsset", "true");
-    }
     try {
-      const res = await fetch(`/api/projects/${projectId}/files`, {
-        method: "POST",
-        body: fd,
+      // Detect 360° aspect *before* upload so the server can skip the
+      // baked-in corner watermark (panoramas get a floor-projected
+      // watermark at serve time instead — corner stamp on a sphere
+      // looks distorted).
+      const isPanorama = await detectPanoramaFromFile(file);
+
+      // Step 1+2: stream the bytes to Drive via the chunk pipeline.
+      const { driveFileId, size } = await chunkedUpload({
+        file,
+        projectId,
+        onProgress: (percent) => {
+          setUploads((prev) =>
+            prev.map((u) =>
+              u.localId === localId ? { ...u, progress: percent } : u
+            )
+          );
+        },
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+
+      // Step 3: register the DB row. The endpoint also runs the
+      // post-upload watermark pass (skipped for panoramas).
+      const finalizeRes = await fetch(
+        `/api/projects/${projectId}/upload-complete`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            driveFileId,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size,
+            isPanorama,
+            isPresentationAsset: uploadIsPresentationAsset,
+          }),
+        }
+      );
+
+      if (!finalizeRes.ok) {
+        const body = await finalizeRes.json().catch(() => ({}));
         setUploads((prev) =>
           prev.map((u) =>
             u.localId === localId
@@ -189,28 +230,31 @@ export function FilePickerModal({
                   ...u,
                   status: "error",
                   errorMessage:
-                    (body as { error?: string }).error || "Upload failed",
+                    (body as { error?: string }).error ||
+                    "Failed to finalize upload",
                 }
               : u
           )
         );
         return null;
       }
-      const data = await res.json();
+
+      const data = await finalizeRes.json();
       const fileId: string | undefined = data?.fileId;
       setUploads((prev) =>
         prev.map((u) =>
           u.localId === localId
-            ? { ...u, status: "done", fileId }
+            ? { ...u, status: "done", progress: 100, fileId }
             : u
         )
       );
       return fileId ?? null;
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
       setUploads((prev) =>
         prev.map((u) =>
           u.localId === localId
-            ? { ...u, status: "error", errorMessage: "Upload failed" }
+            ? { ...u, status: "error", errorMessage: message }
             : u
         )
       );
@@ -555,28 +599,43 @@ export function FilePickerModal({
                 </button>
               )}
             </div>
-            <div className="px-4 py-1.5 space-y-1">
+            <div className="px-4 py-1.5 space-y-1.5">
               {uploads.map((u) => (
-                <div
-                  key={u.localId}
-                  className="flex items-center gap-2 text-xs"
-                >
-                  {u.status === "uploading" && (
-                    <Loader2 className="h-3 w-3 animate-spin text-slate-400 shrink-0" />
-                  )}
-                  {u.status === "done" && (
-                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
-                  )}
-                  {u.status === "error" && (
-                    <AlertCircle className="h-3 w-3 text-red-400 shrink-0" />
-                  )}
-                  <span className="truncate text-slate-300 flex-1">
-                    {u.name}
-                  </span>
-                  {u.errorMessage && (
-                    <span className="text-red-400 text-[10px] shrink-0">
-                      {u.errorMessage}
+                <div key={u.localId} className="space-y-0.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    {u.status === "uploading" && (
+                      <Loader2 className="h-3 w-3 animate-spin text-slate-400 shrink-0" />
+                    )}
+                    {u.status === "done" && (
+                      <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                    )}
+                    {u.status === "error" && (
+                      <AlertCircle className="h-3 w-3 text-red-400 shrink-0" />
+                    )}
+                    <span className="truncate text-slate-300 flex-1">
+                      {u.name}
                     </span>
+                    {u.status === "uploading" && u.progress !== undefined && (
+                      <span className="text-slate-500 text-[10px] font-mono shrink-0">
+                        {u.progress}%
+                      </span>
+                    )}
+                    {u.errorMessage && (
+                      <span className="text-red-400 text-[10px] shrink-0">
+                        {u.errorMessage}
+                      </span>
+                    )}
+                  </div>
+                  {/* Slim progress bar — only while in flight. Width
+                      derived from the chunked uploader's % callback
+                      so the admin sees real movement on big files. */}
+                  {u.status === "uploading" && (
+                    <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/[0.05]">
+                      <div
+                        className="h-full bg-brand-500 transition-[width] duration-200 ease-out"
+                        style={{ width: `${u.progress ?? 0}%` }}
+                      />
+                    </div>
                   )}
                 </div>
               ))}

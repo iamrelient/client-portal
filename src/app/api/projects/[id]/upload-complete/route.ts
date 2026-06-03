@@ -100,7 +100,7 @@ export async function POST(
     }
 
     // ── Standard file upload (client already uploaded to Drive) ──
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType, isPanorama: bodyIsPanorama } = body;
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType, isPanorama: bodyIsPanorama, isPresentationAsset: bodyIsPresentationAsset } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -288,6 +288,11 @@ export async function POST(
           fileGroupId,
           isCurrent: true,
           isPanorama: Boolean(bodyIsPanorama),
+          // Lets picker uploads stay scoped to the presentation — they
+          // don't clutter the project's main file tree, matching the
+          // existing /files single-shot path. Defaults to false for
+          // anything that doesn't set the flag.
+          isPresentationAsset: Boolean(bodyIsPresentationAsset),
         },
       });
     });
