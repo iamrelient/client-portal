@@ -788,8 +788,46 @@ export default function EditPresentationPage() {
                 const canMoveDown =
                   !isFixed && idx < sections.length - 2; // Can't go below closing
 
+                // Tour banner — show once, on the FIRST panorama section
+                // in the deck, when there are 2+ panoramas. Reminds the
+                // admin that bulk-uploaded panoramas collapse into one
+                // tour slide in the client view (the rest become rooms
+                // reachable via the room list / hotspots).
+                const panoramaSections = sections.filter(
+                  (s) => s.type === "panorama" && s.fileId
+                );
+                const isFirstPanorama =
+                  section.type === "panorama" &&
+                  section.fileId &&
+                  panoramaSections.length > 1 &&
+                  panoramaSections[0].id === section.id;
+
                 return (
                   <div key={section.id} data-section-id={section.id}>
+                  {isFirstPanorama && (
+                    <div className="px-6 py-2 bg-brand-500/[0.06] border-y border-brand-500/20 flex items-center gap-2 text-[11px] text-brand-200">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <ellipse cx="12" cy="12" rx="4" ry="10" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                      </svg>
+                      <span className="uppercase tracking-wider font-medium">
+                        Tour · {panoramaSections.length} rooms combined
+                      </span>
+                      <span className="text-slate-400">
+                        — appears as a single slide in the client view;
+                        clients navigate between rooms via hotspots and
+                        the room list.
+                      </span>
+                    </div>
+                  )}
                   <div
                     className="px-6 py-3 flex items-start gap-3"
                   >

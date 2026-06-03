@@ -122,16 +122,31 @@ export function PresentationShell({
     }
   }, []);
 
-  /* ---- Expand image-section carousels into individual slides ----
-     An image section with metadata.fileIds (or carouselFiles) holding 2+
-     files is authored as a single "carousel section" in the editor. The
-     viewer — which renders image sections through ChapterStrip's
-     scroll-linked slide flow — needs one entry per image so each shows
-     up as its own slide in the chapter. Each virtual section keeps the
-     original section's chapter/title/transition but gets a synthetic id
-     (origId__fileId) so React keys and navigation indexes stay unique. */
+  /* ---- Expand image-section carousels + collapse panoramas ----
+     Two transforms applied to data.sections before they become slides:
+
+     1. **Carousel expansion.** An image section with metadata.fileIds
+        (or carouselFiles) holding 2+ files is authored as a single
+        "carousel section" in the editor. The viewer renders one
+        entry per image so each shows up as its own slide. Each
+        virtual section keeps the original section's chapter/title/
+        transition but gets a synthetic id (origId__fileId) so React
+        keys and navigation indexes stay unique.
+
+     2. **Panorama collapse.** Every panorama section in the deck is
+        part of one combined walkthrough — bulk-uploading 10
+        panoramas should give clients *one* "Tour" slide, not 10
+        sequential static-preview slides. So we keep the first
+        panorama in slide order as the entry point and drop the
+        rest from the slide list. The dropped panoramas still live
+        in data.sections, so SectionPanorama's walkthrough mode
+        loads them all as scenes — clients navigate between rooms
+        via hotspots + the room list, not by scrolling. Editors
+        still see/edit each panorama individually in the section
+        list (grouped under a TOUR header for clarity). */
   const expandedSections = useMemo(() => {
     const out: SectionData[] = [];
+    let seenFirstPanorama = false;
     for (const s of data.sections) {
       const hasCarousel =
         s.type === "image" && s.carouselFiles && s.carouselFiles.length >= 2;
@@ -144,9 +159,18 @@ export function PresentationShell({
             file: f,
           });
         }
-      } else {
-        out.push(s);
+        continue;
       }
+      if (s.type === "panorama" && s.file) {
+        if (seenFirstPanorama) {
+          // Already have a tour entry — skip rendering this one
+          // as a slide. Walkthrough still picks it up from
+          // data.sections, which we deliberately don't filter.
+          continue;
+        }
+        seenFirstPanorama = true;
+      }
+      out.push(s);
     }
     return out;
   }, [data.sections]);
