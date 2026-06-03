@@ -1053,7 +1053,11 @@ export default function EditPresentationPage() {
                           <input
                             type="text"
                             defaultValue={section.title || ""}
-                            placeholder="Caption title (optional)"
+                            placeholder={
+                              section.type === "panorama"
+                                ? "Room name (e.g. Lobby) — shown in the tour"
+                                : "Caption title (optional)"
+                            }
                             onBlur={(e) =>
                               handleUpdateSection(section.id, {
                                 title: e.target.value || null,

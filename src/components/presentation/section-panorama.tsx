@@ -62,62 +62,32 @@ export function SectionPanorama({
     });
   }, [visible]);
 
-  /** Set of panorama section ids that should travel together as one
-   *  walkthrough. Two sources are merged:
-   *    1. Explicit tour group — any panorama whose metadata.tourGroupId
-   *       matches this section's tourGroupId.
-   *    2. Navigation graph — BFS from this section across every
-   *       navigation hotspot's targetSectionId. So a "To Lobby" hotspot
-   *       implicitly pulls the Lobby into the same walkthrough, with
-   *       zero manual configuration. The graph is transitive: if Lobby
-   *       links to Conference, Conference comes along too.
+  /** Every panorama section in the presentation. We treat the whole
+   *  deck as a single walkthrough — bulk-uploading 10 panoramas
+   *  gives you a 10-room tour out of the box, navigable via the
+   *  room list. Nav hotspots between rooms become a spatial
+   *  *enhancement* (point-and-go at the doorway you actually see),
+   *  not the thing that wires the tour together.
    *
-   *  Solo mode (no walkthrough) only when the set is just this section. */
-  const reachablePanoramaIds = useMemo(() => {
-    const reachable = new Set<string>([section.id]);
-    const sectionsById = new Map(data.sections.map((s) => [s.id, s]));
-
-    // Explicit tour group siblings.
-    const tourGroupId = metadata.tourGroupId;
-    if (tourGroupId) {
-      for (const s of data.sections) {
-        if (
-          s.type === "panorama" &&
-          s.metadata &&
-          (s.metadata as PanoramaMetadata).tourGroupId === tourGroupId
-        ) {
-          reachable.add(s.id);
-        }
+   *  Used to decide whether to launch walkthrough mode on activate
+   *  and to build the scenes list for the multi-scene Pannellum
+   *  viewer. */
+  const allPanoramaSectionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of data.sections) {
+      if (s.type === "panorama" && s.file) {
+        set.add(s.id);
       }
     }
-
-    // BFS through navigation hotspots, starting from this section's set.
-    const queue: string[] = Array.from(reachable);
-    while (queue.length) {
-      const id = queue.shift()!;
-      const s = sectionsById.get(id);
-      if (!s) continue;
-      const meta = (s.metadata || {}) as PanoramaMetadata;
-      for (const h of meta.hotspots ?? []) {
-        if (h.type !== "navigation") continue;
-        const target = sectionsById.get(h.targetSectionId);
-        if (
-          target?.type === "panorama" &&
-          !reachable.has(h.targetSectionId)
-        ) {
-          reachable.add(h.targetSectionId);
-          queue.push(h.targetSectionId);
-        }
-      }
-    }
-    return reachable;
-  }, [section.id, metadata.tourGroupId, data.sections]);
+    return set;
+  }, [data.sections]);
 
   const handleActivate = useCallback(() => {
-    // If this panorama is connected to others (explicit tour group OR
-    // wired via navigation hotspots), launch the walkthrough so clicks
-    // on hotspots switch scenes in-place. Otherwise stay in solo mode.
-    if (reachablePanoramaIds.size > 1) {
+    // 2+ panoramas in the deck → always walkthrough. Hotspot clicks
+    // switch scenes in-place via Pannellum loadScene, and the room
+    // list lets clients jump anywhere even if no hotspots exist yet.
+    // Solo mode only when this is the lone panorama in the deck.
+    if (allPanoramaSectionIds.size > 1) {
       import("./panorama-walkthrough").then((mod) => {
         setWalkthroughComponent(() => mod.PanoramaWalkthrough);
         setWalkthroughActive(true);
@@ -126,7 +96,7 @@ export function SectionPanorama({
       return;
     }
     setActivated(true);
-  }, [reachablePanoramaIds, onWalkthroughEnter]);
+  }, [allPanoramaSectionIds, onWalkthroughEnter]);
 
   const handleExit = useCallback(() => {
     setActivated(false);
@@ -142,17 +112,12 @@ export function SectionPanorama({
     ? `/api/present/${data.accessToken}/asset/${section.file.id}`
     : null;
 
-  // Build room data for walkthrough — use the same reachable set
-  // computed above so navigation-linked rooms come along even without
-  // an explicit tour group.
+  // Every panorama in the deck becomes a scene in the walkthrough.
+  // Sorted by section order so the room list reads top-to-bottom
+  // the way the admin authored it.
   const tourRooms = walkthroughActive
     ? data.sections
-        .filter(
-          (s) =>
-            s.type === "panorama" &&
-            s.file &&
-            reachablePanoramaIds.has(s.id)
-        )
+        .filter((s) => s.type === "panorama" && s.file)
         .sort((a, b) => a.order - b.order)
         .map((s) => ({
           sectionId: s.id,

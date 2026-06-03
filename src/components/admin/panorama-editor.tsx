@@ -83,18 +83,26 @@ interface PanoramaEditorProps {
   onSwitchToPanorama?: (sectionId: string) => void;
 }
 
-type Tab = "hotspots" | "initial-view" | "floor-plan" | "tour";
+type Tab = "hotspots" | "initial-view" | "floor-plan";
 
 let pannellumLoaded = false;
 let pannellumLoadPromise: Promise<void> | null = null;
 
 /** Build a Pannellum hot-spot config that draws a simple marker in the
  *  editor preview — a blue arrow circle for navigation hotspots, an
- *  amber "i" for info ones, with the label always visible. This is on
- *  purpose simpler than the production client viewer so admins can
- *  immediately see *where* a hotspot landed without worrying about
- *  hover-to-reveal animations. */
-function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> {
+ *  amber "i" for info ones, with the label always visible. Navigation
+ *  hotspots are clickable: clicking switches the editor to the target
+ *  panorama's editor, so admins can walk their tour while authoring
+ *  it (same auto-switch the drag-to-link flow does, just initiated
+ *  from a different gesture).
+ *
+ *  This is intentionally simpler than the production client viewer so
+ *  admins can immediately see *where* a hotspot landed without
+ *  worrying about hover-to-reveal animations. */
+function buildEditorHotspotConfig(
+  hs: PanoramaHotspot,
+  onSwitchToPanorama?: (sectionId: string) => void
+): Record<string, unknown> {
   const isNav = hs.type === "navigation";
   return {
     id: hs.id,
@@ -108,13 +116,20 @@ function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> 
     // markers were invisible). We append our custom content here.
     createTooltipFunc: (hotSpotDiv: HTMLElement) => {
       const wrapper = document.createElement("div");
+      // Nav hotspots get pointer-events: auto so the click handler
+      // below fires. Info hotspots stay click-through for now — the
+      // form-based editor handles editing them.
       wrapper.style.cssText = `
         display: flex;
         flex-direction: column;
         align-items: center;
         transform: translate(-14px, -14px);
-        pointer-events: none;
+        pointer-events: ${isNav && onSwitchToPanorama ? "auto" : "none"};
+        cursor: ${isNav && onSwitchToPanorama ? "pointer" : "default"};
       `;
+      wrapper.title = isNav && onSwitchToPanorama
+        ? "Click to jump to this room's editor"
+        : hs.label;
       wrapper.innerHTML = `
         <div style="
           width: 28px;
@@ -146,6 +161,15 @@ function buildEditorHotspotConfig(hs: PanoramaHotspot): Record<string, unknown> 
           text-overflow: ellipsis;
         ">${hs.label.replace(/[<>&]/g, "")}</span>
       `;
+
+      if (isNav && onSwitchToPanorama) {
+        const navHs = hs as Extract<PanoramaHotspot, { type: "navigation" }>;
+        wrapper.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onSwitchToPanorama(navHs.targetSectionId);
+        });
+      }
+
       hotSpotDiv.appendChild(wrapper);
     },
     createTooltipArgs: "",
@@ -274,8 +298,8 @@ export function PanoramaEditor({
       // Build the initial hotspot configs from current meta so they
       // appear the instant the panorama image finishes loading — no
       // race between Pannellum init and our sync useEffect.
-      const initialHotspots = (meta.hotspots ?? []).map(
-        buildEditorHotspotConfig
+      const initialHotspots = (meta.hotspots ?? []).map((hs) =>
+        buildEditorHotspotConfig(hs, onSwitchToPanorama)
       );
       mountedHotspotIdsRef.current = new Set(
         (meta.hotspots ?? []).map((h) => h.id)
@@ -368,7 +392,7 @@ export function PanoramaEditor({
 
     (meta.hotspots ?? []).forEach((hs) => {
       try {
-        viewer.addHotSpot(buildEditorHotspotConfig(hs));
+        viewer.addHotSpot(buildEditorHotspotConfig(hs, onSwitchToPanorama));
         current.add(hs.id);
       } catch (err) {
         // Don't let one bad hotspot break the rest.
@@ -377,7 +401,7 @@ export function PanoramaEditor({
     });
 
     mountedHotspotIdsRef.current = current;
-  }, [ready, meta.hotspots]);
+  }, [ready, meta.hotspots, onSwitchToPanorama]);
 
   const handleSaveHotspot = useCallback(
     (hotspot: PanoramaHotspot) => {
@@ -559,11 +583,7 @@ export function PanoramaEditor({
     { key: "hotspots", label: "Hotspots" },
     { key: "initial-view", label: "Initial View" },
     { key: "floor-plan", label: "Floor Plan" },
-    { key: "tour", label: "Tour" },
   ];
-
-  const inputClass =
-    "block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none";
 
   return (
     <div className="border-t border-white/[0.06] bg-white/[0.02]">
@@ -862,48 +882,6 @@ export function PanoramaEditor({
             )}
 
             {/* Tour Settings tab */}
-            {activeTab === "tour" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
-                    Room Label
-                  </label>
-                  <input
-                    type="text"
-                    value={meta.roomLabel || ""}
-                    onChange={(e) =>
-                      setMeta((prev) => ({
-                        ...prev,
-                        roomLabel: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. Living Room, Kitchen"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-slate-400 mb-1">
-                    Tour Group ID
-                  </label>
-                  <input
-                    type="text"
-                    value={meta.tourGroupId || ""}
-                    onChange={(e) =>
-                      setMeta((prev) => ({
-                        ...prev,
-                        tourGroupId: e.target.value,
-                      }))
-                    }
-                    placeholder="e.g. main-tour (shared across rooms)"
-                    className={inputClass}
-                  />
-                  <p className="mt-1 text-[10px] text-slate-500">
-                    Panoramas with the same Tour Group ID are linked into one
-                    walkthrough.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Save button — pulses + colour-shifts when there are local
