@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { PresentationData, SectionData } from "./presentation-shell";
 import type { PanoramaMetadata } from "@/types/panorama";
 
@@ -62,33 +62,71 @@ export function SectionPanorama({
     });
   }, [visible]);
 
-  const handleActivate = useCallback(() => {
-    // Check if this panorama is part of a tour group
-    const tourGroupId = metadata.tourGroupId;
+  /** Set of panorama section ids that should travel together as one
+   *  walkthrough. Two sources are merged:
+   *    1. Explicit tour group — any panorama whose metadata.tourGroupId
+   *       matches this section's tourGroupId.
+   *    2. Navigation graph — BFS from this section across every
+   *       navigation hotspot's targetSectionId. So a "To Lobby" hotspot
+   *       implicitly pulls the Lobby into the same walkthrough, with
+   *       zero manual configuration. The graph is transitive: if Lobby
+   *       links to Conference, Conference comes along too.
+   *
+   *  Solo mode (no walkthrough) only when the set is just this section. */
+  const reachablePanoramaIds = useMemo(() => {
+    const reachable = new Set<string>([section.id]);
+    const sectionsById = new Map(data.sections.map((s) => [s.id, s]));
 
+    // Explicit tour group siblings.
+    const tourGroupId = metadata.tourGroupId;
     if (tourGroupId) {
-      // Find all sibling panorama sections in the same tour group
-      const siblings = data.sections.filter(
-        (s) =>
+      for (const s of data.sections) {
+        if (
           s.type === "panorama" &&
           s.metadata &&
           (s.metadata as PanoramaMetadata).tourGroupId === tourGroupId
-      );
-
-      if (siblings.length > 1) {
-        // Launch walkthrough
-        import("./panorama-walkthrough").then((mod) => {
-          setWalkthroughComponent(() => mod.PanoramaWalkthrough);
-          setWalkthroughActive(true);
-          onWalkthroughEnter?.();
-        });
-        return;
+        ) {
+          reachable.add(s.id);
+        }
       }
     }
 
-    // Solo mode
+    // BFS through navigation hotspots, starting from this section's set.
+    const queue: string[] = Array.from(reachable);
+    while (queue.length) {
+      const id = queue.shift()!;
+      const s = sectionsById.get(id);
+      if (!s) continue;
+      const meta = (s.metadata || {}) as PanoramaMetadata;
+      for (const h of meta.hotspots ?? []) {
+        if (h.type !== "navigation") continue;
+        const target = sectionsById.get(h.targetSectionId);
+        if (
+          target?.type === "panorama" &&
+          !reachable.has(h.targetSectionId)
+        ) {
+          reachable.add(h.targetSectionId);
+          queue.push(h.targetSectionId);
+        }
+      }
+    }
+    return reachable;
+  }, [section.id, metadata.tourGroupId, data.sections]);
+
+  const handleActivate = useCallback(() => {
+    // If this panorama is connected to others (explicit tour group OR
+    // wired via navigation hotspots), launch the walkthrough so clicks
+    // on hotspots switch scenes in-place. Otherwise stay in solo mode.
+    if (reachablePanoramaIds.size > 1) {
+      import("./panorama-walkthrough").then((mod) => {
+        setWalkthroughComponent(() => mod.PanoramaWalkthrough);
+        setWalkthroughActive(true);
+        onWalkthroughEnter?.();
+      });
+      return;
+    }
     setActivated(true);
-  }, [metadata.tourGroupId, data.sections, onWalkthroughEnter]);
+  }, [reachablePanoramaIds, onWalkthroughEnter]);
 
   const handleExit = useCallback(() => {
     setActivated(false);
@@ -104,16 +142,16 @@ export function SectionPanorama({
     ? `/api/present/${data.accessToken}/asset/${section.file.id}`
     : null;
 
-  // Build room data for walkthrough
+  // Build room data for walkthrough — use the same reachable set
+  // computed above so navigation-linked rooms come along even without
+  // an explicit tour group.
   const tourRooms = walkthroughActive
     ? data.sections
         .filter(
           (s) =>
             s.type === "panorama" &&
             s.file &&
-            s.metadata &&
-            (s.metadata as PanoramaMetadata).tourGroupId ===
-              metadata.tourGroupId
+            reachablePanoramaIds.has(s.id)
         )
         .sort((a, b) => a.order - b.order)
         .map((s) => ({
