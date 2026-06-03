@@ -8,8 +8,10 @@ import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
 import { FileCategory } from "@prisma/client";
 
-// Allow longer execution for large file uploads
-export const maxDuration = 60;
+// Allow longer execution for large file uploads. On Vercel Pro the
+// ceiling is 5 min — plenty for any single proxied upload, with the
+// chunked path handling truly huge files separately.
+export const maxDuration = 300;
 
 /**
  * Server-side proxy upload — fallback when direct browser-to-Google-Drive

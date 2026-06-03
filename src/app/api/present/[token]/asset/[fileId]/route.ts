@@ -7,9 +7,10 @@ import { isPanoramaAspect } from "@/lib/pano-utils";
 import sharp from "sharp";
 
 // Floor-watermarking buffers the entire image in memory and runs sharp,
-// which can take a few seconds on a 8K panorama. Lift the default 10s
-// Vercel timeout to the 60s Hobby ceiling.
-export const maxDuration = 60;
+// which can take a few seconds on an 8K panorama (more on 16K). On
+// Vercel Pro 120s gives comfortable headroom without holding a client
+// connection open longer than necessary.
+export const maxDuration = 120;
 
 export async function GET(
   _req: Request,

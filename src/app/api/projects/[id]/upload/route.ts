@@ -7,8 +7,10 @@ import { applyWatermark } from "@/lib/watermark";
 import { FileCategory } from "@prisma/client";
 import { randomBytes } from "crypto";
 
-// Allow longer execution for large file uploads
-export const maxDuration = 60;
+// Allow longer execution for large file uploads. On Vercel Pro we
+// can run up to 5 minutes — enough for serious single-shot uploads
+// (the chunked upload path handles really large files anyway).
+export const maxDuration = 300;
 
 export async function POST(
   req: Request,
