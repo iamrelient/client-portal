@@ -1127,6 +1127,16 @@ export default function EditPresentationPage() {
                             return null;
                           }
                         }}
+                        onAddFloorPlan={async () => {
+                          // Just pick an existing project image — no
+                          // section to create. The editor's onChange
+                          // wires the picked id into metadata.floorPlan.
+                          const ids = await triggerPickerAsync(
+                            "image/*",
+                            "Pick an image for the floor plan"
+                          );
+                          return ids?.[0] ?? null;
+                        }}
                       />
                     )}
 

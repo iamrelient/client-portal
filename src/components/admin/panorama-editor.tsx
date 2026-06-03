@@ -50,6 +50,11 @@ interface PanoramaEditorProps {
    *  Resolves to the new section's id (auto-selected by the form),
    *  or null if the picker was dismissed. */
   onAddPanorama?: () => Promise<string | null>;
+  /** Optional: triggered from the "+ Add" button in the Floor Plan
+   *  tab. Lets the admin pick or upload a floor plan image for this
+   *  panorama. Resolves to the file id (auto-selected), or null if
+   *  the picker was dismissed. */
+  onAddFloorPlan?: () => Promise<string | null>;
 }
 
 type Tab = "hotspots" | "initial-view" | "floor-plan" | "tour";
@@ -100,6 +105,7 @@ export function PanoramaEditor({
   projectFiles,
   onSave,
   onAddPanorama,
+  onAddFloorPlan,
 }: PanoramaEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PannellumViewer | null>(null);
@@ -447,6 +453,7 @@ export function PanoramaEditor({
                 floorPlan={meta.floorPlan}
                 projectFiles={projectFiles}
                 onChange={(fp) => setMeta((prev) => ({ ...prev, floorPlan: fp }))}
+                onAddFloorPlan={onAddFloorPlan}
               />
             )}
 

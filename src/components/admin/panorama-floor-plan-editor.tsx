@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { PanoramaMetadata } from "@/types/panorama";
-import { X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 
 interface FileOption {
   id: string;
@@ -14,13 +14,37 @@ interface PanoramaFloorPlanEditorProps {
   floorPlan: PanoramaMetadata["floorPlan"];
   projectFiles: FileOption[];
   onChange: (floorPlan: PanoramaMetadata["floorPlan"]) => void;
+  /** Optional: lets the admin pick or upload a floor plan image
+   *  right from this panel. Resolves with the new file's id (auto-
+   *  selected as the floor plan), or null if the picker was
+   *  dismissed. */
+  onAddFloorPlan?: () => Promise<string | null>;
 }
 
 export function PanoramaFloorPlanEditor({
   floorPlan,
   projectFiles,
   onChange,
+  onAddFloorPlan,
 }: PanoramaFloorPlanEditorProps) {
+  const [adding, setAdding] = useState(false);
+
+  async function handleAddFloorPlan() {
+    if (!onAddFloorPlan || adding) return;
+    setAdding(true);
+    try {
+      const newId = await onAddFloorPlan();
+      if (newId) {
+        onChange({
+          imageFileId: newId,
+          markerX: floorPlan?.markerX ?? 0.5,
+          markerY: floorPlan?.markerY ?? 0.5,
+        });
+      }
+    } finally {
+      setAdding(false);
+    }
+  }
   const imgRef = useRef<HTMLDivElement>(null);
 
   const handleImageClick = useCallback(
@@ -74,6 +98,21 @@ export function PanoramaFloorPlanEditor({
               </option>
             ))}
           </select>
+          {onAddFloorPlan && (
+            <button
+              type="button"
+              onClick={handleAddFloorPlan}
+              disabled={adding}
+              title="Pick a project image or upload a new floor plan"
+              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] disabled:opacity-50 transition-colors"
+            >
+              {adding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
           {floorPlan && (
             <button
               type="button"
@@ -85,6 +124,11 @@ export function PanoramaFloorPlanEditor({
             </button>
           )}
         </div>
+        {imageFiles.length === 0 && onAddFloorPlan && (
+          <p className="mt-1 text-[10px] text-slate-500">
+            No images in this project yet — click + to pick or upload one.
+          </p>
+        )}
       </div>
 
       {floorPlan?.imageFileId && (
