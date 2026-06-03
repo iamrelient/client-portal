@@ -23,23 +23,24 @@ interface PanoramaMinimapProps {
 function roomLabel(room: RoomData): string {
   const m = room.metadata;
   if (m.roomLabel?.trim()) return m.roomLabel.trim();
-  // Fall back to a short id slice; the section title isn't passed
-  // into RoomData, but the admin's roomLabel covers the common case.
   return `Room ${room.sectionId.slice(0, 4)}`;
 }
 
-/** Floor-plan minimap with hover-expand behavior.
+/** Floor-plan minimap with grow-from-corner expansion.
  *
- *  Idle state: small (150 px wide) thumbnail in the bottom-left
- *  corner, just big enough to confirm the room's orientation on the
- *  floor. Hovering lifts it into a centered overlay (~min(60vw, 720
- *  px)) so the client can read room labels and click any marker to
- *  jump there. Pointer-leave collapses back.
+ *  One element. Idle: 150 px wide thumbnail anchored to the bottom-
+ *  left corner, just big enough to confirm the room's orientation.
+ *  Hovering (or tapping on touch) animates width / bottom / left so
+ *  the same element scales out into a centered ~80vw panel with
+ *  labeled, clickable room dots.
  *
- *  We use opacity + transform + a stacked larger version anchored to
- *  the corner, rather than literally moving the small one — that
- *  keeps the corner thumbnail interactive (still shows current room
- *  + heading) even while the expanded version animates in. */
+ *  Dismiss model is sticky on purpose — the previous mouse-leave
+ *  collapse closed the panel before clients could reach a dot. Now
+ *  it only closes when:
+ *    • The user clicks anywhere outside the map, OR
+ *    • The user clicks a dot to jump to that room, OR
+ *    • The user presses Escape.
+ *  Mouse-leave does nothing. */
 export function PanoramaMinimap({
   rooms,
   currentRoomId,
@@ -50,12 +51,10 @@ export function PanoramaMinimap({
   const [expanded, setExpanded] = useState(false);
   const [yaw, setYaw] = useState(0);
   const rafRef = useRef<number>(0);
-  // Hover intent: small delay before collapsing so a tiny mouse jitter
-  // between thumbnail and the expanded overlay doesn't close it.
-  const collapseTimerRef = useRef<number | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
 
-  // Track yaw via RAF so the heading arrow on the current-room marker
-  // follows where the client is actually looking.
+  // Track yaw via RAF so the heading arrow on the current-room
+  // marker follows where the client is actually looking.
   useEffect(() => {
     function update() {
       const viewer = viewerRef.current;
@@ -68,191 +67,121 @@ export function PanoramaMinimap({
     return () => cancelAnimationFrame(rafRef.current);
   }, [viewerRef]);
 
-  // Find floor plan image (first room that has one set on this floor).
-  const floorPlanRoom = rooms.find((r) => r.metadata.floorPlan?.imageFileId);
-  const floorPlanFileId = floorPlanRoom?.metadata.floorPlan?.imageFileId;
-
-  const handleEnter = useCallback(() => {
-    if (collapseTimerRef.current !== null) {
-      window.clearTimeout(collapseTimerRef.current);
-      collapseTimerRef.current = null;
+  // ── Sticky dismiss handlers ──
+  // Click outside the map → collapse. Capture phase so it fires
+  // *before* the walkthrough's other handlers (e.g. anything that
+  // might consume the click event first). Only attached while
+  // expanded so we don't pay the listener cost when closed.
+  useEffect(() => {
+    if (!expanded) return;
+    function handlePointerDown(e: PointerEvent) {
+      const map = mapRef.current;
+      if (!map) return;
+      if (!map.contains(e.target as Node)) {
+        setExpanded(false);
+      }
     }
+    // Defer attaching by one tick so the opening click (which
+    // bubbles up from the thumbnail) doesn't immediately re-close.
+    const tid = window.setTimeout(() => {
+      document.addEventListener("pointerdown", handlePointerDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [expanded]);
+
+  // ESC closes the map (without exiting the walkthrough). We register
+  // capture-phase so we win over the walkthrough's window-level ESC
+  // handler when the map is open. When closed we don't attach the
+  // handler, so ESC behaves normally (walkthrough exits).
+  useEffect(() => {
+    if (!expanded) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setExpanded(false);
+      }
+    }
+    document.addEventListener("keydown", handleKey, true);
+    return () => document.removeEventListener("keydown", handleKey, true);
+  }, [expanded]);
+
+  const handleOpen = useCallback(() => {
     setExpanded(true);
   }, []);
 
-  const handleLeave = useCallback(() => {
-    if (collapseTimerRef.current !== null) {
-      window.clearTimeout(collapseTimerRef.current);
-    }
-    collapseTimerRef.current = window.setTimeout(() => {
+  const handleDotClick = useCallback(
+    (sectionId: string, isCurrent: boolean) => {
+      if (isCurrent) return;
+      onNavigate(sectionId);
+      // Collapse after navigation so the new room is unobstructed.
       setExpanded(false);
-      collapseTimerRef.current = null;
-    }, 120);
-  }, []);
+    },
+    [onNavigate]
+  );
 
-  // Touch-friendly toggle for the thumbnail — coarse-pointer devices
-  // don't fire hover events reliably.
-  const handleThumbnailClick = useCallback(() => {
-    setExpanded((prev) => !prev);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (collapseTimerRef.current !== null) {
-        window.clearTimeout(collapseTimerRef.current);
-      }
-    };
-  }, []);
-
+  // Find floor plan image (first room that has one set on this floor).
+  const floorPlanRoom = rooms.find((r) => r.metadata.floorPlan?.imageFileId);
+  const floorPlanFileId = floorPlanRoom?.metadata.floorPlan?.imageFileId;
   if (!floorPlanFileId) return null;
 
   const floorPlanSrc = `/api/present/${accessToken}/asset/${floorPlanFileId}`;
 
-  return (
-    <>
-      {/* ── Thumbnail (always visible in corner) ── */}
-      <div
-        onMouseEnter={handleEnter}
-        onMouseLeave={handleLeave}
-        onClick={handleThumbnailClick}
-        data-cursor-label="Map"
-        style={{
-          position: "relative",
-          margin: "1rem",
-          width: 150,
-          borderRadius: 8,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: "rgba(6,6,8,0.82)",
-          backdropFilter: "blur(8px)",
-          cursor: "pointer",
-          transition: "border-color 200ms ease, transform 200ms ease",
-          transform: expanded ? "scale(0.96)" : "scale(1)",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={floorPlanSrc}
-          alt="Floor plan"
-          draggable={false}
-          style={{
-            width: "100%",
-            height: "auto",
-            display: "block",
-            opacity: 0.7,
-          }}
-        />
-        {/* Markers — small, current room highlighted */}
-        {rooms.map((room) => {
-          const fp = room.metadata.floorPlan;
-          if (!fp) return null;
-          const isCurrent = room.sectionId === currentRoomId;
-          return (
-            <div
-              key={room.sectionId}
-              style={{
-                position: "absolute",
-                left: `${fp.markerX * 100}%`,
-                top: `${fp.markerY * 100}%`,
-                transform: "translate(-50%, -50%)",
-                zIndex: isCurrent ? 2 : 1,
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                style={{
-                  width: isCurrent ? 12 : 6,
-                  height: isCurrent ? 12 : 6,
-                  borderRadius: "50%",
-                  background: isCurrent ? "#3b82f6" : "rgba(255,255,255,0.55)",
-                  border: isCurrent
-                    ? "2px solid white"
-                    : "1px solid rgba(255,255,255,0.4)",
-                  boxShadow: isCurrent
-                    ? "0 0 0 3px rgba(59,130,246,0.3)"
-                    : "none",
-                }}
-              />
-              {isCurrent && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    width: 18,
-                    height: 18,
-                    transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: -4,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: 0,
-                      height: 0,
-                      borderLeft: "3px solid transparent",
-                      borderRight: "3px solid transparent",
-                      borderBottom: "5px solid rgba(59,130,246,0.9)",
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {/* "Hover for map" cue — fades out once expanded so it
-            doesn't shout for attention once the action is engaged. */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: "3px 6px",
-            background:
-              "linear-gradient(to top, rgba(0,0,0,0.6), transparent)",
-            fontSize: "0.55rem",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: "rgba(255,255,255,0.7)",
-            textAlign: "center",
-            pointerEvents: "none",
-            opacity: expanded ? 0 : 1,
-            transition: "opacity 200ms ease",
-          }}
-        >
-          Hover · Map
-        </div>
-      </div>
+  // ── Layout — transitions between corner and centered ──
+  // Both states position by `bottom` + `left`, animating those plus
+  // `width` and `max-height`. Single source of truth for layout so
+  // the corner-to-center morph is a clean CSS transition without
+  // mid-frame jumps from changing positioning anchors.
+  const collapsedLayout = {
+    bottom: "1rem",
+    left: "1rem",
+    width: "150px",
+    maxHeight: "auto" as const,
+  };
+  const expandedLayout = {
+    bottom: "10vh",
+    left: "10vw",
+    width: "80vw",
+    maxHeight: "80vh" as const,
+  };
+  const layout = expanded ? expandedLayout : collapsedLayout;
 
-      {/* ── Expanded overlay — floats over the center of the screen ── */}
-      <div
-        onMouseEnter={handleEnter}
-        onMouseLeave={handleLeave}
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: expanded
-            ? "translate(-50%, -50%) scale(1)"
-            : "translate(-50%, -50%) scale(0.92)",
-          width: "min(60vw, 720px)",
-          maxHeight: "70vh",
-          zIndex: 40,
-          borderRadius: 12,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.18)",
-          background: "rgba(6,6,8,0.92)",
-          backdropFilter: "blur(16px)",
-          boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
-          opacity: expanded ? 1 : 0,
-          pointerEvents: expanded ? "auto" : "none",
-          transition:
-            "opacity 220ms cubic-bezier(0.4, 0, 0.2, 1), transform 220ms cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      >
+  return (
+    <div
+      ref={mapRef}
+      onMouseEnter={handleOpen}
+      onClick={!expanded ? handleOpen : undefined}
+      data-cursor-label={expanded ? undefined : "Map"}
+      style={{
+        position: "fixed",
+        ...layout,
+        zIndex: expanded ? 40 : 20,
+        borderRadius: expanded ? 12 : 8,
+        overflow: "hidden",
+        border: `1px solid rgba(255,255,255,${expanded ? 0.18 : 0.14})`,
+        background: `rgba(6,6,8,${expanded ? 0.92 : 0.82})`,
+        backdropFilter: `blur(${expanded ? 16 : 8}px)`,
+        cursor: expanded ? "default" : "pointer",
+        boxShadow: expanded
+          ? "0 30px 80px rgba(0,0,0,0.6)"
+          : "0 2px 10px rgba(0,0,0,0.3)",
+        // Animate every property that differs between states. The
+        // bezier matches the cinematic transition's curve so map
+        // expansion + scene transition share a visual language.
+        transition:
+          "width 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
+          "max-height 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
+          "bottom 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
+          "left 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
+          "border-radius 250ms ease, " +
+          "background 250ms ease, " +
+          "box-shadow 250ms ease",
+      }}
+    >
+      {/* ── Header (expanded only) ── */}
+      {expanded && (
         <div
           style={{
             padding: "0.75rem 1rem",
@@ -260,6 +189,10 @@ export function PanoramaMinimap({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            // Fade in slightly after the size animation begins so
+            // the text doesn't pop while the panel is still narrow.
+            animation: "minimap-fade-in 350ms ease forwards",
+            opacity: 0,
           }}
         >
           <span
@@ -279,106 +212,144 @@ export function PanoramaMinimap({
               color: "rgba(255,255,255,0.4)",
             }}
           >
-            Click a dot to jump
+            Click a dot to jump · ESC to close
           </span>
         </div>
-        <div
+      )}
+
+      {/* ── Image + dots wrapper ──
+          Height: auto so the image's aspect ratio drives layout.
+          object-fit: contain on the image, so when expanded with
+          max-height: 80vh the image stays inside without cropping. */}
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          // When collapsed the image just fills the small thumbnail;
+          // when expanded we honor max-height so the image isn't
+          // pushed off the bottom of the viewport.
+          maxHeight: expanded ? "calc(80vh - 50px)" : "none",
+          overflow: "hidden",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={floorPlanSrc}
+          alt="Floor plan"
+          draggable={false}
           style={{
-            position: "relative",
             width: "100%",
-            maxHeight: "calc(70vh - 50px)",
-            overflow: "hidden",
+            height: expanded ? "auto" : "auto",
+            maxHeight: expanded ? "calc(80vh - 50px)" : "none",
+            objectFit: "contain",
+            display: "block",
+            opacity: expanded ? 0.92 : 0.7,
+            transition: "opacity 300ms ease",
           }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={floorPlanSrc}
-            alt="Floor plan"
-            draggable={false}
-            style={{
-              width: "100%",
-              height: "auto",
-              maxHeight: "calc(70vh - 50px)",
-              objectFit: "contain",
-              display: "block",
-              opacity: 0.9,
-            }}
-          />
-          {rooms.map((room) => {
-            const fp = room.metadata.floorPlan;
-            if (!fp) return null;
-            const isCurrent = room.sectionId === currentRoomId;
-            return (
-              <button
-                key={room.sectionId}
-                type="button"
-                onClick={() => {
-                  if (!isCurrent) onNavigate(room.sectionId);
-                }}
-                data-cursor-label={isCurrent ? "Current" : "Jump"}
-                title={roomLabel(room)}
+        />
+
+        {/* Room markers */}
+        {rooms.map((room) => {
+          const fp = room.metadata.floorPlan;
+          if (!fp) return null;
+          const isCurrent = room.sectionId === currentRoomId;
+
+          // Dot sizing scales between collapsed/expanded so the
+          // markers remain readable but never overwhelming.
+          const dotSize = expanded ? (isCurrent ? 18 : 14) : isCurrent ? 12 : 6;
+          const labelVisible = expanded;
+
+          return (
+            <button
+              key={room.sectionId}
+              type="button"
+              disabled={!expanded}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDotClick(room.sectionId, isCurrent);
+              }}
+              data-cursor-label={
+                expanded ? (isCurrent ? "Current" : "Jump") : undefined
+              }
+              title={roomLabel(room)}
+              style={{
+                position: "absolute",
+                left: `${fp.markerX * 100}%`,
+                top: `${fp.markerY * 100}%`,
+                transform: "translate(-50%, -50%)",
+                zIndex: isCurrent ? 3 : 2,
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                cursor: expanded
+                  ? isCurrent
+                    ? "default"
+                    : "pointer"
+                  : "default",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                // Click-through when collapsed so the parent click
+                // handler can pick up the open gesture; receive
+                // events normally when expanded.
+                pointerEvents: expanded ? "auto" : "none",
+              }}
+            >
+              <div
+                className="minimap-dot"
                 style={{
-                  position: "absolute",
-                  left: `${fp.markerX * 100}%`,
-                  top: `${fp.markerY * 100}%`,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: isCurrent ? 3 : 2,
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  cursor: isCurrent ? "default" : "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 4,
+                  width: dotSize,
+                  height: dotSize,
+                  borderRadius: "50%",
+                  background: isCurrent
+                    ? "#3b82f6"
+                    : expanded
+                      ? "rgba(255,255,255,0.75)"
+                      : "rgba(255,255,255,0.55)",
+                  border: `${expanded ? 2 : 1}px solid ${
+                    isCurrent ? "white" : "rgba(255,255,255,0.5)"
+                  }`,
+                  boxShadow: isCurrent
+                    ? expanded
+                      ? "0 0 0 5px rgba(59,130,246,0.35), 0 2px 10px rgba(0,0,0,0.6)"
+                      : "0 0 0 3px rgba(59,130,246,0.3)"
+                    : expanded
+                      ? "0 2px 10px rgba(0,0,0,0.6)"
+                      : "none",
+                  transition:
+                    "width 250ms ease, height 250ms ease, box-shadow 250ms ease, transform 150ms ease",
+                  animation: isCurrent ? "minimap-pulse 2s infinite" : "none",
                 }}
-              >
+              />
+              {isCurrent && (
                 <div
                   style={{
-                    width: isCurrent ? 18 : 14,
-                    height: isCurrent ? 18 : 14,
-                    borderRadius: "50%",
-                    background: isCurrent
-                      ? "#3b82f6"
-                      : "rgba(255,255,255,0.7)",
-                    border: "2px solid white",
-                    boxShadow: isCurrent
-                      ? "0 0 0 5px rgba(59,130,246,0.35), 0 2px 10px rgba(0,0,0,0.6)"
-                      : "0 2px 10px rgba(0,0,0,0.6)",
-                    transition: "transform 150ms ease, box-shadow 200ms ease",
-                    animation: isCurrent
-                      ? "minimap-pulse 2s infinite"
-                      : "none",
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    width: expanded ? 24 : 18,
+                    height: expanded ? 24 : 18,
+                    transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
+                    pointerEvents: "none",
                   }}
-                  className="minimap-dot"
-                />
-                {isCurrent && (
+                >
                   <div
                     style={{
                       position: "absolute",
-                      top: 9,
+                      top: expanded ? -6 : -4,
                       left: "50%",
-                      width: 24,
-                      height: 24,
-                      transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
-                      pointerEvents: "none",
+                      transform: "translateX(-50%)",
+                      width: 0,
+                      height: 0,
+                      borderLeft: `${expanded ? 5 : 3}px solid transparent`,
+                      borderRight: `${expanded ? 5 : 3}px solid transparent`,
+                      borderBottom: `${expanded ? 7 : 5}px solid rgba(59,130,246,${expanded ? 0.95 : 0.8})`,
                     }}
-                  >
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: -6,
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        width: 0,
-                        height: 0,
-                        borderLeft: "5px solid transparent",
-                        borderRight: "5px solid transparent",
-                        borderBottom: "7px solid rgba(59,130,246,0.95)",
-                      }}
-                    />
-                  </div>
-                )}
+                  />
+                </div>
+              )}
+              {labelVisible && (
                 <span
                   style={{
                     fontSize: "0.625rem",
@@ -393,25 +364,56 @@ export function PanoramaMinimap({
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                     pointerEvents: "none",
+                    // Fade the label in once the panel has had time
+                    // to grow — premature labels look cramped during
+                    // the size transition.
+                    animation: "minimap-fade-in 400ms ease 100ms forwards",
+                    opacity: 0,
                   }}
                 >
                   {roomLabel(room)}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {/* "Hover · Map" cue — only when collapsed. */}
+      {!expanded && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: "3px 6px",
+            background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)",
+            fontSize: "0.55rem",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.7)",
+            textAlign: "center",
+            pointerEvents: "none",
+          }}
+        >
+          Hover · Map
+        </div>
+      )}
 
       <style>{`
         @keyframes minimap-pulse {
           0%, 100% { box-shadow: 0 0 0 5px rgba(59,130,246,0.35), 0 2px 10px rgba(0,0,0,0.6); }
           50% { box-shadow: 0 0 0 12px rgba(59,130,246,0), 0 2px 10px rgba(0,0,0,0.6); }
         }
+        @keyframes minimap-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
         .minimap-dot:hover {
           transform: scale(1.18);
         }
       `}</style>
-    </>
+    </div>
   );
 }
