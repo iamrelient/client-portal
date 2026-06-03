@@ -33,7 +33,19 @@ export function PanoramaWalkthrough({
   const [currentRoomId, setCurrentRoomId] = useState(initialRoomId);
   const [transitioning, setTransitioning] = useState(false);
   const [infoHotspot, setInfoHotspot] = useState<PanoramaHotspot | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const { isSupported: gyroSupported, isEnabled: gyroEnabled, toggle: toggleGyro } = useGyroscope(viewerRef);
+
+  // Respect the OS-level reduced-motion preference. When true, skip
+  // the cinematic zoom and fall back to a quick crossfade.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   // Has floor plan?
   const hasFloorPlan = rooms.some((r) => r.metadata.floorPlan?.imageFileId);
@@ -58,25 +70,75 @@ export function PanoramaWalkthrough({
     [rooms]
   );
 
+  /** Matterport-style transition between rooms.
+   *
+   *  When the user clicks a navigation hotspot, we know which point in
+   *  the *current* scene they aimed at — the hotspot's pitch/yaw. We
+   *  animate the camera toward that direction while zooming in (HFOV
+   *  shrinks from default ~110° down to ~40°) over ~550 ms. That
+   *  perspective compression reads as forward motion through the
+   *  doorway, the way a Matterport tour feels. Simultaneously the
+   *  fade overlay darkens, masking the scene swap that happens at the
+   *  zoom's tail. The new scene loads with its own initialView so the
+   *  camera lands somewhere meaningful, then the overlay fades back.
+   *
+   *  Room-list clicks (no hotspot pitch/yaw) fall through to a quick
+   *  crossfade — there's no spatial direction to zoom toward and we
+   *  don't want the room list to feel slow. Reduced-motion users get
+   *  the crossfade path too. */
   const handleNavigate = useCallback(
-    (targetSectionId: string) => {
+    (
+      targetSectionId: string,
+      fromPitch?: number,
+      fromYaw?: number
+    ) => {
       if (transitioning) return;
       const targetRoom = rooms.find((r) => r.sectionId === targetSectionId);
       if (!targetRoom) return;
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+
+      const useCinematic =
+        !reducedMotion && fromPitch !== undefined && fromYaw !== undefined;
 
       setTransitioning(true);
 
-      // CSS fade: fade out → load scene → fade in
+      if (useCinematic) {
+        // Phase 1 (0-550 ms): camera dollies toward the doorway.
+        // HFOV 40° gives a noticeable perspective compression without
+        // looking like a telephoto crop. Pannellum's lookAt with a
+        // numeric duration uses an ease-out tween internally.
+        viewer.lookAt(fromPitch!, fromYaw!, 40, 550);
+      }
+
+      // Phase 2 — scene swap. We do this slightly before the zoom
+      // finishes so the loadScene crossfade overlaps the last of the
+      // zoom motion. Net feel: continuous forward movement that
+      // dissolves into the new room.
+      const swapDelay = useCinematic ? 500 : 180;
+
       setTimeout(() => {
-        viewerRef.current?.loadScene(targetSectionId);
+        const iv = targetRoom.metadata.initialView;
+        // Pass the target's initialView so the new scene starts where
+        // the admin intended, regardless of where the camera was
+        // pointing when we left the old scene.
+        viewer.loadScene(
+          targetSectionId,
+          iv?.pitch,
+          iv?.yaw,
+          iv?.hfov
+        );
         setCurrentRoomId(targetSectionId);
 
-        setTimeout(() => {
-          setTransitioning(false);
-        }, 400);
-      }, 200);
+        // Phase 3 — fade back to reveal the new room. Slightly longer
+        // than the zoom-in for a satisfying "settle" feel.
+        setTimeout(
+          () => setTransitioning(false),
+          useCinematic ? 500 : 350
+        );
+      }, swapDelay);
     },
-    [rooms, transitioning]
+    [rooms, transitioning, reducedMotion]
   );
 
   const handleSceneChange = useCallback((sceneId: string) => {
@@ -117,15 +179,21 @@ export function PanoramaWalkthrough({
         backgroundColor: "#060608",
       }}
     >
-      {/* Transition fade overlay */}
+      {/* Transition fade overlay. Asymmetric easing: a slow accel-out
+          during the zoom (so the darkening feels like accumulating
+          forward momentum) and a quicker accel-in on reveal so the new
+          room snaps into focus. Paired with handleNavigate's timing
+          for the Matterport-feel transition. */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           zIndex: 10,
-          backgroundColor: "rgba(6,6,8,0.95)",
+          backgroundColor: "rgba(6,6,8,0.96)",
           opacity: transitioning ? 1 : 0,
-          transition: "opacity 0.2s ease",
+          transition: transitioning
+            ? "opacity 500ms cubic-bezier(0.4, 0, 0.2, 1)"
+            : "opacity 350ms cubic-bezier(0.2, 0, 0.2, 1)",
           pointerEvents: transitioning ? "auto" : "none",
         }}
       />

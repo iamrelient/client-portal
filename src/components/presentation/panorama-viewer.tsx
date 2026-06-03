@@ -13,7 +13,16 @@ export interface PanoramaViewerProps {
   imageUrl: string;
   initialView?: { pitch: number; yaw: number; hfov?: number };
   hotspots?: PanoramaHotspot[];
-  onNavigationHotspotClick?: (targetSectionId: string) => void;
+  /** Fired when the user clicks a navigation hotspot. `fromPitch` and
+   *  `fromYaw` are the clicked hotspot's coordinates in the *current*
+   *  scene — used by the walkthrough to animate a Matterport-style
+   *  camera zoom toward the doorway before swapping scenes. Optional
+   *  so legacy callers (solo-mode, editor) can ignore them. */
+  onNavigationHotspotClick?: (
+    targetSectionId: string,
+    fromPitch?: number,
+    fromYaw?: number
+  ) => void;
   onInfoHotspotClick?: (hotspot: PanoramaHotspot) => void;
   autoRotate?: number;
   scenes?: PanoramaScene[];
@@ -35,8 +44,20 @@ export interface PanoramaViewerHandle {
   setPitch: (p: number) => void;
   setYaw: (y: number) => void;
   setHfov: (h: number) => void;
-  lookAt: (pitch: number, yaw: number, hfov?: number) => void;
-  loadScene: (sceneId: string) => void;
+  /** `animated`: pass a number of milliseconds for the tween duration,
+   *  `true` for ~1 s default, `false` for instant. */
+  lookAt: (
+    pitch: number,
+    yaw: number,
+    hfov?: number,
+    animated?: boolean | number
+  ) => void;
+  loadScene: (
+    sceneId: string,
+    pitch?: number,
+    yaw?: number,
+    hfov?: number
+  ) => void;
   startAutoRotate: (speed?: number) => void;
   stopAutoRotate: () => void;
   resize: () => void;
@@ -51,8 +72,27 @@ interface PannellumViewer {
   getYaw: () => number;
   setPitch: (p: number) => void;
   setYaw: (y: number) => void;
-  lookAt: (pitch: number, yaw: number, hfov?: number, animated?: boolean) => void;
-  loadScene: (sceneId: string) => void;
+  /** Pannellum's lookAt — `animated` is either `true` (default ~1 s
+   *  tween) or an explicit number of milliseconds for the camera
+   *  movement. We pass a number for the cinematic zoom transition so
+   *  the timing is predictable. */
+  lookAt: (
+    pitch: number,
+    yaw: number,
+    hfov?: number,
+    animated?: boolean | number
+  ) => void;
+  /** loadScene takes optional camera overrides — pitch/yaw/hfov let
+   *  us drop the viewer into a specific orientation when the new
+   *  scene loads (so navigating from a hotspot in Room A lands the
+   *  camera at Room B's initialView, not wherever the camera
+   *  happened to be when we left A). */
+  loadScene: (
+    sceneId: string,
+    pitch?: number,
+    yaw?: number,
+    hfov?: number
+  ) => void;
   startAutoRotate: (speed?: number) => void;
   stopAutoRotate: () => void;
   resize: () => void;
@@ -153,7 +193,11 @@ function createInfoTooltip(
 
 function buildHotspotConfigs(
   hotspots: PanoramaHotspot[],
-  onNav?: (targetId: string) => void,
+  onNav?: (
+    targetId: string,
+    fromPitch?: number,
+    fromYaw?: number
+  ) => void,
   onInfo?: (hs: PanoramaHotspot) => void
 ): Record<string, unknown>[] {
   return hotspots.map((hs) => ({
@@ -165,10 +209,16 @@ function buildHotspotConfigs(
     // never gets attached anywhere is why hotspots have been silently
     // invisible — Pannellum's default hotspot sprite image isn't in
     // /public/pannellum so the fallback shows nothing either.
+    //
+    // For nav hotspots we forward the hotspot's pitch/yaw so the
+    // walkthrough can do a Matterport-style camera zoom toward the
+    // doorway before swapping scenes.
     createTooltipFunc: (hotSpotDiv: HTMLElement) => {
       const el =
         hs.type === "navigation"
-          ? createNavigationTooltip(hs, () => onNav?.(hs.targetSectionId))
+          ? createNavigationTooltip(hs, () =>
+              onNav?.(hs.targetSectionId, hs.pitch, hs.yaw)
+            )
           : createInfoTooltip(hs, () => onInfo?.(hs));
       hotSpotDiv.appendChild(el);
     },
@@ -203,9 +253,10 @@ export const PanoramaViewer = forwardRef<
     setPitch: (p) => viewerRef.current?.setPitch(p),
     setYaw: (y) => viewerRef.current?.setYaw(y),
     setHfov: (h) => viewerRef.current?.setHfov(h),
-    lookAt: (pitch, yaw, hfov) =>
-      viewerRef.current?.lookAt(pitch, yaw, hfov, true),
-    loadScene: (sceneId) => viewerRef.current?.loadScene(sceneId),
+    lookAt: (pitch, yaw, hfov, animated) =>
+      viewerRef.current?.lookAt(pitch, yaw, hfov, animated ?? true),
+    loadScene: (sceneId, pitch, yaw, hfov) =>
+      viewerRef.current?.loadScene(sceneId, pitch, yaw, hfov),
     startAutoRotate: (speed) =>
       viewerRef.current?.startAutoRotate(speed ?? -0.5),
     stopAutoRotate: () => viewerRef.current?.stopAutoRotate(),
