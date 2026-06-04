@@ -329,7 +329,17 @@ export const PanoramaViewer = forwardRef<
               showControls: false,
               showFullscreenCtrl: false,
               mouseZoom: true,
-              touchPanSpeedCoeffFactor: 1,
+              // Snappier mouse + touch response. Pannellum's default
+              // friction (0.15) carries momentum for ~1 s after the
+              // pointer releases — admin's complaint that the pan
+              // "feels laggy" is that drift settling. 0.4 still has
+              // a hint of glide so the motion doesn't feel robotic,
+              // but the camera lands much closer to where the user
+              // let go. touchPanSpeedCoeffFactor 1.2 mirrors the
+              // bump on touch where finger drags otherwise read as
+              // slow vs the screen distance covered.
+              friction: 0.4,
+              touchPanSpeedCoeffFactor: 1.2,
               draggable: true,
               sceneFadeDuration: 500,
             },
@@ -359,7 +369,10 @@ export const PanoramaViewer = forwardRef<
             showFullscreenCtrl: false,
             hfov: initialView?.hfov ?? 110,
             mouseZoom: true,
-            touchPanSpeedCoeffFactor: 1,
+            // Match the multi-scene config's snappier feel — see
+            // the friction comment above.
+            friction: 0.4,
+            touchPanSpeedCoeffFactor: 1.2,
             draggable: true,
             pitch: initialView?.pitch ?? 0,
             yaw: initialView?.yaw ?? 180,

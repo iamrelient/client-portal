@@ -46,10 +46,22 @@ export async function GET(
       }
     }
 
-    // Verify this file belongs to a section of this presentation or is the client logo
+    // Verify this file belongs to the presentation. Several places
+    // can reference it:
+    //   • clientLogo                  (one off, presentation-level)
+    //   • tourHeroFileId              (cover image for the tour slide)
+    //   • a section's fileId          (primary content)
+    //   • a section's metadata blob   (hotspot images, PDFs, legacy
+    //                                  per-pano floorPlan)
+    //   • tourRooms[].floorPlanImageFileId
+    //                                 (current per-room floor plans)
+    // The blob checks are tolerant string-includes scans rather than
+    // structured parses — picks up new metadata shapes without
+    // having to keep the allowlist in lockstep with every UI change.
     const isClientLogo = presentation.clientLogo === params.fileId;
+    const isTourHero = presentation.tourHeroFileId === params.fileId;
 
-    if (!isClientLogo) {
+    if (!isClientLogo && !isTourHero) {
       const section = await prisma.presentationSection.findFirst({
         where: {
           presentationId: presentation.id,
@@ -58,19 +70,28 @@ export async function GET(
       });
 
       if (!section) {
-        // Check if file is referenced in any section's metadata (hotspot images, PDFs, floor plans)
+        // Check section metadata blobs — covers hotspot images,
+        // hotspot PDFs, and legacy per-pano floorPlan references.
         const allSections = await prisma.presentationSection.findMany({
           where: { presentationId: presentation.id },
           select: { id: true, metadata: true },
         });
 
-        const referencedInMetadata = allSections.some((s) => {
+        const inSectionMetadata = allSections.some((s) => {
           if (!s.metadata) return false;
           const metaStr = JSON.stringify(s.metadata);
           return metaStr.includes(params.fileId);
         });
 
-        if (!referencedInMetadata) {
+        // Check the presentation-level tourRooms blob — current
+        // home for per-room floor plan file ids after the refactor.
+        let inTourRooms = false;
+        if (!inSectionMetadata && presentation.tourRooms) {
+          const blob = JSON.stringify(presentation.tourRooms);
+          inTourRooms = blob.includes(params.fileId);
+        }
+
+        if (!inSectionMetadata && !inTourRooms) {
           return NextResponse.json(
             { error: "File not found in presentation" },
             { status: 404 }

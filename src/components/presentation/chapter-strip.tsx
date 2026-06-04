@@ -69,9 +69,20 @@ export const ChapterStrip = memo(function ChapterStrip({
   const chapterTitle =
     divider?.title || sections[0]?.section.chapter || null;
 
-  // Spacer height: one viewport per section
+  // Spacer height — controls how much scrolling it takes to step
+  // through the carousel. Was `totalItems * vh` (one full viewport
+  // per image), which felt like an endurance test for a 6-image
+  // chapter (600vh of scroll to get past it). New formula gives
+  // the first image a full viewport (so it gets focused attention
+  // when scrolling in) and then half a viewport per additional
+  // image. A 6-image strip is now 350vh instead of 600vh — ~42%
+  // less wheel-spin, the carousel still feels paced rather than
+  // flashy.
+  const perItemAfterFirst = 0.5;
   const spacerHeight =
-    vh > 0 ? totalItems * vh : `${totalItems * 100}vh`;
+    vh > 0
+      ? vh + (totalItems - 1) * vh * perItemAfterFirst
+      : `${100 + (totalItems - 1) * perItemAfterFirst * 100}vh`;
 
   // Navigate to a specific item index by scrolling the parent container
   const navigateToItem = useCallback(
