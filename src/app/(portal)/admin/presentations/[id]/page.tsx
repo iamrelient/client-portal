@@ -69,6 +69,8 @@ interface PresentationDetail {
   watermarkEnabled: boolean;
   panoramaFloorWatermark: boolean;
   tourRooms: unknown;
+  tourHeroFileId: string | null;
+  theme: string | null;
   project: { id: string; name: string };
   sections: SectionRow[];
   _count: { accessLogs: number };
@@ -97,6 +99,7 @@ const AMBIENT_STYLES = [
   { value: "particles", label: "Particles" },
   { value: "line-pulse", label: "Line Pulse" },
   { value: "gradient-shift", label: "Gradient Shift" },
+  { value: "space", label: "Space — Stars + Planets" },
 ];
 
 export default function EditPresentationPage() {
@@ -117,6 +120,8 @@ export default function EditPresentationPage() {
   const [expiresAt, setExpiresAt] = useState("");
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
   const [panoramaFloorWatermark, setPanoramaFloorWatermark] = useState(true);
+  const [tourHeroFileId, setTourHeroFileId] = useState<string>("");
+  const [theme, setTheme] = useState<string>("");
   const [newPassword, setNewPassword] = useState("");
 
   // File upload
@@ -177,6 +182,8 @@ export default function EditPresentationPage() {
         );
         setWatermarkEnabled(data.watermarkEnabled);
         setPanoramaFloorWatermark(data.panoramaFloorWatermark ?? true);
+        setTourHeroFileId(data.tourHeroFileId ?? "");
+        setTheme(data.theme ?? "");
         // Hydrate from stored tourRooms. Auto-migration of legacy
         // per-pano floorPlan blobs is handled in a separate effect
         // below so it can use the page's helpers without ordering
@@ -445,6 +452,8 @@ export default function EditPresentationPage() {
         expiresAt: expiresAt || null,
         watermarkEnabled,
         panoramaFloorWatermark,
+        tourHeroFileId: tourHeroFileId || null,
+        theme: theme || null,
       };
 
       if (newPassword) {
@@ -1824,6 +1833,82 @@ export default function EditPresentationPage() {
                   </label>
                 </div>
               )}
+
+              {/* Tour cover image — replaces the equirectangular preview
+                  on the tour slide so clients see a polished poster
+                  instead of a distorted 360 thumbnail. */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Tour Cover Image
+                </label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={tourHeroFileId}
+                    onChange={(e) => setTourHeroFileId(e.target.value)}
+                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="">
+                      Use 360° preview (default)
+                    </option>
+                    {projectFiles
+                      .filter((f) => f.mimeType.startsWith("image/"))
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.originalName}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      triggerPicker("image/*", "Pick a tour cover image", (ids) =>
+                        setTourHeroFileId(ids[0] ?? "")
+                      )
+                    }
+                    className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
+                    title="Browse project images"
+                  >
+                    <Images className="h-4 w-4" />
+                  </button>
+                  {tourHeroFileId && (
+                    <button
+                      type="button"
+                      onClick={() => setTourHeroFileId("")}
+                      className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-red-400 transition-colors"
+                      title="Clear cover image"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Shown as a darkened cover with a play button on the
+                  tour slide. Falls back to a cropped 360° preview
+                  when no cover is set.
+                </p>
+              </div>
+
+              {/* Visual theme — opt in to the animated space
+                  background for the deck + dividers. */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Visual Theme
+                </label>
+                <select
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                  className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                >
+                  <option value="">Light (default)</option>
+                  <option value="space">Space — animated stars + planets</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Space adds a slow starfield + drifting distant
+                  planets behind the deck and as a divider ambient
+                  style.
+                </p>
+              </div>
+
               <button
                 type="submit"
                 disabled={saving}

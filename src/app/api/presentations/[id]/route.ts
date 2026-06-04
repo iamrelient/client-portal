@@ -89,6 +89,8 @@ export async function PATCH(
       watermarkEnabled,
       panoramaFloorWatermark,
       tourRooms,
+      tourHeroFileId,
+      theme,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -107,6 +109,9 @@ export async function PATCH(
     if (panoramaFloorWatermark !== undefined)
       data.panoramaFloorWatermark = panoramaFloorWatermark;
     if (tourRooms !== undefined) data.tourRooms = tourRooms;
+    if (tourHeroFileId !== undefined)
+      data.tourHeroFileId = tourHeroFileId || null;
+    if (theme !== undefined) data.theme = theme || null;
 
     if (removePassword) {
       data.password = null;

@@ -236,6 +236,18 @@ model Presentation {
   accessToken       String                  @unique
   watermarkEnabled  Boolean                 @default(true)
   panoramaFloorWatermark Boolean            @default(true)
+  /// Optional cover image for the 360° tour slide. When set,
+  /// section-panorama renders this file (with a darkened overlay
+  /// + play button + "Click to view 360° tour" prompt) instead of
+  /// the cropped equirectangular preview. File id refers to a
+  /// project file (image of any aspect ratio).
+  tourHeroFileId    String?
+  /// Visual theme for the deck background + dividers. "space"
+  /// turns on the animated starfield + planet drift; null/"light"
+  /// keeps the neutral-50 baseline. Per-presentation so the
+  /// architect can opt in selectively rather than apply
+  /// site-wide.
+  theme             String?
   // Logical "rooms" pinned on a floor plan. Each room owns its own
   // marker position + name + which panorama is the entry point
   // ("starting pano"). Panoramas reference a room by id in their

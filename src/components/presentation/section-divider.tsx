@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SpaceBackground } from "./space-background";
 
 /** Supported ambient backdrops for a divider slide. Random picks a
  *  different one on each viewer load so the same presentation feels
@@ -9,13 +10,15 @@ export type AmbientStyle =
   | "grid"
   | "particles"
   | "line-pulse"
-  | "gradient-shift";
+  | "gradient-shift"
+  | "space";
 
 const ALL_STYLES: AmbientStyle[] = [
   "grid",
   "particles",
   "line-pulse",
   "gradient-shift",
+  "space",
 ];
 
 function pickStyle(
@@ -182,7 +185,26 @@ function AmbientBackdrop({
     return <AmbientParticles accent={accent} reduced={reduced} />;
   if (style === "line-pulse")
     return <AmbientLinePulse accent={accent} reduced={reduced} />;
+  if (style === "space")
+    return <AmbientSpace />;
   return <AmbientGradientShift accent={accent} reduced={reduced} />;
+}
+
+/** Space ambient — reuses the shared SpaceBackground component in
+ *  its rich variant so the divider gets a richer planetary
+ *  treatment than the deck background's subtle wash. Inline so it
+ *  fills the divider's own bounds (not the viewport). */
+function AmbientSpace() {
+  return (
+    <SpaceBackground
+      variant="rich"
+      // Different seed than the deck background so the divider's
+      // sky isn't a copy of what's already showing through the
+      // gaps between slides.
+      seed={777}
+      inline
+    />
+  );
 }
 
 /** Subtle grid that drifts slowly. */

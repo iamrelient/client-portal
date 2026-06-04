@@ -12,6 +12,7 @@ import { SectionVideo } from "./section-video";
 import { SectionText } from "./section-text";
 import { SectionDivider } from "./section-divider";
 import { SectionPanorama } from "./section-panorama";
+import { SpaceBackground } from "./space-background";
 import { Section3DModel } from "./section-3d-model";
 import { PresentationCursor } from "./presentation-cursor";
 import { Model3DPiP } from "./model-3d-pip";
@@ -38,6 +39,15 @@ export interface PresentationData {
    *  walkthrough's minimap parses this via lib/tour-rooms.ts to
    *  build its room dots. */
   tourRooms?: unknown;
+  /** Optional cover image (project file id) for the 360° tour
+   *  slide. When set, section-panorama renders it as a darkened
+   *  hero with a play-button overlay instead of the cropped
+   *  equirectangular preview — same role as a movie poster. */
+  tourHeroFileId?: string | null;
+  /** "space" enables the animated starfield + planet background
+   *  for the deck. Null/undefined/anything else = the light
+   *  baseline theme. */
+  theme?: string | null;
   project: { id: string; name: string; company: string | null };
   sections: SectionData[];
 }
@@ -357,7 +367,9 @@ export function PresentationShell({
   return (
     <div
       ref={scrollContainerRef}
-      className="presentation-shell fixed inset-0 overflow-y-auto overflow-x-hidden bg-neutral-50 select-none scrollbar-hide"
+      className={`presentation-shell fixed inset-0 overflow-y-auto overflow-x-hidden select-none scrollbar-hide ${
+        data.theme === "space" ? "" : "bg-neutral-50"
+      }`}
       style={{
         fontFamily: "'Inter Tight', 'Inter', sans-serif",
         // Scroll-snap fixes the "tour slide is half-scrolled past"
@@ -367,8 +379,13 @@ export function PresentationShell({
         // still scroll fluidly through chapter strips (which opt
         // out by not setting scroll-snap-align on their segment).
         scrollSnapType: "y proximity",
+        // Dark void color under the SpaceBackground in case a star
+        // pattern doesn't tile to every viewport corner. Light
+        // theme stays on the bg-neutral-50 class above.
+        ...(data.theme === "space" ? { backgroundColor: "#050714" } : {}),
       }}
     >
+      {data.theme === "space" && <SpaceBackground variant="subtle" /> }
       {segments.map((seg, i) => {
         if (seg.kind === "fullscreen") {
           return (

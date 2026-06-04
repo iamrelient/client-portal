@@ -203,45 +203,65 @@ export function SectionPanorama({
         <>
           {/* Static preview image.
            *
-           *  Equirectangular panoramas look distorted as flat
-           *  thumbnails — the top quarter is stretched ceiling /
-           *  sky, the bottom quarter is stretched floor, and only
-           *  the middle band (the equator) reads like a normal
-           *  wide-angle photo. Matterport pre-renders a perspective
-           *  view per scan; 3D Vista lets you upload a separate
-           *  cover image. The cheapest middle ground that doesn't
-           *  need either backend work or admin config: zoom the
-           *  image so only the middle band is visible. scale(1.6)
-           *  hides roughly the top and bottom ~20%, which is where
-           *  the worst distortion lives, while keeping enough
-           *  panoramic context for the client to recognize the
-           *  room. */}
+           *  Two paths:
+           *  - **Custom tour hero** (presentation.tourHeroFileId):
+           *    use the admin's chosen cover image natural-fit, no
+           *    zoom hacks. Matterport / 3D Vista call this a "tour
+           *    cover" — a normal photo that previews the experience
+           *    without the equirectangular distortion.
+           *  - **Equirectangular fallback**: when no cover is set,
+           *    zoom the pano so only the middle band is visible.
+           *    scale(1.6) hides the top/bottom ~20% where the
+           *    poles look stretched, giving a wide-angle-photo
+           *    feel without a separate asset. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={assetUrl}
-            alt={section.title || "360° panorama"}
-            loading="lazy"
-            draggable={false}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: "center 50%",
-              transform: "scale(1.6)",
-              transformOrigin: "center center",
-              pointerEvents: "none",
-              WebkitUserDrag: "none",
-              opacity: visible ? 1 : 0,
-              transition: reduced ? "none" : "opacity 0.8s ease",
-            } as React.CSSProperties}
-          />
+          {data.tourHeroFileId ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/present/${data.accessToken}/asset/${data.tourHeroFileId}`}
+              alt={section.title || "Tour cover"}
+              loading="lazy"
+              draggable={false}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                pointerEvents: "none",
+                WebkitUserDrag: "none",
+                opacity: visible ? 1 : 0,
+                transition: reduced ? "none" : "opacity 0.8s ease",
+              } as React.CSSProperties}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={assetUrl}
+              alt={section.title || "360° panorama"}
+              loading="lazy"
+              draggable={false}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: "center 50%",
+                transform: "scale(1.6)",
+                transformOrigin: "center center",
+                pointerEvents: "none",
+                WebkitUserDrag: "none",
+                opacity: visible ? 1 : 0,
+                transition: reduced ? "none" : "opacity 0.8s ease",
+              } as React.CSSProperties}
+            />
+          )}
 
-          {/* Explore prompt overlay */}
+          {/* Click overlay — darkened scrim + centered play CTA. */}
           <div
             onClick={handleActivate}
-            data-cursor-label="Explore"
+            data-cursor-label="Play tour"
             style={{
               position: "absolute",
               inset: 0,
@@ -251,7 +271,13 @@ export function SectionPanorama({
               flexDirection: "column",
               zIndex: 2,
               cursor: "pointer",
-              background: "rgba(6,6,8,0.3)",
+              // Heavier darkening when there's a hero image so the
+              // play button + text read clearly. Lighter scrim on
+              // the equirectangular preview so the room is still
+              // identifiable.
+              background: data.tourHeroFileId
+                ? "linear-gradient(to bottom, rgba(6,6,8,0.45) 0%, rgba(6,6,8,0.62) 100%)"
+                : "rgba(6,6,8,0.3)",
             }}
           >
             <div
@@ -264,53 +290,103 @@ export function SectionPanorama({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: "1rem",
+                gap: "1.25rem",
               }}
             >
-              {/* 360 icon */}
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 48 48"
-                fill="none"
-              >
-                <circle
-                  cx="24"
-                  cy="24"
-                  r="22"
-                  stroke="rgba(255,255,255,0.4)"
-                  strokeWidth="1"
-                />
-                <ellipse
-                  cx="24"
-                  cy="24"
-                  rx="12"
-                  ry="22"
-                  stroke="rgba(255,255,255,0.2)"
-                  strokeWidth="0.5"
-                />
-                <line
-                  x1="2"
-                  y1="24"
-                  x2="46"
-                  y2="24"
-                  stroke="rgba(255,255,255,0.2)"
-                  strokeWidth="0.5"
-                />
-              </svg>
-
-              <span
+              {/* Big play button — concentric rings + triangle so it
+                  reads as "play this experience" universally. Pulse
+                  animation draws the eye without being noisy. */}
+              <div
+                className="pano-play-button"
                 style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 300,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.7)",
+                  position: "relative",
+                  width: 96,
+                  height: 96,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                Explore in 360&deg;
-              </span>
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    borderRadius: "50%",
+                    background: "rgba(255,255,255,0.12)",
+                    backdropFilter: "blur(6px)",
+                    border: "1.5px solid rgba(255,255,255,0.5)",
+                  }}
+                />
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  style={{
+                    position: "relative",
+                    marginLeft: 4, // optical center for a triangle
+                  }}
+                >
+                  <path
+                    d="M8 6 L26 16 L8 26 Z"
+                    fill="rgba(255,255,255,0.95)"
+                  />
+                </svg>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 300,
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "rgba(255,255,255,0.95)",
+                    textShadow: "0 2px 12px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  Click to view a 360&deg; tour
+                </span>
+                {allPanoramaSectionIds.size > 1 && (
+                  <span
+                    style={{
+                      fontSize: "0.625rem",
+                      fontWeight: 300,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: "rgba(255,255,255,0.6)",
+                      textShadow: "0 1px 8px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {allPanoramaSectionIds.size} rooms
+                  </span>
+                )}
+              </div>
             </div>
+
+            <style>{`
+              .pano-play-button {
+                animation: pano-play-pulse 2.6s ease-in-out infinite;
+              }
+              .pano-play-button:hover {
+                transform: scale(1.08);
+                transition: transform 200ms ease;
+              }
+              @keyframes pano-play-pulse {
+                0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.18); }
+                50% { box-shadow: 0 0 0 18px rgba(255,255,255,0); }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .pano-play-button { animation: none; }
+              }
+            `}</style>
           </div>
         </>
       )}
