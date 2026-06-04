@@ -236,6 +236,17 @@ model Presentation {
   accessToken       String                  @unique
   watermarkEnabled  Boolean                 @default(true)
   panoramaFloorWatermark Boolean            @default(true)
+  // Logical "rooms" pinned on a floor plan. Each room owns its own
+  // marker position + name + which panorama is the entry point
+  // ("starting pano"). Panoramas reference a room by id in their
+  // metadata.roomId. Lets multiple panoramas share one map marker
+  // (multi-shoot-point rooms) without a bidirectional sync
+  // headache: editing the dot edits the ROOM, not whichever pano
+  // happens to live in it. Shape: { rooms: TourRoom[] }.
+  // Migration: when null/empty but per-pano metadata.floorPlan
+  // exists, deriveTourRooms() builds an initial rooms list (one
+  // room per legacy pano) on first save.
+  tourRooms         Json?
   createdById       String
   createdBy         User                    @relation(fields: [createdById], references: [id])
   sections          PresentationSection[]

@@ -1,44 +1,51 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import type { PanoramaMetadata } from "@/types/panorama";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import type { PanoramaMetadata, TourRoom } from "@/types/panorama";
 import type { PanoramaViewerHandle } from "./panorama-viewer";
 
-interface RoomData {
+interface PanoData {
   sectionId: string;
   imageUrl: string;
   metadata: PanoramaMetadata;
-  /** Friendly room name resolved upstream (roomLabel → title →
-   *  filename). Already correct — the minimap just renders it. */
   label: string;
 }
 
 interface PanoramaMinimapProps {
-  rooms: RoomData[];
+  /** Logical rooms — one dot per entry. */
+  mapRooms: TourRoom[];
+  /** All panoramas in the walkthrough — used to look up which room
+   *  is currently active (via the active pano's roomId or by
+   *  matching against room.startingPanoSectionId). */
+  panos: PanoData[];
+  /** Currently-loaded scene id (= panorama section id). */
   currentRoomId: string;
   accessToken: string;
   viewerRef: React.RefObject<PanoramaViewerHandle | null>;
+  /** Navigate to a section id — calling with a room's
+   *  startingPanoSectionId jumps to that room. */
   onNavigate: (sectionId: string) => void;
 }
 
-
 /** Floor-plan minimap with grow-from-corner expansion.
  *
- *  One element. Idle: 150 px wide thumbnail anchored to the bottom-
- *  left corner, just big enough to confirm the room's orientation.
- *  Hovering (or tapping on touch) animates width / bottom / left so
- *  the same element scales out into a centered ~80vw panel with
- *  labeled, clickable room dots.
+ *  One element. Idle: 150 px thumbnail anchored to the bottom-left
+ *  corner. Hovering (or tapping on touch) animates width / bottom /
+ *  left so the same element scales into a centered ~80vw panel
+ *  with labeled, clickable room dots.
  *
- *  Dismiss model is sticky on purpose — the previous mouse-leave
- *  collapse closed the panel before clients could reach a dot. Now
- *  it only closes when:
- *    • The user clicks anywhere outside the map, OR
- *    • The user clicks a dot to jump to that room, OR
- *    • The user presses Escape.
- *  Mouse-leave does nothing. */
+ *  Sticky dismiss: closes only on outside pointerdown, dot click,
+ *  or Escape. Mouse-leave does nothing — once it's open it stays
+ *  open until the client takes an explicit action.
+ *
+ *  Renders one dot per TourRoom (the presentation's logical
+ *  rooms). The currently-active room is detected by checking which
+ *  room owns the active panorama (either via metadata.roomId or by
+ *  matching the room's startingPanoSectionId). Clicking a dot
+ *  navigates to that room's startingPanoSectionId. */
 export function PanoramaMinimap({
-  rooms,
+  mapRooms,
+  panos,
   currentRoomId,
   accessToken,
   viewerRef,
@@ -49,8 +56,8 @@ export function PanoramaMinimap({
   const rafRef = useRef<number>(0);
   const mapRef = useRef<HTMLDivElement>(null);
 
-  // Track yaw via RAF so the heading arrow on the current-room
-  // marker follows where the client is actually looking.
+  // Track yaw via RAF so the heading arrow on the active room
+  // marker rotates with the client's view.
   useEffect(() => {
     function update() {
       const viewer = viewerRef.current;
@@ -64,10 +71,6 @@ export function PanoramaMinimap({
   }, [viewerRef]);
 
   // ── Sticky dismiss handlers ──
-  // Click outside the map → collapse. Capture phase so it fires
-  // *before* the walkthrough's other handlers (e.g. anything that
-  // might consume the click event first). Only attached while
-  // expanded so we don't pay the listener cost when closed.
   useEffect(() => {
     if (!expanded) return;
     function handlePointerDown(e: PointerEvent) {
@@ -77,8 +80,6 @@ export function PanoramaMinimap({
         setExpanded(false);
       }
     }
-    // Defer attaching by one tick so the opening click (which
-    // bubbles up from the thumbnail) doesn't immediately re-close.
     const tid = window.setTimeout(() => {
       document.addEventListener("pointerdown", handlePointerDown, true);
     }, 0);
@@ -88,10 +89,6 @@ export function PanoramaMinimap({
     };
   }, [expanded]);
 
-  // ESC closes the map (without exiting the walkthrough). We register
-  // capture-phase so we win over the walkthrough's window-level ESC
-  // handler when the map is open. When closed we don't attach the
-  // handler, so ESC behaves normally (walkthrough exits).
   useEffect(() => {
     if (!expanded) return;
     function handleKey(e: KeyboardEvent) {
@@ -109,27 +106,75 @@ export function PanoramaMinimap({
   }, []);
 
   const handleDotClick = useCallback(
-    (sectionId: string, isCurrent: boolean) => {
-      if (isCurrent) return;
-      onNavigate(sectionId);
-      // Collapse after navigation so the new room is unobstructed.
+    (room: TourRoom) => {
+      // Jump to the room's starting pano. Falls back to the first
+      // pano whose metadata.roomId points at this room (so half-
+      // configured rooms with no starting pano still navigate
+      // *somewhere*, rather than no-op).
+      const target =
+        room.startingPanoSectionId ??
+        panos.find((p) => p.metadata.roomId === room.id)?.sectionId ??
+        null;
+      if (target) onNavigate(target);
       setExpanded(false);
     },
-    [onNavigate]
+    [onNavigate, panos]
   );
 
-  // Find floor plan image (first room that has one set on this floor).
-  const floorPlanRoom = rooms.find((r) => r.metadata.floorPlan?.imageFileId);
-  const floorPlanFileId = floorPlanRoom?.metadata.floorPlan?.imageFileId;
+  /** Currently active panorama (by section id) — used to look up
+   *  its metadata for the per-pano north calibration. */
+  const activePano = useMemo(
+    () => panos.find((p) => p.sectionId === currentRoomId) ?? null,
+    [panos, currentRoomId]
+  );
+
+  /** Which room owns the active panorama? Two ways:
+   *    1. Active pano's metadata.roomId points at this room.
+   *    2. Room's startingPanoSectionId === active pano's id
+   *       (covers legacy-migrated rooms whose starter wasn't
+   *       re-stamped onto the pano yet). */
+  const activeRoomId = useMemo(() => {
+    if (!activePano) return null;
+    const fromMeta = activePano.metadata.roomId;
+    if (fromMeta && mapRooms.some((r) => r.id === fromMeta)) {
+      return fromMeta;
+    }
+    const fromStarter = mapRooms.find(
+      (r) => r.startingPanoSectionId === currentRoomId
+    );
+    return fromStarter?.id ?? null;
+  }, [activePano, mapRooms, currentRoomId]);
+
+  /** Active room's floor plan — what we render as the background.
+   *  When the active pano isn't on the map (rare, but happens for
+   *  unassigned secondary viewpoints), fall back to whichever floor
+   *  plan the FIRST room uses. */
+  const floorPlanFileId = useMemo(() => {
+    if (activeRoomId) {
+      const room = mapRooms.find((r) => r.id === activeRoomId);
+      if (room) return room.floorPlanImageFileId;
+    }
+    return mapRooms[0]?.floorPlanImageFileId ?? null;
+  }, [activeRoomId, mapRooms]);
+
+  /** Rooms anchored to whichever floor plan we're showing — keeps
+   *  multi-floor decks coherent (don't draw a Floor 2 dot on the
+   *  Floor 1 plan). */
+  const visibleRooms = useMemo(
+    () => mapRooms.filter((r) => r.floorPlanImageFileId === floorPlanFileId),
+    [mapRooms, floorPlanFileId]
+  );
+
   if (!floorPlanFileId) return null;
 
   const floorPlanSrc = `/api/present/${accessToken}/asset/${floorPlanFileId}`;
 
-  // ── Layout — transitions between corner and centered ──
-  // Both states position by `bottom` + `left`, animating those plus
-  // `width` and `max-height`. Single source of truth for layout so
-  // the corner-to-center morph is a clean CSS transition without
-  // mid-frame jumps from changing positioning anchors.
+  // North calibration for the heading arrow — comes from the active
+  // pano's per-pano northYaw (each pano was captured at a different
+  // camera orientation, so the offset is per-pano even within the
+  // same room).
+  const northYaw = activePano?.metadata.northYaw ?? 0;
+
   const collapsedLayout = {
     bottom: "1rem",
     left: "1rem",
@@ -155,21 +200,9 @@ export function PanoramaMinimap({
         ...layout,
         zIndex: expanded ? 40 : 20,
         overflow: "hidden",
-        // No border, no fill — just the map image and the dots.
-        // Transparent floor plan PNGs show the panorama through
-        // their transparent regions, no panel chrome in the way.
-        // A soft drop shadow only when collapsed gives the corner
-        // thumbnail enough lift to read against busy panoramas;
-        // when expanded the dots + image carry the composition.
         background: "transparent",
         cursor: expanded ? "default" : "pointer",
-        // Shadow only on the corner thumbnail — gives it lift
-        // against busy panoramas. Once expanded, the map IS the
-        // composition; no shadow needed and admin asked for none.
         boxShadow: expanded ? "none" : "0 4px 14px rgba(0,0,0,0.5)",
-        // Animate every property that differs between states. The
-        // bezier matches the cinematic transition's curve so map
-        // expansion + scene transition share a visual language.
         transition:
           "width 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
           "max-height 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
@@ -178,20 +211,10 @@ export function PanoramaMinimap({
           "box-shadow 250ms ease",
       }}
     >
-      {/* ── Image + dots wrapper ── No header / chrome — admins
-          asked for just the map and the points. ESC + outside-click
-          dismiss still work (handled in the effects above), the
-          discoverability of those gestures is now in the
-          walkthrough's top bar instead of inside the map itself.
-          object-fit: contain on the image, so when expanded with
-          max-height: 80vh the image stays inside without cropping. */}
       <div
         style={{
           position: "relative",
           width: "100%",
-          // When collapsed the image just fills the small thumbnail;
-          // when expanded we honor max-height so the image isn't
-          // pushed off the bottom of the viewport.
           maxHeight: expanded ? "80vh" : "none",
           overflow: "hidden",
         }}
@@ -207,43 +230,31 @@ export function PanoramaMinimap({
             maxHeight: expanded ? "80vh" : "none",
             objectFit: "contain",
             display: "block",
-            // No opacity dim — the floor plan may be a PNG with a
-            // transparent background, and dimming would multiply
-            // the panorama color through the transparent areas.
-            // Plain image with the panorama showing through naturally
-            // gives the cleanest look.
             opacity: 1,
           }}
         />
 
-        {/* Room markers */}
-        {rooms.map((room) => {
-          const fp = room.metadata.floorPlan;
-          if (!fp) return null;
-          const isCurrent = room.sectionId === currentRoomId;
-
-          // Dot sizing scales between collapsed/expanded so the
-          // markers remain readable but never overwhelming.
+        {visibleRooms.map((room) => {
+          const isCurrent = room.id === activeRoomId;
           const dotSize = expanded ? (isCurrent ? 18 : 14) : isCurrent ? 12 : 6;
           const labelVisible = expanded;
-
           return (
             <button
-              key={room.sectionId}
+              key={room.id}
               type="button"
               disabled={!expanded}
               onClick={(e) => {
                 e.stopPropagation();
-                handleDotClick(room.sectionId, isCurrent);
+                handleDotClick(room);
               }}
               data-cursor-label={
                 expanded ? (isCurrent ? "Current" : "Jump") : undefined
               }
-              title={room.label}
+              title={room.name}
               style={{
                 position: "absolute",
-                left: `${fp.markerX * 100}%`,
-                top: `${fp.markerY * 100}%`,
+                left: `${room.markerX * 100}%`,
+                top: `${room.markerY * 100}%`,
                 transform: "translate(-50%, -50%)",
                 zIndex: isCurrent ? 3 : 2,
                 background: "transparent",
@@ -258,9 +269,6 @@ export function PanoramaMinimap({
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 4,
-                // Click-through when collapsed so the parent click
-                // handler can pick up the open gesture; receive
-                // events normally when expanded.
                 pointerEvents: expanded ? "auto" : "none",
               }}
             >
@@ -298,14 +306,8 @@ export function PanoramaMinimap({
                     left: "50%",
                     width: expanded ? 24 : 18,
                     height: expanded ? 24 : 18,
-                    // Calibrated heading: subtract the panorama's
-                    // northYaw so the arrow points relative to
-                    // "north on the floor plan" instead of relative
-                    // to wherever Pannellum's yaw 0 happens to land.
-                    // If the admin hasn't calibrated yet, northYaw
-                    // is undefined → fall back to raw yaw.
                     transform: `translate(-50%, -50%) rotate(${
-                      yaw - (fp.northYaw ?? 0)
+                      yaw - northYaw
                     }deg)`,
                     pointerEvents: "none",
                   }}
@@ -340,14 +342,11 @@ export function PanoramaMinimap({
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                     pointerEvents: "none",
-                    // Fade the label in once the panel has had time
-                    // to grow — premature labels look cramped during
-                    // the size transition.
                     animation: "minimap-fade-in 400ms ease 100ms forwards",
                     opacity: 0,
                   }}
                 >
-                  {room.label}
+                  {room.name}
                 </span>
               )}
             </button>

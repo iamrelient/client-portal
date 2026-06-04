@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { PanoramaMetadata, PanoramaHotspot } from "@/types/panorama";
+import type {
+  PanoramaMetadata,
+  PanoramaHotspot,
+  TourRoom,
+} from "@/types/panorama";
 import { PanoramaHotspotForm } from "./panorama-hotspot-form";
 import { PanoramaFloorPlanEditor } from "./panorama-floor-plan-editor";
 import { Crosshair, RotateCcw, Save, Loader2 } from "lucide-react";
@@ -59,11 +63,12 @@ interface PanoramaEditorProps {
    *  Resolves to the new section's id (auto-selected by the form),
    *  or null if the picker was dismissed. */
   onAddPanorama?: () => Promise<string | null>;
-  /** Optional: triggered from the "+ Add" button in the Floor Plan
-   *  tab. Lets the admin pick or upload a floor plan image for this
-   *  panorama. Resolves to the file id (auto-selected), or null if
-   *  the picker was dismissed. */
-  onAddFloorPlan?: () => Promise<string | null>;
+  /** Tour rooms defined on the presentation. The per-pano floor
+   *  plan tab uses these to populate the room dropdown. */
+  rooms: TourRoom[];
+  /** Patch a single tour room (e.g. when toggling the starting-pano
+   *  for the currently-edited panorama). Parent persists. */
+  onRoomChange: (id: string, patch: Partial<TourRoom>) => void;
   /** Drag-to-link callback. Called when the admin drops another
    *  panorama's thumbnail onto the 360° view. The page is responsible
    *  for PATCHing a *reverse* navigation hotspot into the dropped
@@ -231,7 +236,8 @@ export function PanoramaEditor({
   projectFiles,
   onSave,
   onAddPanorama,
-  onAddFloorPlan,
+  rooms,
+  onRoomChange,
   onLinkPanorama,
   onSwitchToPanorama,
 }: PanoramaEditorProps) {
@@ -871,13 +877,19 @@ export function PanoramaEditor({
               </div>
             )}
 
-            {/* Floor Plan tab */}
+            {/* Floor Plan tab — now a room dropdown + starting toggle.
+                The actual marker position lives on the room (managed
+                in the top-level Floor Plan map), not on the
+                panorama. */}
             {activeTab === "floor-plan" && (
               <PanoramaFloorPlanEditor
-                floorPlan={meta.floorPlan}
-                projectFiles={projectFiles}
-                onChange={(fp) => setMeta((prev) => ({ ...prev, floorPlan: fp }))}
-                onAddFloorPlan={onAddFloorPlan}
+                sectionId={sectionId}
+                metadata={meta}
+                onMetadataChange={(patch) =>
+                  setMeta((prev) => ({ ...prev, ...patch }))
+                }
+                rooms={rooms}
+                onRoomChange={onRoomChange}
                 onCaptureNorth={() => {
                   // Pull the current yaw straight from the Pannellum
                   // viewer on the left. Round to one decimal — more

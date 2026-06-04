@@ -1,335 +1,209 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import type { PanoramaMetadata } from "@/types/panorama";
-import { Compass, Loader2, Plus, RotateCcw, X } from "lucide-react";
-
-interface FileOption {
-  id: string;
-  originalName: string;
-  mimeType: string;
-}
+import { useState } from "react";
+import type { PanoramaMetadata, TourRoom } from "@/types/panorama";
+import { Compass, MapPin, RotateCcw } from "lucide-react";
 
 interface PanoramaFloorPlanEditorProps {
-  floorPlan: PanoramaMetadata["floorPlan"];
-  projectFiles: FileOption[];
-  onChange: (floorPlan: PanoramaMetadata["floorPlan"]) => void;
-  /** Optional: lets the admin pick or upload a floor plan image
-   *  right from this panel. Resolves with the new file's id (auto-
-   *  selected as the floor plan), or null if the picker was
-   *  dismissed. */
-  onAddFloorPlan?: () => Promise<string | null>;
-  /** Capture the panorama viewer's current yaw and stamp it on
-   *  metadata.floorPlan.northYaw — so the heading arrow in the
-   *  client viewer reads correctly relative to the floor plan. The
-   *  parent component owns viewerRef, so it provides this callback.
-   *  Returns the captured yaw (rounded) or null if no viewer is
-   *  mounted. */
+  /** This panorama's section id — needed to detect whether this
+   *  pano is currently the starting pano of any room. */
+  sectionId: string;
+  /** Current panorama metadata (read for roomId + northYaw). */
+  metadata: PanoramaMetadata;
+  /** Patch the metadata. Caller persists. */
+  onMetadataChange: (patch: Partial<PanoramaMetadata>) => void;
+  /** Full rooms list from the presentation. */
+  rooms: TourRoom[];
+  /** Patch a single room. Caller persists the whole rooms list. */
+  onRoomChange: (id: string, patch: Partial<TourRoom>) => void;
+  /** Capture the panorama viewer's current yaw — used for the
+   *  north-calibration button. Returns null if no viewer is
+   *  mounted (e.g. preview hasn't loaded yet). */
   onCaptureNorth?: () => number | null;
 }
 
+/**
+ * Per-panorama "Floor Plan" tab — now Room Assignment.
+ *
+ *  In the new tour-rooms model the floor plan position lives on the
+ *  room, not the panorama. This tab just assigns *which* room the
+ *  pano belongs to, and toggles whether it's the starting pano for
+ *  that room. North-calibration (per-pano) still lives here because
+ *  each panorama's yaw 0 is independent.
+ */
 export function PanoramaFloorPlanEditor({
-  floorPlan,
-  projectFiles,
-  onChange,
-  onAddFloorPlan,
+  sectionId,
+  metadata,
+  onMetadataChange,
+  rooms,
+  onRoomChange,
   onCaptureNorth,
 }: PanoramaFloorPlanEditorProps) {
-  const [adding, setAdding] = useState(false);
-  /** Brief visual ping after capture so the admin knows the gesture
-   *  registered (the change is otherwise just a tiny arrow rotation
-   *  in the preview). */
   const [justCaptured, setJustCaptured] = useState(false);
 
+  const currentRoom = metadata.roomId
+    ? rooms.find((r) => r.id === metadata.roomId) ?? null
+    : null;
+  const isStartingForCurrent =
+    !!currentRoom && currentRoom.startingPanoSectionId === sectionId;
+
+  function handleRoomChange(roomId: string) {
+    // If we were the starting pano of the old room, clear that link
+    // first so the room doesn't end up pointing at a pano that's no
+    // longer in it.
+    if (currentRoom && currentRoom.startingPanoSectionId === sectionId) {
+      onRoomChange(currentRoom.id, { startingPanoSectionId: null });
+    }
+    onMetadataChange({ roomId: roomId || undefined });
+  }
+
+  function handleMakeStarting(checked: boolean) {
+    if (!currentRoom) return;
+    onRoomChange(currentRoom.id, {
+      startingPanoSectionId: checked ? sectionId : null,
+    });
+  }
+
   function handleCaptureNorth() {
-    if (!onCaptureNorth || !floorPlan) return;
+    if (!onCaptureNorth) return;
     const yaw = onCaptureNorth();
     if (yaw === null) return;
-    onChange({
-      ...floorPlan,
-      northYaw: yaw,
-    });
+    onMetadataChange({ northYaw: yaw });
     setJustCaptured(true);
     window.setTimeout(() => setJustCaptured(false), 1200);
   }
 
   function handleClearNorth() {
-    if (!floorPlan) return;
-    const { northYaw: _drop, ...rest } = floorPlan;
-    void _drop;
-    onChange(rest);
+    onMetadataChange({ northYaw: undefined });
   }
-
-  async function handleAddFloorPlan() {
-    if (!onAddFloorPlan || adding) return;
-    setAdding(true);
-    try {
-      const newId = await onAddFloorPlan();
-      if (newId) {
-        onChange({
-          imageFileId: newId,
-          markerX: floorPlan?.markerX ?? 0.5,
-          markerY: floorPlan?.markerY ?? 0.5,
-        });
-      }
-    } finally {
-      setAdding(false);
-    }
-  }
-  const imgRef = useRef<HTMLDivElement>(null);
-
-  const handleImageClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!floorPlan?.imageFileId) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width;
-      const y = (e.clientY - rect.top) / rect.height;
-      onChange({
-        ...floorPlan,
-        markerX: Math.round(x * 1000) / 1000,
-        markerY: Math.round(y * 1000) / 1000,
-      });
-    },
-    [floorPlan, onChange]
-  );
 
   const selectClass =
     "block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none";
 
-  const imageFiles = projectFiles.filter((f) =>
-    f.mimeType.startsWith("image/")
-  );
-
   return (
     <div className="space-y-3">
+      {/* Room dropdown */}
       <div>
         <label className="block text-[10px] font-medium text-slate-400 mb-1">
-          Floor Plan Image
+          Room
         </label>
-        <div className="flex gap-1.5">
-          <select
-            value={floorPlan?.imageFileId || ""}
-            onChange={(e) => {
-              if (e.target.value) {
-                onChange({
-                  imageFileId: e.target.value,
-                  markerX: floorPlan?.markerX ?? 0.5,
-                  markerY: floorPlan?.markerY ?? 0.5,
-                });
-              } else {
-                onChange(undefined);
-              }
-            }}
-            className={selectClass}
-          >
-            <option value="">No floor plan</option>
-            {imageFiles.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.originalName}
-              </option>
-            ))}
-          </select>
-          {onAddFloorPlan && (
-            <button
-              type="button"
-              onClick={handleAddFloorPlan}
-              disabled={adding}
-              title="Pick a project image or upload a new floor plan"
-              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.1] disabled:opacity-50 transition-colors"
-            >
-              {adding ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Plus className="h-3.5 w-3.5" />
-              )}
-            </button>
-          )}
-          {floorPlan && (
-            <button
-              type="button"
-              onClick={() => onChange(undefined)}
-              className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2 py-1.5 text-slate-400 hover:text-red-400 transition-colors"
-              title="Remove floor plan"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        {imageFiles.length === 0 && onAddFloorPlan && (
-          <p className="mt-1 text-[10px] text-slate-500">
-            No images in this project yet — click + to pick or upload one.
+        <select
+          value={metadata.roomId ?? ""}
+          onChange={(e) => handleRoomChange(e.target.value)}
+          className={selectClass}
+        >
+          <option value="">— Not in a room —</option>
+          {rooms.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+        {rooms.length === 0 && (
+          <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">
+            No rooms yet. Open the Floor Plan section above and click
+            <span className="text-slate-400"> Add Room</span> to place
+            one on the plan, then come back here to assign this
+            panorama to it.
           </p>
         )}
-        {/* Multi-viewpoint guidance. If a single physical room has
-            several panoramas (camera moved within the same space —
-            e.g. "Lobby from entrance" + "Lobby from elevator"), only
-            the *primary* one should appear on the floor plan. The
-            extras should be left unplaced and reached via navigation
-            hotspots from the primary. Otherwise the minimap stacks
-            multiple dots on the same physical room and the client
-            can't tell which one is "the lobby." */}
-        {!floorPlan && (
-          <p className="mt-1.5 text-[10px] text-slate-500 leading-relaxed">
-            <span className="text-slate-400">Tip:</span> if this is a
-            secondary viewpoint inside another room (multiple shoot
-            positions in the same physical space), leave it unplaced
-            — clients reach it via a navigation hotspot from the
-            primary panorama, and the floor plan stays uncluttered.
+        {rooms.length > 0 && !metadata.roomId && (
+          <p className="mt-1 text-[10px] text-slate-500 leading-relaxed">
+            Unassigned panoramas don&apos;t appear as map dots and can
+            only be reached via navigation hotspots from other panos.
           </p>
         )}
       </div>
 
-      {floorPlan?.imageFileId && (
-        <>
-          <p className="text-[10px] text-slate-500">
-            Click on the image to place the room marker.
-          </p>
-          <div
-            ref={imgRef}
-            onClick={handleImageClick}
-            className="relative rounded-lg overflow-hidden border border-white/[0.08] cursor-crosshair"
-            style={{ maxHeight: 200 }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/files/${floorPlan.imageFileId}/download?inline=true`}
-              alt="Floor plan"
-              className="w-full h-auto"
-              style={{ maxHeight: 200, objectFit: "contain" }}
-              draggable={false}
+      {/* Starting-pano toggle — only when a room is chosen */}
+      {currentRoom && (
+        <div className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isStartingForCurrent}
+              onChange={(e) => handleMakeStarting(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-600 focus:ring-brand-500"
             />
-            {/* Marker + calibrated heading preview. Lets the admin
-                see the arrow's resulting direction before committing
-                — pan the pano, click Set North, watch the arrow snap
-                to point up. */}
-            <div
-              style={{
-                position: "absolute",
-                left: `${(floorPlan.markerX ?? 0.5) * 100}%`,
-                top: `${(floorPlan.markerY ?? 0.5) * 100}%`,
-                transform: "translate(-50%, -50%)",
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: "50%",
-                  background: "#3b82f6",
-                  border: "2px solid white",
-                  boxShadow: "0 0 0 2px rgba(59,130,246,0.4)",
-                }}
-              />
-              {/* Heading arrow — shows the captured "north" direction
-                  as a static reference so the admin can verify it
-                  points the right way on the plan. Arrow points UP
-                  when northYaw is the current view direction. */}
-              {floorPlan.northYaw !== undefined && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    width: 20,
-                    height: 20,
-                    transform: "translate(-50%, -50%)",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: -6,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: 0,
-                      height: 0,
-                      borderLeft: "4px solid transparent",
-                      borderRight: "4px solid transparent",
-                      borderBottom: "6px solid rgba(59,130,246,0.95)",
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 flex gap-4">
-            <div className="text-[10px]">
-              <span className="text-slate-500">X: </span>
-              <span className="text-slate-300 font-mono">
-                {((floorPlan.markerX ?? 0.5) * 100).toFixed(1)}%
+            <span className="text-xs text-slate-200">
+              Starting panorama for{" "}
+              <span className="text-brand-300">{currentRoom.name}</span>
+              <span className="block text-[10px] text-slate-500 mt-0.5">
+                Clicking this room&apos;s dot in the client viewer opens
+                this panorama. Other panos in the same room are
+                reached via navigation hotspots.
               </span>
-            </div>
-            <div className="text-[10px]">
-              <span className="text-slate-500">Y: </span>
-              <span className="text-slate-300 font-mono">
-                {((floorPlan.markerY ?? 0.5) * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="text-[10px] ml-auto">
-              <span className="text-slate-500">North: </span>
-              <span className="text-slate-300 font-mono">
-                {floorPlan.northYaw !== undefined
-                  ? `${floorPlan.northYaw.toFixed(0)}°`
-                  : "not set"}
-              </span>
-            </div>
-          </div>
-
-          {/* North calibration controls. Pan the panorama (on the
-              left) until you're looking in the direction you want to
-              read as UP on the floor plan, then click Set as North.
-              The viewer's heading arrow will use this offset so it
-              points correctly relative to the real world. */}
-          {onCaptureNorth && (
-            <div
-              className={`rounded-lg border px-3 py-2.5 space-y-2 transition-colors ${
-                justCaptured
-                  ? "border-emerald-500/40 bg-emerald-500/[0.08]"
-                  : "border-white/[0.08] bg-white/[0.02]"
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <Compass className="h-3 w-3 text-slate-400" />
-                <span className="text-[10px] font-medium text-slate-300 uppercase tracking-wider">
-                  North Calibration
-                </span>
-                {justCaptured && (
-                  <span className="text-[10px] text-emerald-400 ml-auto">
-                    ✓ Saved
-                  </span>
-                )}
-              </div>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Pan the panorama on the left until you&apos;re facing the
-                direction that should read as UP on the floor plan
-                (e.g. the building&apos;s front), then click Set as North.
-                The client-viewer heading arrow will rotate from there.
+            </span>
+          </label>
+          {currentRoom.startingPanoSectionId &&
+            currentRoom.startingPanoSectionId !== sectionId && (
+              <p className="text-[10px] text-amber-300/80 ml-6">
+                Another panorama is currently set as the starter for
+                this room. Checking the box above will switch it.
               </p>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleCaptureNorth}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 transition-colors"
-                >
-                  <Compass className="h-3 w-3" />
-                  Set current view as North
-                </button>
-                {floorPlan.northYaw !== undefined && (
-                  <button
-                    type="button"
-                    onClick={handleClearNorth}
-                    title="Clear calibration (arrow rotates by raw yaw)"
-                    className="rounded-lg border border-white/[0.1] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </>
+            )}
+        </div>
+      )}
+
+      {/* North calibration — per pano, since each capture has its
+          own yaw zero direction. */}
+      {onCaptureNorth && (
+        <div
+          className={`rounded-lg border px-3 py-2.5 space-y-2 transition-colors ${
+            justCaptured
+              ? "border-emerald-500/40 bg-emerald-500/[0.08]"
+              : "border-white/[0.08] bg-white/[0.02]"
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <Compass className="h-3 w-3 text-slate-400" />
+            <span className="text-[10px] font-medium text-slate-300 uppercase tracking-wider">
+              North Calibration
+            </span>
+            <span className="text-[10px] text-slate-500 ml-auto font-mono">
+              {metadata.northYaw !== undefined
+                ? `${metadata.northYaw.toFixed(0)}°`
+                : "not set"}
+            </span>
+            {justCaptured && (
+              <span className="text-[10px] text-emerald-400">✓</span>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            Pan the panorama on the left until you&apos;re facing the
+            direction that reads as UP on the floor plan, then click
+            Set as North. The minimap heading arrow uses this offset
+            so it matches real-world orientation.
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleCaptureNorth}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              <Compass className="h-3 w-3" />
+              Set current view as North
+            </button>
+            {metadata.northYaw !== undefined && (
+              <button
+                type="button"
+                onClick={handleClearNorth}
+                title="Clear calibration (arrow rotates by raw yaw)"
+                className="rounded-lg border border-white/[0.1] px-2 py-1.5 text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Hint reminder */}
+      {!currentRoom && rooms.length > 0 && (
+        <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+          <MapPin className="h-3 w-3" />
+          Pick a room above so this panorama shows on the floor plan.
+        </p>
       )}
     </div>
   );

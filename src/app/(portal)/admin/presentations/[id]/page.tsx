@@ -27,6 +27,13 @@ import { Model3DEditor } from "@/components/admin/model-3d-editor";
 import type { Model3DMetadata } from "@/types/model3d";
 import { canPreview3D } from "@/lib/model-utils";
 import { PresentationFloorPlanMap } from "@/components/admin/presentation-floor-plan-map";
+import type { TourRoom } from "@/types/panorama";
+import {
+  deriveTourRooms,
+  packTourRooms,
+  readTourRooms,
+  shouldAutoMigrate,
+} from "@/lib/tour-rooms";
 
 interface FileOption {
   id: string;
@@ -61,6 +68,7 @@ interface PresentationDetail {
   accessToken: string;
   watermarkEnabled: boolean;
   panoramaFloorWatermark: boolean;
+  tourRooms: unknown;
   project: { id: string; name: string };
   sections: SectionRow[];
   _count: { accessLogs: number };
@@ -130,6 +138,11 @@ export default function EditPresentationPage() {
 
   // Panorama editor
   const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
+  /** Local working copy of tour rooms — owned here so the main
+   *  floor-plan map and each panorama editor can both read/write
+   *  through the same source. Persisted via PATCH after every
+   *  meaningful change (debounced inside the callbacks). */
+  const [tourRooms, setTourRooms] = useState<TourRoom[]>([]);
   /** Section id we just *programmatically* switched to via the drag-
    *  to-link flow. The render effect uses this to scroll the freshly-
    *  opened editor into view once it actually mounts (one tick later,
@@ -164,6 +177,11 @@ export default function EditPresentationPage() {
         );
         setWatermarkEnabled(data.watermarkEnabled);
         setPanoramaFloorWatermark(data.panoramaFloorWatermark ?? true);
+        // Hydrate from stored tourRooms. Auto-migration of legacy
+        // per-pano floorPlan blobs is handled in a separate effect
+        // below so it can use the page's helpers without ordering
+        // headaches.
+        setTourRooms(readTourRooms(data.tourRooms));
         setLoading(false);
 
         // Load project files
@@ -188,6 +206,94 @@ export default function EditPresentationPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Persist the rooms list to the server. Called by the floor-plan
+   *  map after every mutation (add / drag / rename / delete /
+   *  starting-pano change). Keeping it raw rather than tied to a
+   *  setter so the auto-migration effect can also call it. */
+  const persistTourRooms = useCallback(
+    async (next: TourRoom[]) => {
+      try {
+        await fetch(`/api/presentations/${params.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tourRooms: packTourRooms(next) }),
+        });
+      } catch {
+        toast.error("Failed to save floor plan changes");
+      }
+    },
+    [params.id, toast]
+  );
+
+  /** Auto-migration: when a presentation loads with no tourRooms
+   *  but at least one panorama still carries legacy floorPlan
+   *  metadata, derive a rooms list (one room per pano), stamp
+   *  roomId onto each migrated pano, and persist. Runs once per
+   *  load(), keyed on `pres` so it re-evaluates after every fetch. */
+  const migrationRanRef = useRef(false);
+  useEffect(() => {
+    if (!pres || tourRooms.length > 0) return;
+    if (migrationRanRef.current) return;
+    if (!shouldAutoMigrate(pres.tourRooms, pres.sections)) return;
+    migrationRanRef.current = true;
+
+    const { rooms: derived, sectionRoomMap } = deriveTourRooms(
+      pres.sections.map((s) => ({
+        id: s.id,
+        type: s.type,
+        title: s.title,
+        metadata: s.metadata,
+        file: s.file ? { originalName: s.file.originalName } : null,
+      }))
+    );
+
+    setTourRooms(derived);
+    persistTourRooms(derived);
+
+    // Stamp metadata.roomId onto each migrated pano so the per-pano
+    // editor reflects the auto-assignment immediately. (Array.from
+    // avoids the ts2802 downlevel-iteration constraint on Map.entries().)
+    for (const [sectionId, roomId] of Array.from(sectionRoomMap.entries())) {
+      const sec = pres.sections.find((s) => s.id === sectionId);
+      if (!sec) continue;
+      const meta = (sec.metadata || {}) as Record<string, unknown>;
+      handleUpdateSection(sectionId, {
+        metadata: { ...meta, roomId },
+      }).catch(() => {});
+    }
+    // handleUpdateSection is stable enough across this render; we
+    // intentionally don't list it as a dep to avoid retriggering
+    // migration when sibling actions update the section list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pres, tourRooms.length, persistTourRooms]);
+
+  /** Update a single tour room (drag, rename, starting-pano).
+   *  Updates local state immediately for snappy UX and fires the
+   *  PATCH in the background. */
+  const handleUpdateRoom = useCallback(
+    (id: string, patch: Partial<TourRoom>) => {
+      setTourRooms((prev) => {
+        const next = prev.map((r) =>
+          r.id === id ? { ...r, ...patch } : r
+        );
+        persistTourRooms(next);
+        return next;
+      });
+    },
+    [persistTourRooms]
+  );
+
+  /** Replace the entire rooms list (used by add / delete / drag in
+   *  the main map, since it computes the next list before calling
+   *  back). */
+  const handleRoomsChange = useCallback(
+    (next: TourRoom[]) => {
+      setTourRooms(next);
+      persistTourRooms(next);
+    },
+    [persistTourRooms]
+  );
 
   /** When the drag-to-link flow asked us to switch panoramas, scroll
    *  the freshly-mounted editor into view once it's actually present
@@ -750,6 +856,7 @@ export default function EditPresentationPage() {
               one panorama in the deck. */}
           {sections.some((s) => s.type === "panorama" && s.fileId) && (
             <PresentationFloorPlanMap
+              rooms={tourRooms}
               sections={sections.map((s) => ({
                 id: s.id,
                 type: s.type,
@@ -761,9 +868,7 @@ export default function EditPresentationPage() {
                   : null,
               }))}
               projectFiles={projectFiles}
-              onUpdateSectionMetadata={async (sectionId, metadata) => {
-                await handleUpdateSection(sectionId, { metadata });
-              }}
+              onRoomsChange={handleRoomsChange}
               onPickFloorPlan={async () => {
                 const ids = await triggerPickerAsync(
                   "image/*",
@@ -1423,16 +1528,8 @@ export default function EditPresentationPage() {
                             return null;
                           }
                         }}
-                        onAddFloorPlan={async () => {
-                          // Just pick an existing project image — no
-                          // section to create. The editor's onChange
-                          // wires the picked id into metadata.floorPlan.
-                          const ids = await triggerPickerAsync(
-                            "image/*",
-                            "Pick an image for the floor plan"
-                          );
-                          return ids?.[0] ?? null;
-                        }}
+                        rooms={tourRooms}
+                        onRoomChange={handleUpdateRoom}
                         onLinkPanorama={async (args) => {
                           // Mirror the forward hotspot into the target
                           // section (one PATCH), then refresh the

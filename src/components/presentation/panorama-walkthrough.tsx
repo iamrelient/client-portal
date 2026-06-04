@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import type { PanoramaMetadata, PanoramaHotspot } from "@/types/panorama";
+import type {
+  PanoramaMetadata,
+  PanoramaHotspot,
+  TourRoom,
+} from "@/types/panorama";
 import { isInfoHotspot } from "@/types/panorama";
 import type { PanoramaViewerHandle, PanoramaScene } from "./panorama-viewer";
 import { PanoramaViewer } from "./panorama-viewer";
@@ -22,6 +26,12 @@ interface RoomData {
 
 interface PanoramaWalkthroughProps {
   rooms: RoomData[];
+  /** Logical "tour rooms" — one entry per floor-plan dot. May
+   *  contain fewer entries than `rooms` because multiple panoramas
+   *  can share a single room. Drives the minimap; the walkthrough
+   *  itself still loads every entry in `rooms` as a Pannellum scene
+   *  so hotspot navigation works across the full pano set. */
+  mapRooms: TourRoom[];
   initialRoomId: string;
   accessToken: string;
   onExit: () => void;
@@ -29,6 +39,7 @@ interface PanoramaWalkthroughProps {
 
 export function PanoramaWalkthrough({
   rooms,
+  mapRooms,
   initialRoomId,
   accessToken,
   onExit,
@@ -79,7 +90,11 @@ export function PanoramaWalkthrough({
   }, [rooms]);
 
   // Has floor plan?
-  const hasFloorPlan = rooms.some((r) => r.metadata.floorPlan?.imageFileId);
+  // Minimap shows when there's at least one mapped tour room
+  // (preferred) OR a legacy per-pano floorPlan blob to fall back on.
+  const hasFloorPlan =
+    mapRooms.length > 0 ||
+    rooms.some((r) => r.metadata.floorPlan?.imageFileId);
 
   // Build scenes for Pannellum multi-scene mode. MUST be memoized —
   // PanoramaViewer's init effect depends on `scenes` by reference, so
@@ -404,7 +419,8 @@ export function PanoramaWalkthrough({
         <div style={{ position: "absolute", bottom: 0, left: 0, zIndex: 20 }}>
           {hasFloorPlan ? (
             <PanoramaMinimap
-              rooms={rooms}
+              mapRooms={mapRooms}
+              panos={rooms}
               currentRoomId={currentRoomId}
               accessToken={accessToken}
               viewerRef={viewerRef}

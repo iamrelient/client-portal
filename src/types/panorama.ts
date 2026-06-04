@@ -1,27 +1,54 @@
 // Panorama 360° Walkthrough Types
 
+/** A logical "room" pinned to a floor plan — owned by the
+ *  presentation, not the panorama. Multiple panoramas can belong to
+ *  the same room (e.g. lobby shot from the entrance + lobby shot
+ *  from the reception desk); they share this single map marker.
+ *  startingPanoSectionId designates which panorama opens when a
+ *  client clicks the room's dot on the minimap. */
+export interface TourRoom {
+  id: string;
+  /** Display name shown on the minimap and in the room list. */
+  name: string;
+  /** Floor plan image (a project file). Multi-floor buildings can
+   *  have rooms anchored to different floor plan images. */
+  floorPlanImageFileId: string;
+  /** Normalized 0-1 position on the floor plan. */
+  markerX: number;
+  markerY: number;
+  /** Section id of the panorama that opens when this room is
+   *  selected from the minimap. Null when the admin hasn't assigned
+   *  any pano to the room yet (room is just a placeholder). */
+  startingPanoSectionId: string | null;
+}
+
 export interface PanoramaMetadata {
   initialView?: { pitch: number; yaw: number; hfov?: number };
   hotspots?: PanoramaHotspot[];
+  /** Which TourRoom this panorama lives in. Optional for back-compat
+   *  with legacy data that hadn't been migrated yet. */
+  roomId?: string;
+  /** Optional per-pano yaw offset that aligns the minimap's heading
+   *  arrow with the real-world "up" on the floor plan. Captured in
+   *  the editor by panning to the desired north and clicking Set
+   *  North — viewer.getYaw() lands here. Each pano needs its own
+   *  because they were captured at different camera orientations,
+   *  even within the same room. */
+  northYaw?: number;
+  /** @deprecated — Use the presentation's tourRooms instead. Kept
+   *  on the type so legacy data still loads, and so the editor can
+   *  derive a starter set of tourRooms from any panorama that still
+   *  has this set. New data shouldn't write to this field. */
   floorPlan?: {
     imageFileId: string;
-    markerX: number; // 0-1 normalized position on floor plan
+    markerX: number;
     markerY: number;
-    /** Optional. The pano yaw (in degrees) that corresponds to "up"
-     *  on the floor plan image. Calibration: in the editor the
-     *  admin pans the panorama until they're looking in the
-     *  direction they want to read as "north" on the plan (e.g.
-     *  facing the building's front), then clicks Set North — we
-     *  capture viewer.getYaw() into this field. At view time the
-     *  heading arrow rotates by `currentYaw - northYaw` so it
-     *  matches real-world orientation.
-     *
-     *  When unset, the arrow rotates by raw yaw — which works
-     *  fine for panoramas shot facing "plan north" but reads the
-     *  wrong way for any pano captured at a different rotation. */
     northYaw?: number;
   };
+  /** @deprecated — Display name now lives on section.title. */
   roomLabel?: string;
+  /** @deprecated — All panoramas in a presentation are one
+   *  walkthrough automatically; tour-group ids no longer matter. */
   tourGroupId?: string;
 }
 

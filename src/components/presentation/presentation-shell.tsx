@@ -34,6 +34,10 @@ export interface PresentationData {
   clientAccentColor: string | null;
   watermarkEnabled: boolean;
   accessToken: string;
+  /** Raw tourRooms JSON as stored on the presentation. The
+   *  walkthrough's minimap parses this via lib/tour-rooms.ts to
+   *  build its room dots. */
+  tourRooms?: unknown;
   project: { id: string; name: string; company: string | null };
   sections: SectionData[];
 }

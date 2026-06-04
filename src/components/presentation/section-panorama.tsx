@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { PresentationData, SectionData } from "./presentation-shell";
-import type { PanoramaMetadata } from "@/types/panorama";
+import type { PanoramaMetadata, TourRoom } from "@/types/panorama";
+import { deriveTourRooms, readTourRooms } from "@/lib/tour-rooms";
 
 interface SectionPanoramaProps {
   section: SectionData;
@@ -139,8 +140,7 @@ export function SectionPanorama({
   // We compute the room's friendly `label` here, where we have access
   // to both the section's `title` (admin-set Room Name) and the
   // backing file. Downstream components (minimap, room list, top
-  // bar) just read room.label — no more "Room cmpy" fallbacks
-  // because the old Tour-tab roomLabel field is gone.
+  // bar) just read room.label.
   const tourRooms = useMemo(
     () =>
       walkthroughActive
@@ -149,11 +149,6 @@ export function SectionPanorama({
             .sort((a, b) => a.order - b.order)
             .map((s, idx) => {
               const meta = (s.metadata || {}) as PanoramaMetadata;
-              // Preference chain: legacy metadata.roomLabel (kept for
-              // backwards compat) → section title (admin's Room Name)
-              // → filename without extension → "Room N" as a last
-              // resort. The slice-of-id fallback that produced "Room
-              // cmpy" is gone.
               const fromFile = s.file!.originalName.replace(/\.[^.]+$/, "");
               const label =
                 meta.roomLabel?.trim() ||
@@ -170,6 +165,28 @@ export function SectionPanorama({
         : [],
     [walkthroughActive, data.sections, data.accessToken]
   );
+
+  /** Logical tour rooms (one per floor plan dot). Pulled from the
+   *  presentation's tourRooms when present; falls back to deriving
+   *  one room per panorama with legacy floorPlan metadata so old
+   *  decks that haven't been re-saved post-migration still display.
+   *  Passed into the walkthrough so the minimap can render one
+   *  dot per room instead of one per pano. */
+  const mapRooms: TourRoom[] = useMemo(() => {
+    if (!walkthroughActive) return [];
+    const stored = readTourRooms(data.tourRooms);
+    if (stored.length > 0) return stored;
+    const { rooms: derived } = deriveTourRooms(
+      data.sections.map((s) => ({
+        id: s.id,
+        type: s.type,
+        title: s.title,
+        metadata: s.metadata,
+        file: s.file ? { originalName: s.file.originalName } : null,
+      }))
+    );
+    return derived;
+  }, [walkthroughActive, data.tourRooms, data.sections]);
 
   return (
     <div
@@ -366,6 +383,7 @@ export function SectionPanorama({
       {walkthroughActive && WalkthroughComponent && tourRooms.length > 0 && (
         <WalkthroughComponent
           rooms={tourRooms}
+          mapRooms={mapRooms}
           initialRoomId={section.id}
           accessToken={data.accessToken}
           onExit={handleWalkthroughExit}
