@@ -163,9 +163,10 @@ export function PanoramaMinimap({
         // when expanded the dots + image carry the composition.
         background: "transparent",
         cursor: expanded ? "default" : "pointer",
-        boxShadow: expanded
-          ? "0 20px 60px rgba(0,0,0,0.45)"
-          : "0 4px 14px rgba(0,0,0,0.5)",
+        // Shadow only on the corner thumbnail — gives it lift
+        // against busy panoramas. Once expanded, the map IS the
+        // composition; no shadow needed and admin asked for none.
+        boxShadow: expanded ? "none" : "0 4px 14px rgba(0,0,0,0.5)",
         // Animate every property that differs between states. The
         // bezier matches the cinematic transition's curve so map
         // expansion + scene transition share a visual language.

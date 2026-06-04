@@ -83,6 +83,22 @@ export function SectionPanorama({
   }, [data.sections]);
 
   const handleActivate = useCallback(() => {
+    // Snap the slide flush with the viewport before launching the
+    // walkthrough. Two reasons:
+    //   1. If the client clicked Explore from a half-scrolled
+    //      position (the tour entry only partly visible), the
+    //      walkthrough opens over whatever was scrolled to —
+    //      that's invisible while the walkthrough is up but
+    //      becomes obvious when they hit Exit and land back on
+    //      a half-scrolled deck. Snapping first guarantees a
+    //      clean return.
+    //   2. The scroll-snap CSS only kicks in on user-initiated
+    //      scrolling; a programmatic snap on activate covers the
+    //      "clicked while not snapped" case.
+    // behavior: "auto" is instant — we want the walkthrough to
+    // open immediately, not after a 300ms smooth scroll.
+    ref.current?.scrollIntoView({ behavior: "auto", block: "start" });
+
     // 2+ panoramas in the deck → always walkthrough. Hotspot clicks
     // switch scenes in-place via Pannellum loadScene, and the room
     // list lets clients jump anywhere even if no hotspots exist yet.
@@ -168,7 +184,21 @@ export function SectionPanorama({
     >
       {assetUrl && !activated && !walkthroughActive && (
         <>
-          {/* Static preview image */}
+          {/* Static preview image.
+           *
+           *  Equirectangular panoramas look distorted as flat
+           *  thumbnails — the top quarter is stretched ceiling /
+           *  sky, the bottom quarter is stretched floor, and only
+           *  the middle band (the equator) reads like a normal
+           *  wide-angle photo. Matterport pre-renders a perspective
+           *  view per scan; 3D Vista lets you upload a separate
+           *  cover image. The cheapest middle ground that doesn't
+           *  need either backend work or admin config: zoom the
+           *  image so only the middle band is visible. scale(1.6)
+           *  hides roughly the top and bottom ~20%, which is where
+           *  the worst distortion lives, while keeping enough
+           *  panoramic context for the client to recognize the
+           *  room. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={assetUrl}
@@ -181,6 +211,9 @@ export function SectionPanorama({
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              objectPosition: "center 50%",
+              transform: "scale(1.6)",
+              transformOrigin: "center center",
               pointerEvents: "none",
               WebkitUserDrag: "none",
               opacity: visible ? 1 : 0,
