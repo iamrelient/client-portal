@@ -160,6 +160,23 @@ export function PanoramaFloorPlanEditor({
             No images in this project yet — click + to pick or upload one.
           </p>
         )}
+        {/* Multi-viewpoint guidance. If a single physical room has
+            several panoramas (camera moved within the same space —
+            e.g. "Lobby from entrance" + "Lobby from elevator"), only
+            the *primary* one should appear on the floor plan. The
+            extras should be left unplaced and reached via navigation
+            hotspots from the primary. Otherwise the minimap stacks
+            multiple dots on the same physical room and the client
+            can't tell which one is "the lobby." */}
+        {!floorPlan && (
+          <p className="mt-1.5 text-[10px] text-slate-500 leading-relaxed">
+            <span className="text-slate-400">Tip:</span> if this is a
+            secondary viewpoint inside another room (multiple shoot
+            positions in the same physical space), leave it unplaced
+            — clients reach it via a navigation hotspot from the
+            primary panorama, and the floor plan stays uncluttered.
+          </p>
+        )}
       </div>
 
       {floorPlan?.imageFileId && (

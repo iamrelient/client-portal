@@ -473,6 +473,7 @@ export function PresentationFloorPlanMap({
                         label={panoramaLabel(p)}
                         x={fp.markerX}
                         y={fp.markerY}
+                        northYaw={fp.northYaw}
                         saving={savingIds.has(p.id)}
                         dragging={draggingSectionId === p.id}
                         onDragStart={(e) => handleDragStart(e, p.id)}
@@ -527,6 +528,11 @@ interface MarkerProps {
   label: string;
   x: number;
   y: number;
+  /** Optional calibrated "north" yaw — if set, we render a small
+   *  heading-up arrow on top of the dot pointing in the direction
+   *  that reads as UP on the floor plan. Lets admins visually
+   *  confirm the calibration without bouncing to the viewer. */
+  northYaw?: number;
   saving: boolean;
   dragging: boolean;
   onDragStart: (e: React.DragEvent) => void;
@@ -534,10 +540,19 @@ interface MarkerProps {
   onRemove: () => void;
 }
 
+/** Marker style matches the client-viewer minimap and the per-
+ *  panorama floor plan editor — blue (#3b82f6) dot, white ring,
+ *  with the calibrated heading arrow when northYaw is set. The
+ *  three contexts now look identical at a glance:
+ *    1. Admin's main floor-plan map (this component)
+ *    2. Per-panorama Floor Plan tab in the panorama editor
+ *    3. Client viewer's minimap during walkthrough
+ *  No more "why does this room look different here vs. there?" */
 function Marker({
   label,
   x,
   y,
+  northYaw,
   saving,
   dragging,
   onDragStart,
@@ -569,10 +584,42 @@ function Marker({
           <div
             className="w-4 h-4 rounded-full border-2 border-white shadow-lg"
             style={{
-              background: "#10b981",
-              boxShadow: "0 0 0 2px rgba(16,185,129,0.4), 0 2px 8px rgba(0,0,0,0.5)",
+              background: "#3b82f6",
+              boxShadow:
+                "0 0 0 2px rgba(59,130,246,0.4), 0 2px 8px rgba(0,0,0,0.5)",
             }}
           />
+          {/* Calibrated heading arrow — points UP relative to the
+              dot, marking the direction the admin chose as "north"
+              for this panorama. Same indicator the viewer's minimap
+              shows live, just static here since there's no live
+              panorama session to tie it to. */}
+          {northYaw !== undefined && !saving && (
+            <div
+              className="pointer-events-none absolute"
+              style={{
+                top: "50%",
+                left: "50%",
+                width: 18,
+                height: 18,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: -5,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: 0,
+                  height: 0,
+                  borderLeft: "4px solid transparent",
+                  borderRight: "4px solid transparent",
+                  borderBottom: "5px solid rgba(59,130,246,0.95)",
+                }}
+              />
+            </div>
+          )}
           {saving && (
             <Loader2 className="absolute inset-0 m-auto h-3 w-3 animate-spin text-white" />
           )}
