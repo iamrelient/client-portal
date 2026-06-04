@@ -278,7 +278,54 @@ export function PanoramaWalkthrough({
         >
           {currentLabel}
         </span>
-        <div style={{ display: "flex", gap: "0.5rem", pointerEvents: "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            pointerEvents: "auto",
+          }}
+        >
+          {/* ESC-to-exit hint — sits next to the action buttons so
+              clients (especially desktop users) know the key works.
+              On touch the cue is mostly decorative; the X button is
+              the actual exit there. */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0 0.65rem",
+              height: 28,
+              fontSize: "0.625rem",
+              fontWeight: 400,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.7)",
+              background: "rgba(0,0,0,0.4)",
+              backdropFilter: "blur(8px)",
+              borderRadius: 6,
+              border: "1px solid rgba(255,255,255,0.12)",
+              userSelect: "none",
+            }}
+            title="Press ESC to exit the tour"
+          >
+            <kbd
+              style={{
+                fontFamily: "inherit",
+                fontSize: "0.625rem",
+                padding: "1px 5px",
+                borderRadius: 3,
+                background: "rgba(255,255,255,0.12)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                color: "rgba(255,255,255,0.95)",
+              }}
+            >
+              ESC
+            </kbd>
+            <span>Exit</span>
+          </span>
+
           {/* Gyroscope toggle */}
           {gyroSupported && (
             <button

@@ -154,20 +154,17 @@ export function PanoramaMinimap({
         position: "fixed",
         ...layout,
         zIndex: expanded ? 40 : 20,
-        borderRadius: expanded ? 12 : 8,
         overflow: "hidden",
-        // Subtle outline so the map's edge reads against the
-        // panorama, but NO opaque fill — the floor plan image
-        // often has a transparent background and we want the
-        // panorama to show through those areas (admin's intent
-        // when they exported a PNG with transparency).
-        border: `1px solid rgba(255,255,255,${expanded ? 0.22 : 0.18})`,
+        // No border, no fill — just the map image and the dots.
+        // Transparent floor plan PNGs show the panorama through
+        // their transparent regions, no panel chrome in the way.
+        // A soft drop shadow only when collapsed gives the corner
+        // thumbnail enough lift to read against busy panoramas;
+        // when expanded the dots + image carry the composition.
         background: "transparent",
         cursor: expanded ? "default" : "pointer",
-        // Drop shadow gives the panel "lift" without a fill —
-        // still reads as a discrete element floating over the room.
         boxShadow: expanded
-          ? "0 20px 60px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4)"
+          ? "0 20px 60px rgba(0,0,0,0.45)"
           : "0 4px 14px rgba(0,0,0,0.5)",
         // Animate every property that differs between states. The
         // bezier matches the cinematic transition's curve so map
@@ -177,55 +174,14 @@ export function PanoramaMinimap({
           "max-height 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
           "bottom 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
           "left 350ms cubic-bezier(0.4, 0, 0.2, 1), " +
-          "border-radius 250ms ease, " +
           "box-shadow 250ms ease",
       }}
     >
-      {/* ── Header (expanded only) ── */}
-      {expanded && (
-        <div
-          style={{
-            padding: "0.75rem 1rem",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            // Localized backdrop — container is transparent so the
-            // header would otherwise float against whatever panorama
-            // is behind. Subtle blur + tint keeps the text legible
-            // without bringing back the full dark panel.
-            background: "rgba(6,6,8,0.72)",
-            backdropFilter: "blur(14px)",
-            // Fade in slightly after the size animation begins so
-            // the text doesn't pop while the panel is still narrow.
-            animation: "minimap-fade-in 350ms ease forwards",
-            opacity: 0,
-          }}
-        >
-          <span
-            style={{
-              fontSize: "0.625rem",
-              fontWeight: 400,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "rgba(255,255,255,0.6)",
-            }}
-          >
-            Floor Plan · {rooms.length} rooms
-          </span>
-          <span
-            style={{
-              fontSize: "0.625rem",
-              color: "rgba(255,255,255,0.4)",
-            }}
-          >
-            Click a dot to jump · ESC to close
-          </span>
-        </div>
-      )}
-
-      {/* ── Image + dots wrapper ──
-          Height: auto so the image's aspect ratio drives layout.
+      {/* ── Image + dots wrapper ── No header / chrome — admins
+          asked for just the map and the points. ESC + outside-click
+          dismiss still work (handled in the effects above), the
+          discoverability of those gestures is now in the
+          walkthrough's top bar instead of inside the map itself.
           object-fit: contain on the image, so when expanded with
           max-height: 80vh the image stays inside without cropping. */}
       <div
@@ -235,7 +191,7 @@ export function PanoramaMinimap({
           // When collapsed the image just fills the small thumbnail;
           // when expanded we honor max-height so the image isn't
           // pushed off the bottom of the viewport.
-          maxHeight: expanded ? "calc(80vh - 50px)" : "none",
+          maxHeight: expanded ? "80vh" : "none",
           overflow: "hidden",
         }}
       >
@@ -247,7 +203,7 @@ export function PanoramaMinimap({
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: expanded ? "calc(80vh - 50px)" : "none",
+            maxHeight: expanded ? "80vh" : "none",
             objectFit: "contain",
             display: "block",
             // No opacity dim — the floor plan may be a PNG with a
@@ -397,28 +353,6 @@ export function PanoramaMinimap({
           );
         })}
       </div>
-
-      {/* "Hover · Map" cue — only when collapsed. */}
-      {!expanded && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: "3px 6px",
-            background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)",
-            fontSize: "0.55rem",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: "rgba(255,255,255,0.7)",
-            textAlign: "center",
-            pointerEvents: "none",
-          }}
-        >
-          Hover · Map
-        </div>
-      )}
 
       <style>{`
         @keyframes minimap-pulse {

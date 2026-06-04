@@ -354,7 +354,16 @@ export function PresentationShell({
     <div
       ref={scrollContainerRef}
       className="presentation-shell fixed inset-0 overflow-y-auto overflow-x-hidden bg-neutral-50 select-none scrollbar-hide"
-      style={{ fontFamily: "'Inter Tight', 'Inter', sans-serif" }}
+      style={{
+        fontFamily: "'Inter Tight', 'Inter', sans-serif",
+        // Scroll-snap fixes the "tour slide is half-scrolled past"
+        // issue without forcing real fullscreen mode. `proximity`
+        // (not `mandatory`) keeps it gentle — the snap only kicks
+        // in when the user pauses near a snap target, so they can
+        // still scroll fluidly through chapter strips (which opt
+        // out by not setting scroll-snap-align on their segment).
+        scrollSnapType: "y proximity",
+      }}
     >
       {segments.map((seg, i) => {
         if (seg.kind === "fullscreen") {
@@ -363,7 +372,18 @@ export function PresentationShell({
               key={`seg-${i}`}
               data-segment-index={i}
               className="relative w-screen"
-              style={{ height: "100vh" }}
+              style={{
+                height: "100vh",
+                // Snap fullscreen slides to viewport top. Combined
+                // with the container's scrollSnapType: y proximity,
+                // this means if the user scrolls and stops near a
+                // tour / hero / closing slide, the viewport snaps
+                // to fit it cleanly. Chapter strip segments don't
+                // set this — they need free scrolling for the
+                // carousel progression.
+                scrollSnapAlign: "start",
+                scrollSnapStop: "always",
+              }}
             >
               <FullscreenSection
                 section={seg.section}
