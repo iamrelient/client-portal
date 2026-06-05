@@ -136,7 +136,21 @@ export const ChapterStrip = memo(function ChapterStrip({
             data.theme === "space" ? "rgba(6,6,8,0.2)" : "#060608",
         }}
       >
-        {/* Image hero view */}
+        {/* Image hero view.
+
+            Layout uses three deterministic zones so the carousel fits
+            ANY screen and stays consistent room-to-room:
+              • Title row    — fixed height (clamp), always reserved.
+              • Image area   — flex:1, object-fit contain. Because the
+                               rows around it are fixed-height, this box
+                               is identical on every room (so a single-
+                               image room and a multi-image room show the
+                               same image size).
+              • Bottom row   — fixed height for caption + thumbnails,
+                               always reserved (even single-image rooms)
+                               so the image size doesn't jump around.
+            paddingBottom clears the page's FIXED timeline nav at the
+            bottom of the viewport, so thumbnails never hide under it. */}
         {isActiveImage && (
           <div
             style={{
@@ -144,34 +158,47 @@ export const ChapterStrip = memo(function ChapterStrip({
               flexDirection: "column",
               alignItems: "center",
               height: "100%",
-              // Tighter bottom padding so the thumbnail track + caption
-              // stay on-screen alongside the title. The image area
-              // (flex:1, min-height:0) absorbs the rest.
-              padding: "0 60px 24px",
+              boxSizing: "border-box",
+              paddingTop: "clamp(0.6rem, 2vh, 1.25rem)",
+              paddingLeft: "clamp(16px, 5vw, 60px)",
+              paddingRight: "clamp(16px, 5vw, 60px)",
+              // Clear the fixed bottom timeline navigator (~75px) so the
+              // thumbnail strip always sits above it.
+              paddingBottom: "clamp(72px, 9vh, 92px)",
             }}
           >
-            {/* Chapter title — above image */}
-            {chapterTitle && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "1rem 2rem 0.4rem",
-                  flexShrink: 0,
-                }}
-              >
+            {/* Chapter title — fixed-height row so the image area below
+                is the same size on every room. */}
+            <div
+              style={{
+                height: "clamp(30px, 5vh, 52px)",
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                padding: "0 2rem",
+                textAlign: "center",
+              }}
+            >
+              {chapterTitle && (
                 <h2
                   style={{
-                    fontSize: "clamp(0.85rem, 1.8vw, 1.15rem)",
+                    fontSize: "clamp(0.8rem, 1.8vw, 1.15rem)",
                     fontWeight: 300,
                     letterSpacing: "0.18em",
                     textTransform: "uppercase",
                     color: "rgba(255,255,255,0.7)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: "100%",
                   }}
                 >
                   {chapterTitle}
                 </h2>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Hero image — cross-fade between adjacent images.
                 min-height: 0 is essential: without it a flex child
@@ -186,7 +213,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                 flex: 1,
                 minHeight: 0,
                 width: "100%",
-                maxWidth: "calc(100vw - 120px)",
+                maxWidth: "100%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -228,18 +255,37 @@ export const ChapterStrip = memo(function ChapterStrip({
               })}
             </div>
 
-            {/* Image caption — below image, aligned with image left edge */}
+            {/* Bottom row — caption + thumbnails. Fixed height, always
+                reserved (even on single-image rooms) so the image area
+                above stays the same size across the whole tour. */}
+            <div
+              style={{
+                flexShrink: 0,
+                width: "100%",
+                height: "clamp(70px, 10vh, 96px)",
+                marginTop: "0.5rem",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.4rem",
+              }}
+            >
+            {/* Image caption — aligned with image left edge */}
             {activeSection?.title && (
               <p
                 style={{
                   alignSelf: "flex-start",
-                  marginTop: "0.5rem",
                   marginLeft: imageLeftOffset > 0 ? `${imageLeftOffset}px` : 0,
                   fontSize: "0.8rem",
                   fontWeight: 300,
                   letterSpacing: "0.03em",
                   color: "rgba(255,255,255,0.55)",
                   flexShrink: 0,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: "100%",
                   transition: "margin-left 0.3s ease",
                 }}
               >
@@ -254,11 +300,10 @@ export const ChapterStrip = memo(function ChapterStrip({
                 style={{
                   display: "flex",
                   gap: "8px",
-                  marginTop: "0.5rem",
                   overflowX: "auto",
-                  maxWidth: "calc(100vw - 120px)",
+                  maxWidth: "100%",
                   justifyContent: "center",
-                  padding: "4px 0",
+                  padding: "2px 0",
                 }}
               >
                 {imageEntries.map(({ section, globalIdx }) => {
@@ -306,6 +351,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                 })}
               </div>
             )}
+            </div>
           </div>
         )}
 
