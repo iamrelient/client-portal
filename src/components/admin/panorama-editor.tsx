@@ -215,6 +215,22 @@ function loadPannellum(): Promise<void> {
   return pannellumLoadPromise;
 }
 
+/** Canonical persisted shape for a panorama's metadata. Strips empty
+ *  / undefined fields so (a) what we save is tidy and (b) the dirty
+ *  check compares apples to apples — meta carries empty-string
+ *  defaults for some fields that we never persist, which otherwise
+ *  left the Save button permanently "unsaved". */
+function cleanMeta(m: PanoramaMetadata): PanoramaMetadata {
+  const c: PanoramaMetadata = { ...m };
+  if (!c.roomLabel) delete c.roomLabel;
+  if (!c.tourGroupId) delete c.tourGroupId;
+  if (!c.floorPlan) delete c.floorPlan;
+  if (!c.roomId) delete c.roomId;
+  if (c.northYaw === undefined || c.northYaw === null) delete c.northYaw;
+  if (!c.hotspots || c.hotspots.length === 0) delete c.hotspots;
+  return c;
+}
+
 /** Friendly label for a panorama section — mirrors the helper in the
  *  floor plan map so a room's name reads the same everywhere. */
 function panoramaLabel(s: SectionOption): string {
@@ -248,20 +264,28 @@ export function PanoramaEditor({
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("hotspots");
   const [saving, setSaving] = useState(false);
-  /** Snapshot of the last persisted metadata so we can tell when there
-   *  are unsaved local edits and prompt the admin to hit Save. */
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() =>
-    JSON.stringify(initialMetadata)
-  );
-
-  // Local editable metadata
+  // Local editable metadata. IMPORTANT: carry through roomId +
+  // northYaw — omitting them here meant the Floor Plan tab's room
+  // assignment never loaded (always showed "not in a room") and,
+  // worse, hitting Save wrote metadata without roomId, wiping the
+  // assignment.
   const [meta, setMeta] = useState<PanoramaMetadata>({
     initialView: initialMetadata.initialView || { pitch: 0, yaw: 180 },
     hotspots: initialMetadata.hotspots || [],
     floorPlan: initialMetadata.floorPlan || undefined,
+    roomId: initialMetadata.roomId,
+    northYaw: initialMetadata.northYaw,
     roomLabel: initialMetadata.roomLabel || "",
     tourGroupId: initialMetadata.tourGroupId || "",
   });
+
+  /** Snapshot of the last persisted metadata so we can tell when there
+   *  are unsaved local edits and prompt the admin to hit Save. Compared
+   *  against cleanMeta(meta) so empty-string defaults don't leave the
+   *  Save button stuck in a permanent "unsaved" state. */
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>(() =>
+    JSON.stringify(cleanMeta(initialMetadata))
+  );
 
   // Hotspot editing state
   const [placingHotspot, setPlacingHotspot] = useState(false);
@@ -492,15 +516,19 @@ export function PanoramaEditor({
 
   async function handleSave() {
     setSaving(true);
-    // Clean empty strings
-    const cleaned: PanoramaMetadata = { ...meta };
-    if (!cleaned.roomLabel) delete cleaned.roomLabel;
-    if (!cleaned.tourGroupId) delete cleaned.tourGroupId;
-    if (!cleaned.floorPlan) delete cleaned.floorPlan;
-    if (cleaned.hotspots?.length === 0) delete cleaned.hotspots;
-    await onSave(cleaned);
-    setLastSavedSnapshot(JSON.stringify(cleaned));
-    setSaving(false);
+    try {
+      const cleaned = cleanMeta(meta);
+      await onSave(cleaned);
+      // Snapshot the SAME shape we compare against in `dirty`, so the
+      // button reliably returns to its resting state after a save.
+      setLastSavedSnapshot(JSON.stringify(cleaned));
+    } catch (err) {
+      console.error("Save configuration failed", err);
+    } finally {
+      // Always clear the spinner — a thrown onSave used to leave the
+      // button stuck spinning ("prompt doesn't go away").
+      setSaving(false);
+    }
   }
 
   /** Drag-to-link drop on the 360° canvas: creates a forward nav
@@ -511,38 +539,18 @@ export function PanoramaEditor({
    *  We commit synchronously here (not deferred to Save Configuration)
    *  because the editor is about to unmount on switch — anything held
    *  in local `meta` state would be lost. */
-  const handleLinkDrop = useCallback(
-    async (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      const targetId = e.dataTransfer.getData("application/x-pano-link");
-      if (!targetId || targetId === sectionId) {
-        setDraggingLinkTargetId(null);
-        return;
-      }
-      const viewer = viewerRef.current;
-      if (!viewer) {
-        setDraggingLinkTargetId(null);
-        return;
-      }
-
+  /** Shared link logic — used by both the drag-drop and the
+   *  click-to-link fallback. Creates a forward nav hotspot toward
+   *  `targetId` at the given pitch/yaw, persists it, mirrors a
+   *  reverse hotspot into the target, then switches the editor over. */
+  const commitLink = useCallback(
+    async (targetId: string, pitch: number, yaw: number) => {
+      if (!targetId || targetId === sectionId) return;
       const targetSection = allSections.find((s) => s.id === targetId);
-      if (!targetSection) {
-        setDraggingLinkTargetId(null);
-        return;
-      }
-
-      // Pannellum exposes mouseEventToCoords([pitch, yaw]) — drag events
-      // carry the same clientX/Y so this works for drops as well.
-      const coords = viewer.mouseEventToCoords(e.nativeEvent as MouseEvent);
-      if (!coords) {
-        setDraggingLinkTargetId(null);
-        return;
-      }
-      const [pitch, yaw] = coords;
+      if (!targetSection) return;
 
       setLinking(true);
       try {
-        // 1. Forward hotspot — current pano → dropped pano, at drop coords.
         const forwardHotspot: import("@/types/panorama").NavigationHotspot = {
           id: crypto.randomUUID(),
           type: "navigation",
@@ -556,18 +564,11 @@ export function PanoramaEditor({
           hotspots: [...(meta.hotspots ?? []), forwardHotspot],
         };
 
-        // Clean before save (same rules as handleSave).
-        const cleaned: PanoramaMetadata = { ...nextMeta };
-        if (!cleaned.roomLabel) delete cleaned.roomLabel;
-        if (!cleaned.tourGroupId) delete cleaned.tourGroupId;
-        if (!cleaned.floorPlan) delete cleaned.floorPlan;
-        if (cleaned.hotspots?.length === 0) delete cleaned.hotspots;
-
+        const cleaned = cleanMeta(nextMeta);
         await onSave(cleaned);
         setMeta(nextMeta);
         setLastSavedSnapshot(JSON.stringify(cleaned));
 
-        // 2. Reverse hotspot in target — page handles the cross-section PATCH.
         if (onLinkPanorama) {
           await onLinkPanorama({
             fromSectionId: sectionId,
@@ -576,17 +577,58 @@ export function PanoramaEditor({
             forwardYaw: yaw,
           });
         }
-
-        // 3. Switch editor to the freshly-linked room.
         if (onSwitchToPanorama) {
           onSwitchToPanorama(targetId);
         }
+      } catch (err) {
+        console.error("Link panorama failed", err);
       } finally {
         setLinking(false);
         setDraggingLinkTargetId(null);
       }
     },
     [sectionId, allSections, meta, onSave, onLinkPanorama, onSwitchToPanorama]
+  );
+
+  const handleLinkDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const targetId = e.dataTransfer.getData("application/x-pano-link");
+      if (!targetId || targetId === sectionId) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+      const viewer = viewerRef.current;
+      if (!viewer) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+      // Pannellum exposes mouseEventToCoords([pitch, yaw]) — drag events
+      // carry the same clientX/Y so this works for drops as well.
+      const coords = viewer.mouseEventToCoords(e.nativeEvent as MouseEvent);
+      if (!coords) {
+        setDraggingLinkTargetId(null);
+        return;
+      }
+      await commitLink(targetId, coords[0], coords[1]);
+    },
+    [sectionId, commitLink]
+  );
+
+  /** Click-to-link fallback — clicking a rail thumbnail links it at
+   *  the current view center. More reliable than HTML5 drag-and-drop
+   *  (which silently no-ops on some setups) and more discoverable. */
+  const handleRailClick = useCallback(
+    (targetId: string) => {
+      const viewer = viewerRef.current;
+      // Place the doorway slightly below the current view center so it
+      // reads as "on the floor ahead." Falls back to 0/0 if the
+      // viewer isn't ready.
+      const yaw = viewer ? viewer.getYaw() : 0;
+      const pitch = viewer ? Math.min(viewer.getPitch(), -10) : -10;
+      commitLink(targetId, pitch, yaw);
+    },
+    [commitLink]
   );
 
   function handleLinkDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -611,7 +653,7 @@ export function PanoramaEditor({
 
   // True whenever local meta diverges from the last persisted snapshot —
   // drives the "Unsaved changes" pill so admins can't miss it.
-  const dirty = JSON.stringify(meta) !== lastSavedSnapshot;
+  const dirty = JSON.stringify(cleanMeta(meta)) !== lastSavedSnapshot;
 
   const editingHotspot = editingHotspotId
     ? (meta.hotspots || []).find((h) => h.id === editingHotspotId) || null
@@ -700,7 +742,7 @@ export function PanoramaEditor({
             <div className="absolute inset-x-0 bottom-0 z-10 border-t border-white/[0.1] bg-black/55 backdrop-blur-md">
               <div className="px-3 py-2 flex items-center gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 shrink-0">
-                  Drag to link →
+                  Click or drag to link →
                 </span>
                 <div className="flex gap-1.5 overflow-x-auto flex-1 scrollbar-thin">
                   {panoramaSections
@@ -722,10 +764,11 @@ export function PanoramaEditor({
                           draggable
                           onDragStart={(e) => handleRailDragStart(e, s.id)}
                           onDragEnd={handleRailDragEnd}
+                          onClick={() => handleRailClick(s.id)}
                           title={
                             alreadyLinked
-                              ? `Already linked to ${panoramaLabel(s)} — drag again to add another doorway`
-                              : `Drag onto the 360° view to add a doorway to ${panoramaLabel(s)}`
+                              ? `Already linked to ${panoramaLabel(s)} — click or drag to add another doorway`
+                              : `Click to link, or drag onto the 360° view to place a doorway to ${panoramaLabel(s)}`
                           }
                           className={`group shrink-0 rounded-md border overflow-hidden cursor-grab active:cursor-grabbing transition-all ${
                             isDragging
