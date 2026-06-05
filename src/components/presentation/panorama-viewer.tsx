@@ -175,11 +175,12 @@ function createNavigationTooltip(
     onClick();
   });
 
-  // Arrow SVG
+  // Arrow SVG — larger + stronger fill/stroke so it reads against
+  // busy panoramas instead of blending in.
   wrapper.innerHTML = `
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" class="pano-hs-nav-arrow">
-      <circle cx="18" cy="18" r="17" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="rgba(255,255,255,0.08)"/>
-      <path d="M18 10 L24 20 L18 17 L12 20 Z" fill="rgba(255,255,255,0.85)"/>
+    <svg width="48" height="48" viewBox="0 0 36 36" fill="none" class="pano-hs-nav-arrow">
+      <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.95)" stroke-width="2" fill="rgba(0,0,0,0.35)"/>
+      <path d="M18 9 L25 21 L18 17.5 L11 21 Z" fill="rgba(255,255,255,0.98)"/>
     </svg>
     <span class="pano-hs-nav-label">${hotspot.label}</span>
   `;
@@ -232,6 +233,9 @@ function createFloorDisc(
     onClick();
   });
   const sy = floorForeshorten(target.pitch);
+  // Same-room viewpoints: just the circle, no text label (the title
+  // attr still gives a hover tooltip for accessibility). The room
+  // name would be redundant — you're already in that room.
   wrapper.innerHTML = `
     <div class="pano-hs-floor-disc" style="transform: scaleY(${sy.toFixed(
       3
@@ -239,7 +243,6 @@ function createFloorDisc(
       <div class="pano-hs-floor-ring"></div>
       <div class="pano-hs-floor-dot"></div>
     </div>
-    <span class="pano-hs-floor-label">${target.label}</span>
   `;
   return wrapper;
 }
@@ -727,34 +730,32 @@ export const PanoramaViewer = forwardRef<
           display: flex;
           flex-direction: column;
           align-items: center;
-          transform: translate(-18px, -18px);
+          transform: translate(-24px, -24px);
         }
         .pano-hs-nav-arrow {
           animation: pano-nav-bob 2s ease-in-out infinite;
-          filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+          filter: drop-shadow(0 2px 10px rgba(0,0,0,0.7));
         }
         .pano-hs-nav-label {
-          margin-top: 4px;
+          margin-top: 6px;
           white-space: nowrap;
-          font-size: 0.6875rem;
-          font-weight: 300;
+          font-size: 0.8125rem;
+          font-weight: 500;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.8);
-          background: rgba(0,0,0,0.5);
-          padding: 2px 8px;
-          opacity: 0;
-          transition: opacity 0.2s ease;
+          color: #fff;
+          background: rgba(0,0,0,0.7);
+          padding: 4px 12px;
+          border-radius: 4px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+          /* Always visible — the room arrow used to hide its label
+             until hover, which made it blend in. */
+          opacity: 1;
           pointer-events: none;
         }
-        .pano-hs-nav:hover .pano-hs-nav-label,
-        .pano-hs-nav:active .pano-hs-nav-label {
-          opacity: 1;
-        }
         @media (pointer: coarse) {
-          .pano-hs-nav { transform: translate(-24px, -24px); }
-          .pano-hs-nav-arrow { width: 48px; height: 48px; }
-          .pano-hs-nav-label { opacity: 1; }
+          .pano-hs-nav { transform: translate(-28px, -28px); }
+          .pano-hs-nav-arrow { width: 56px; height: 56px; }
         }
         @keyframes pano-nav-bob {
           0%, 100% { transform: translateY(0); }

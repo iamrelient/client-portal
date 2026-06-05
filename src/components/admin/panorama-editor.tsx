@@ -106,7 +106,12 @@ let pannellumLoadPromise: Promise<void> | null = null;
  *  worrying about hover-to-reveal animations. */
 function buildEditorHotspotConfig(
   hs: PanoramaHotspot,
-  onSelectHotspot?: (id: string) => void
+  onSelectHotspot?: (id: string) => void,
+  /** Admin-only display label. For nav hotspots we pass the TARGET
+   *  pano's image name so the admin can tell which pano a link goes
+   *  to (the stored hs.label is the room name, shown to clients).
+   *  Falls back to hs.label when not provided. */
+  displayLabel?: string
 ): Record<string, unknown> {
   const isNav = hs.type === "navigation";
   return {
@@ -164,7 +169,7 @@ function buildEditorHotspotConfig(
           max-width: 160px;
           overflow: hidden;
           text-overflow: ellipsis;
-        ">${hs.label.replace(/[<>&]/g, "")}</span>
+        ">${(displayLabel ?? hs.label).replace(/[<>&]/g, "")}</span>
       `;
 
       if (onSelectHotspot) {
@@ -348,6 +353,21 @@ export function PanoramaEditor({
     setEditingHotspotId(id);
   }, []);
 
+  /** Admin-only marker label. For nav hotspots, show the TARGET
+   *  pano's image name (so two "Lobby" rooms are distinguishable
+   *  while wiring); the stored hs.label stays the room name for
+   *  clients. Info hotspots keep their own label. */
+  const editorLabelFor = useCallback(
+    (hs: PanoramaHotspot): string | undefined => {
+      if (hs.type === "navigation") {
+        const target = allSections.find((s) => s.id === hs.targetSectionId);
+        if (target) return panoFileLabel(target);
+      }
+      return undefined;
+    },
+    [allSections]
+  );
+
   // Initialize Pannellum
   useEffect(() => {
     const el = containerRef.current;
@@ -365,7 +385,7 @@ export function PanoramaEditor({
       // appear the instant the panorama image finishes loading — no
       // race between Pannellum init and our sync useEffect.
       const initialHotspots = (meta.hotspots ?? []).map((hs) =>
-        buildEditorHotspotConfig(hs, handleSelectHotspot)
+        buildEditorHotspotConfig(hs, handleSelectHotspot, editorLabelFor(hs))
       );
       mountedHotspotIdsRef.current = new Set(
         (meta.hotspots ?? []).map((h) => h.id)
@@ -485,7 +505,9 @@ export function PanoramaEditor({
 
     (meta.hotspots ?? []).forEach((hs) => {
       try {
-        viewer.addHotSpot(buildEditorHotspotConfig(hs, handleSelectHotspot));
+        viewer.addHotSpot(
+          buildEditorHotspotConfig(hs, handleSelectHotspot, editorLabelFor(hs))
+        );
         current.add(hs.id);
       } catch (err) {
         // Don't let one bad hotspot break the rest.
@@ -494,7 +516,7 @@ export function PanoramaEditor({
     });
 
     mountedHotspotIdsRef.current = current;
-  }, [ready, meta.hotspots, handleSelectHotspot]);
+  }, [ready, meta.hotspots, handleSelectHotspot, editorLabelFor]);
 
   const handleSaveHotspot = useCallback(
     (hotspot: PanoramaHotspot) => {
