@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { downloadFile } from "@/lib/google-drive";
-import { applyFloorWatermark, isWatermarkable } from "@/lib/watermark";
+import { isWatermarkable } from "@/lib/watermark";
 import { isPanoramaAspect } from "@/lib/pano-utils";
 import { buildViewerDerivative } from "@/lib/image-derivatives";
 import sharp from "sharp";
@@ -158,20 +158,28 @@ export async function GET(
 
     const { stream } = await downloadFile(file.path);
 
-    // ── Panorama without a stored derivative: downscale on the fly ──
-    // CRITICAL for fresh uploads: most GPUs cap WebGL textures at
-    // 4096px, so handing Pannellum a raw 6K equirectangular makes the
-    // scene fail to load — the tour appears to "kick back" to the entry
-    // room because the new scene never becomes ready. The fast path
-    // above serves the pre-baked ≤4K derivative, but that's generated
-    // fire-and-forget after upload, so for a few seconds (or if that
-    // job failed) there's no derivative. Rather than stream the
-    // un-renderable original, downscale (and floor-watermark, if
-    // enabled) to a viewer-safe JPEG here. The CDN edge-caches the
-    // result, so only the first viewer pays; once generate-viewer
-    // finishes, the fast path takes over. Gated on isPanorama so plain
-    // carousel/lightbox images stay a cheap full-res passthrough.
-    if (file.isPanorama) {
+    // ── No stored derivative: build a viewer-safe image on the fly ──
+    //
+    // CRITICAL cross-device fix. Most GPUs cap WebGL textures at 4096px,
+    // and Safari/Mac is far stricter than Chrome about decoding huge
+    // images — so handing Pannellum a raw 6K equirectangular renders
+    // fine on a Windows/Chrome machine but FAILS on a Mac. When the
+    // target scene fails to load, Pannellum stays on the current scene,
+    // so navigation looks broken: "I click the gallery and it puts me
+    // right back in the same room." The fast path above serves the
+    // pre-baked ≤4K derivative, but that's generated fire-and-forget
+    // after upload — so for fresh uploads, files whose derivative job
+    // failed, or older pre-derivative uploads, we must downscale here
+    // rather than stream the un-renderable original.
+    //
+    // We detect a panorama by the stored flag OR by aspect ratio (so
+    // legacy uploads that never got the flag are still handled), and
+    // self-heal the flag for next time. buildViewerDerivative downscales
+    // to ≤4K (+ floor watermark when enabled) and returns null for an
+    // already-small clean image, in which case we pass the original
+    // through untouched. The CDN edge-caches whatever we return, so only
+    // the first viewer pays the cost.
+    if (isWatermarkable(file.mimeType)) {
       const reader = stream.getReader();
       const chunks: Uint8Array[] = [];
       while (true) {
@@ -180,13 +188,42 @@ export async function GET(
         if (value) chunks.push(value);
       }
       const original = Buffer.concat(chunks);
+
+      // Detect panorama: trust the flag, else check aspect from the
+      // actual bytes and self-heal the DB so the fast path / derivative
+      // logic can short-circuit next time.
+      let actuallyPanorama: boolean = file.isPanorama;
+      if (!actuallyPanorama) {
+        try {
+          const meta = await sharp(original).metadata();
+          if (
+            meta.width &&
+            meta.height &&
+            isPanoramaAspect(meta.width, meta.height)
+          ) {
+            actuallyPanorama = true;
+            prisma.file
+              .update({ where: { id: file.id }, data: { isPanorama: true } })
+              .catch(() => {});
+          }
+        } catch {
+          /* not a sharp-readable image — fall through to passthrough */
+        }
+      }
+
       try {
-        const onTheFly = await buildViewerDerivative(original, file.mimeType, {
-          isPanorama: true,
-          watermark: wantsWatermark,
-        });
-        const out = onTheFly?.buffer ?? original;
-        const outMime = onTheFly?.mimeType ?? file.mimeType;
+        const derivative = await buildViewerDerivative(
+          original,
+          file.mimeType,
+          {
+            isPanorama: actuallyPanorama,
+            // Floor watermark only matters for panoramas; for non-panos
+            // buildViewerDerivative just downscales oversized images.
+            watermark: wantsWatermark && actuallyPanorama,
+          }
+        );
+        const out = derivative?.buffer ?? original;
+        const outMime = derivative?.mimeType ?? file.mimeType;
         const body = out.buffer.slice(
           out.byteOffset,
           out.byteOffset + out.byteLength
@@ -198,14 +235,14 @@ export async function GET(
             "Content-Length": String(out.length),
             "Cache-Control": cacheControl,
             "X-Content-Type-Options": "nosniff",
-            "X-Asset-Path": onTheFly
+            "X-Asset-Path": derivative
               ? "on-the-fly-derivative"
-              : "passthrough-pano",
+              : "passthrough-original",
           },
         });
       } catch (err) {
         console.error(
-          "On-the-fly panorama derivative failed; serving original:",
+          "On-the-fly derivative failed; serving original:",
           err
         );
         const body = original.buffer.slice(
@@ -219,72 +256,13 @@ export async function GET(
             "Content-Length": String(original.length),
             "Cache-Control": cacheControl,
             "X-Content-Type-Options": "nosniff",
-            "X-Asset-Path": "passthrough-pano",
+            "X-Asset-Path": "passthrough-original",
           },
         });
       }
     }
 
-    // ── Slow path: per-serve floor watermark for legacy files ──
-    // Only kicks in for files without a baked derivative — older
-    // uploads, or fresh ones whose derivative-build failed. We
-    // buffer the bytes, run Sharp, and return. For 8K panoramas
-    // this can take 5–15 s on cold start; the CDN cache amortizes
-    // it across subsequent viewers.
-    const watermarkingPossible =
-      presentation.project.watermarkEnabled &&
-      presentation.watermarkEnabled &&
-      presentation.panoramaFloorWatermark &&
-      isWatermarkable(file.mimeType);
-
-    if (watermarkingPossible) {
-      const reader = stream.getReader();
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) chunks.push(value);
-      }
-      const original = Buffer.concat(chunks);
-
-      // file.isPanorama may be false for legacy uploads (pre-flag) or
-      // for files uploaded via paths that didn't detect aspect. Re-check
-      // here from the actual buffer and self-heal the DB so future
-      // serves can short-circuit if we ever skip the buffer step again.
-      let actuallyPanorama: boolean = file.isPanorama;
-      if (!actuallyPanorama) {
-        try {
-          const meta = await sharp(original).metadata();
-          if (meta.width && meta.height && isPanoramaAspect(meta.width, meta.height)) {
-            actuallyPanorama = true;
-            prisma.file
-              .update({ where: { id: file.id }, data: { isPanorama: true } })
-              .catch(() => {});
-          }
-        } catch {
-          /* not a sharp-readable image — skip */
-        }
-      }
-
-      const outBuf = actuallyPanorama
-        ? await applyFloorWatermark(original, file.mimeType)
-        : original;
-      const body = outBuf.buffer.slice(
-        outBuf.byteOffset,
-        outBuf.byteOffset + outBuf.byteLength
-      ) as ArrayBuffer;
-      return new NextResponse(body, {
-        headers: {
-          "Content-Type": file.mimeType,
-          "Content-Disposition": `inline; filename="${file.originalName}"`,
-          "Content-Length": String(outBuf.length),
-          "Cache-Control": cacheControl,
-          "X-Content-Type-Options": "nosniff",
-          "X-Asset-Path": "serve-time-watermark",
-        },
-      });
-    }
-
+    // Non-image file (PDF, etc.) — stream through untouched.
     return new NextResponse(stream, {
       headers: {
         "Content-Type": file.mimeType,
