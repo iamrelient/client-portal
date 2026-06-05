@@ -248,6 +248,11 @@ model Presentation {
   /// architect can opt in selectively rather than apply
   /// site-wide.
   theme             String?
+  /// When true, the 360° tour opens on the floor-plan room chooser
+  /// (pick a room to start) instead of dropping straight into the
+  /// starting panorama. Only takes effect when the deck actually has
+  /// floor-plan rooms; otherwise it opens to the pano as usual.
+  tourStartOnMap    Boolean                 @default(false)
   // Logical "rooms" pinned on a floor plan. Each room owns its own
   // marker position + name + which panorama is the entry point
   // ("starting pano"). Panoramas reference a room by id in their

@@ -48,6 +48,9 @@ export interface PresentationData {
    *  for the deck. Null/undefined/anything else = the light
    *  baseline theme. */
   theme?: string | null;
+  /** When true, the 360° tour opens on the floor-plan room chooser
+   *  (if rooms exist) instead of the starting panorama. */
+  tourStartOnMap?: boolean;
   project: { id: string; name: string; company: string | null };
   sections: SectionData[];
 }

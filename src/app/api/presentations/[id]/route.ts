@@ -91,6 +91,7 @@ export async function PATCH(
       tourRooms,
       tourHeroFileId,
       theme,
+      tourStartOnMap,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -112,6 +113,8 @@ export async function PATCH(
     if (tourHeroFileId !== undefined)
       data.tourHeroFileId = tourHeroFileId || null;
     if (theme !== undefined) data.theme = theme || null;
+    if (tourStartOnMap !== undefined)
+      data.tourStartOnMap = !!tourStartOnMap;
 
     if (removePassword) {
       data.password = null;

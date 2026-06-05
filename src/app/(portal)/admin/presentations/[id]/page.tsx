@@ -73,6 +73,7 @@ interface PresentationDetail {
   tourRooms: unknown;
   tourHeroFileId: string | null;
   theme: string | null;
+  tourStartOnMap: boolean;
   project: { id: string; name: string };
   sections: SectionRow[];
   _count: { accessLogs: number };
@@ -124,6 +125,7 @@ export default function EditPresentationPage() {
   const [panoramaFloorWatermark, setPanoramaFloorWatermark] = useState(true);
   const [tourHeroFileId, setTourHeroFileId] = useState<string>("");
   const [theme, setTheme] = useState<string>("");
+  const [tourStartOnMap, setTourStartOnMap] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
   // File upload
@@ -202,6 +204,7 @@ export default function EditPresentationPage() {
         setPanoramaFloorWatermark(data.panoramaFloorWatermark ?? true);
         setTourHeroFileId(data.tourHeroFileId ?? "");
         setTheme(data.theme ?? "");
+        setTourStartOnMap(!!data.tourStartOnMap);
         // Hydrate from stored tourRooms. Auto-migration of legacy
         // per-pano floorPlan blobs is handled in a separate effect
         // below so it can use the page's helpers without ordering
@@ -501,6 +504,7 @@ export default function EditPresentationPage() {
         panoramaFloorWatermark,
         tourHeroFileId: tourHeroFileId || null,
         theme: theme || null,
+        tourStartOnMap,
       };
 
       if (newPassword) {
@@ -2090,11 +2094,46 @@ export default function EditPresentationPage() {
                     </button>
                   )}
                 </div>
+                {/* Live preview of the chosen cover so it's obvious
+                    which image is set (and that a change took). */}
+                {tourHeroFileId && (
+                  <div className="mt-2 overflow-hidden rounded-lg border border-white/[0.1]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/files/${tourHeroFileId}/download?inline=true`}
+                      alt="Tour cover preview"
+                      className="block w-full h-28 object-cover"
+                    />
+                  </div>
+                )}
                 <p className="text-[11px] text-slate-500 mt-1">
                   Shown as a darkened cover with a play button on the
                   tour slide. Falls back to a cropped 360° preview
                   when no cover is set.
                 </p>
+              </div>
+
+              {/* Tour start behavior — open on the floor-plan room
+                  chooser instead of dropping into the first pano. */}
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="tour-start-on-map"
+                  checked={tourStartOnMap}
+                  onChange={(e) => setTourStartOnMap(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.05] text-brand-600 focus:ring-brand-500"
+                />
+                <label
+                  htmlFor="tour-start-on-map"
+                  className="text-sm text-slate-300"
+                >
+                  Start tour on the floor plan
+                  <span className="block text-[11px] text-slate-500 mt-0.5">
+                    Opens the 360° tour on the room map so the viewer
+                    picks where to begin. Needs floor-plan rooms;
+                    otherwise it opens to the starting panorama.
+                  </span>
+                </label>
               </div>
 
               {/* Visual theme — opt in to the animated space

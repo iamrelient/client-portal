@@ -34,6 +34,9 @@ interface PanoramaWalkthroughProps {
   mapRooms: TourRoom[];
   initialRoomId: string;
   accessToken: string;
+  /** Open on the floor-plan room chooser instead of dropping into
+   *  the starting panorama (only when there are mapped rooms). */
+  startOnMap?: boolean;
   onExit: () => void;
 }
 
@@ -42,10 +45,17 @@ export function PanoramaWalkthrough({
   mapRooms,
   initialRoomId,
   accessToken,
+  startOnMap,
   onExit,
 }: PanoramaWalkthroughProps) {
   const viewerRef = useRef<PanoramaViewerHandle>(null);
   const [currentRoomId, setCurrentRoomId] = useState(initialRoomId);
+  /** When true, show the room-chooser overlay instead of the live
+   *  pano. Starts true only when startOnMap + there's a floor plan
+   *  with rooms to choose from. */
+  const [choosingStart, setChoosingStart] = useState(
+    () => !!startOnMap && mapRooms.length > 0
+  );
   const [transitioning, setTransitioning] = useState(false);
   const [infoHotspot, setInfoHotspot] = useState<PanoramaHotspot | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -289,6 +299,33 @@ export function PanoramaWalkthrough({
     return rooms.filter((r) => groupKey(r) === key);
   }, [rooms, currentRoom]);
 
+  /** Enter a room from the start chooser. Navigates to the room's
+   *  starting pano (or the first pano in it) and dismisses the
+   *  chooser overlay. */
+  const handleChooseStart = useCallback(
+    (room: TourRoom) => {
+      const target =
+        room.startingPanoSectionId ??
+        rooms.find((r) => r.metadata.roomId === room.id)?.sectionId ??
+        null;
+      setChoosingStart(false);
+      if (target && target !== currentRoomId) {
+        handleNavigate(target);
+      }
+    },
+    [rooms, currentRoomId, handleNavigate]
+  );
+
+  // Floor plan shown in the chooser (first room's plan; rooms on it).
+  const chooserPlanId = mapRooms[0]?.floorPlanImageFileId ?? null;
+  const chooserRooms = useMemo(
+    () =>
+      chooserPlanId
+        ? mapRooms.filter((r) => r.floorPlanImageFileId === chooserPlanId)
+        : [],
+    [mapRooms, chooserPlanId]
+  );
+
   return (
     <div
       style={{
@@ -328,6 +365,139 @@ export function PanoramaWalkthrough({
         onSceneChange={handleSceneChange}
         autoRotate={-0.3}
       />
+
+      {/* Start chooser — opens on the floor plan so the viewer picks
+          a room to begin in, instead of dropping into a pano. Sits
+          above the (already-loaded) viewer; picking a room navigates
+          there and dismisses this. */}
+      {choosingStart && chooserPlanId && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 60,
+            background: "rgba(6,6,8,0.92)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "3vh 3vw",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.8rem",
+              fontWeight: 300,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.85)",
+              marginBottom: "1.25rem",
+              textAlign: "center",
+            }}
+          >
+            Choose a room to begin
+          </div>
+          <div
+            style={{
+              position: "relative",
+              maxWidth: "min(80vw, 900px)",
+              maxHeight: "72vh",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/present/${accessToken}/asset/${chooserPlanId}`}
+              alt="Floor plan"
+              draggable={false}
+              style={{
+                display: "block",
+                maxWidth: "100%",
+                maxHeight: "72vh",
+                objectFit: "contain",
+              }}
+            />
+            {chooserRooms.map((room) => (
+              <button
+                key={room.id}
+                type="button"
+                onClick={() => handleChooseStart(room)}
+                data-cursor-label="Start here"
+                title={room.name}
+                style={{
+                  position: "absolute",
+                  left: `${room.markerX * 100}%`,
+                  top: `${room.markerY * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="walkthrough-start-dot"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    background: "#3b82f6",
+                    border: "2px solid white",
+                    boxShadow:
+                      "0 0 0 5px rgba(59,130,246,0.35), 0 2px 10px rgba(0,0,0,0.6)",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 400,
+                    color: "#fff",
+                    background: "rgba(0,0,0,0.7)",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    whiteSpace: "nowrap",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {room.name}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Skip — just start at the default entry pano. */}
+          <button
+            type="button"
+            onClick={() => setChoosingStart(false)}
+            style={{
+              marginTop: "1.5rem",
+              fontSize: "0.6875rem",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.6)",
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 999,
+              padding: "0.5rem 1.25rem",
+              cursor: "pointer",
+            }}
+          >
+            Skip — start anywhere
+          </button>
+
+          <style>{`
+            .walkthrough-start-dot { animation: minimap-pulse 2s infinite; }
+            @keyframes minimap-pulse {
+              0%, 100% { box-shadow: 0 0 0 5px rgba(59,130,246,0.35), 0 2px 10px rgba(0,0,0,0.6); }
+              50% { box-shadow: 0 0 0 12px rgba(59,130,246,0), 0 2px 10px rgba(0,0,0,0.6); }
+            }
+          `}</style>
+        </div>
+      )}
 
       {/* Top bar: room label + exit */}
       <div

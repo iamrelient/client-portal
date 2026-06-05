@@ -468,6 +468,7 @@ export function SectionPanorama({
           mapRooms={mapRooms}
           initialRoomId={section.id}
           accessToken={data.accessToken}
+          startOnMap={!!data.tourStartOnMap}
           onExit={handleWalkthroughExit}
         />
       )}
