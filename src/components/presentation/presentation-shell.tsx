@@ -385,12 +385,7 @@ export function PresentationShell({
         ...(data.theme === "space" ? { backgroundColor: "#050714" } : {}),
       }}
     >
-      {data.theme === "space" && (
-        <SpaceBackground
-          variant="subtle"
-          scrollContainer={scrollContainerRef}
-        />
-      )}
+      {data.theme === "space" && <SpaceBackground variant="subtle" />}
       {segments.map((seg, i) => {
         if (seg.kind === "fullscreen") {
           return (

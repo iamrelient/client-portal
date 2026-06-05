@@ -47,6 +47,24 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         continue;
       }
 
+      if (s.type === "panorama") {
+        // The 360° tour gets its own labeled stop — it isn't a
+        // "gallery" of flat images, it's the walkthrough. Only the
+        // first panorama in the deck renders as a slide (the rest
+        // collapse into the one tour), so this fires once.
+        if (currentDot) {
+          currentDot = null;
+          currentChapterName = undefined;
+        }
+        result.push({
+          label: "360 Tour",
+          navigateToIndex: i,
+          kind: "chapter",
+          sectionIndices: [i],
+        });
+        continue;
+      }
+
       if (s.type === "3d-model") {
         // Flush any pending chapter
         if (currentDot) {

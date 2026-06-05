@@ -4,10 +4,6 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listFilesInFolder, uploadFileToFolder, downloadFile, updateFileContent } from "@/lib/google-drive";
 import { applyWatermark, isWatermarkable } from "@/lib/watermark";
-import {
-  buildViewerDerivative,
-  viewerDerivativeFilename,
-} from "@/lib/image-derivatives";
 import { sendInspirationNotification } from "@/lib/email";
 import { randomBytes } from "crypto";
 
@@ -327,92 +323,19 @@ export async function POST(
       }).catch(() => {}); // fire-and-forget
     }
 
-    // ── Viewer-optimized derivative ──
-    // Bake watermark + downscale to 4K max once, so the presentation
-    // viewer doesn't have to do per-serve Sharp work on huge files.
-    // Non-fatal: if anything fails, the asset route falls back to the
-    // original + serve-time watermark (legacy path still works).
+    // NOTE: The viewer-optimized derivative (downscale + watermark
+    // bake) used to run HERE, synchronously, before returning. For
+    // large panoramas (8K PNGs, ~16 MB) the Sharp decode could OOM
+    // the function — which kills the process and returns a 500 even
+    // though the file already landed in Drive + the DB. That surfaced
+    // to the admin as "upload failed" on every big 360.
     //
-    // We do this after responding to the DB write so the function
-    // can use its full 300 s budget; the client gets the fileId
-    // immediately and the viewer derivative shows up when the next
-    // refresh happens. Actually — we have to do it before the
-    // response so the picker can rely on the derivative existing by
-    // the time the asset route fires. Trade-off: longer upload-
-    // complete latency (10–30 s for 8K), but no missed cache.
-    const resolvedMimeForDerivative =
-      mimeType || "application/octet-stream";
-    if (isWatermarkable(resolvedMimeForDerivative)) {
-      try {
-        // Re-download the current Drive content. For non-panoramas
-        // this is the just-watermarked buffer; for panoramas it's the
-        // raw original (corner watermark was skipped above). Either
-        // way, buildViewerDerivative does the right thing:
-        //  - panorama + watermark on → bakes floor watermark
-        //  - non-panorama + already watermarked → just downscales
-        //    (we pass watermark: false to avoid double-stamping)
-        const { stream } = await downloadFile(driveFileId);
-        const chunks: Uint8Array[] = [];
-        const reader = (stream as ReadableStream<Uint8Array>).getReader();
-        let done = false;
-        while (!done) {
-          const r = await reader.read();
-          if (r.value) chunks.push(r.value);
-          done = r.done;
-        }
-        const sourceBuf = Buffer.concat(chunks);
-
-        const derivative = await buildViewerDerivative(
-          sourceBuf,
-          resolvedMimeForDerivative,
-          {
-            isPanorama: Boolean(bodyIsPanorama),
-            // Panoramas: bake floor watermark now (currently per-serve).
-            // Non-panoramas: corner watermark already baked into source
-            // by the pass above, so the derivative just inherits it.
-            watermark:
-              Boolean(bodyIsPanorama) && project.watermarkEnabled,
-          }
-        );
-
-        if (derivative && project.driveFolderId) {
-          const viewerDriveResult = await uploadFileToFolder(
-            project.driveFolderId,
-            viewerDerivativeFilename(fileName),
-            derivative.mimeType,
-            derivative.buffer
-          );
-
-          await prisma.file.update({
-            where: { id: dbFile.id },
-            data: {
-              viewerDriveFileId: viewerDriveResult.id,
-              viewerMimeType: derivative.mimeType,
-              viewerSize: derivative.buffer.length,
-              viewerWidth: derivative.width,
-              viewerHeight: derivative.height,
-              // For non-panoramas the source already had the corner
-              // watermark baked in by the pass above (when project
-              // watermarking is on), so the derivative inherits it.
-              // For panoramas the derivative carries the floor
-              // watermark iff we asked buildViewerDerivative to add one.
-              viewerHasWatermark:
-                bodyIsPanorama
-                  ? derivative.hasWatermark
-                  : project.watermarkEnabled,
-            },
-          });
-        }
-      } catch (derivErr) {
-        // Non-fatal — the asset route will fall back to original +
-        // serve-time watermark for this file. Log so we can fix.
-        console.error(
-          "Viewer derivative generation failed (non-fatal):",
-          derivErr
-        );
-      }
-    }
-
+    // It's now a separate, fire-and-forget endpoint
+    // (/api/files/[id]/generate-viewer) the client calls after this
+    // returns. Upload success no longer depends on derivative
+    // generation, and the asset route already falls back to the
+    // original + serve-time watermark when no derivative exists, so
+    // nothing breaks if derivative generation is slow or fails.
     return NextResponse.json(
       { message: "File registered", fileId: dbFile.id },
       { status: 201 }

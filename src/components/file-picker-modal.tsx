@@ -241,6 +241,21 @@ export function FilePickerModal({
 
       const data = await finalizeRes.json();
       const fileId: string | undefined = data?.fileId;
+
+      // Kick off viewer-derivative generation in the background. This
+      // is the heavy Sharp work (downscale + watermark) that used to
+      // live in upload-complete and OOM on big panoramas. Fire-and-
+      // forget: we don't await it and a failure can't affect the
+      // upload's success. The asset route falls back to serve-time
+      // handling for any file that doesn't have a derivative yet.
+      if (fileId) {
+        fetch(`/api/files/${fileId}/generate-viewer`, {
+          method: "POST",
+        }).catch(() => {
+          /* best-effort — serve-time fallback covers failures */
+        });
+      }
+
       setUploads((prev) =>
         prev.map((u) =>
           u.localId === localId
