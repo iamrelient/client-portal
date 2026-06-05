@@ -105,16 +105,52 @@ export function PanoramaWalkthrough({
   // scene gets clobbered by the fresh init — clients see "click goes
   // nowhere, stuck on the entry room." Memoizing by `rooms` keeps
   // the reference stable across state-only re-renders.
-  const scenes: PanoramaScene[] = useMemo(
-    () =>
-      rooms.map((room) => ({
+  const scenes: PanoramaScene[] = useMemo(() => {
+    // Map each pano section → its room id, so we can tell whether a
+    // navigation hotspot points to a viewpoint in the SAME room
+    // (→ floor-disc / click-the-ground navigation) or a different
+    // room (→ keep the arrow, it's a real doorway between spaces).
+    const roomBySection = new Map<string, string | undefined>();
+    for (const r of rooms) {
+      roomBySection.set(r.sectionId, r.metadata.roomId);
+    }
+
+    return rooms.map((room) => {
+      const myRoom = room.metadata.roomId;
+      const allHotspots = room.metadata.hotspots ?? [];
+
+      const floorTargets: PanoramaScene["floorTargets"] = [];
+      const arrowHotspots: typeof allHotspots = [];
+
+      for (const h of allHotspots) {
+        if (h.type === "navigation") {
+          const targetRoom = roomBySection.get(h.targetSectionId);
+          const sameRoom =
+            !!myRoom && !!targetRoom && targetRoom === myRoom;
+          if (sameRoom) {
+            // Same room → floor navigation (no arrow).
+            floorTargets.push({
+              sectionId: h.targetSectionId,
+              pitch: h.pitch,
+              yaw: h.yaw,
+              label: h.label,
+            });
+            continue;
+          }
+        }
+        // Cross-room nav + all info hotspots keep their normal style.
+        arrowHotspots.push(h);
+      }
+
+      return {
         id: room.sectionId,
         imageUrl: room.imageUrl,
         initialView: room.metadata.initialView,
-        hotspots: room.metadata.hotspots,
-      })),
-    [rooms]
-  );
+        hotspots: arrowHotspots,
+        floorTargets,
+      };
+    });
+  }, [rooms]);
 
   /** Matterport-style transition between rooms.
    *

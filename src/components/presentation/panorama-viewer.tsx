@@ -28,6 +28,20 @@ export interface PanoramaViewerProps {
   scenes?: PanoramaScene[];
   initialScene?: string;
   onSceneChange?: (sceneId: string) => void;
+  /** Single-scene-mode floor targets (same-room viewpoints). In
+   *  multi-scene mode each PanoramaScene carries its own. */
+  floorTargets?: FloorTarget[];
+}
+
+/** A same-room viewpoint reachable by clicking the floor (Matterport
+ *  / 3D Vista style) instead of an arrow. pitch/yaw are where the
+ *  destination sits in the *current* scene; clicking on or near that
+ *  floor spot loads the target panorama. */
+export interface FloorTarget {
+  sectionId: string;
+  pitch: number;
+  yaw: number;
+  label: string;
 }
 
 export interface PanoramaScene {
@@ -35,6 +49,9 @@ export interface PanoramaScene {
   imageUrl: string;
   initialView?: { pitch: number; yaw: number; hfov?: number };
   hotspots?: PanoramaHotspot[];
+  /** Same-room viewpoints shown as floor discs + reachable by
+   *  clicking the ground, rather than arrow hotspots. */
+  floorTargets?: FloorTarget[];
 }
 
 export interface PanoramaViewerHandle {
@@ -191,6 +208,59 @@ function createInfoTooltip(
   return wrapper;
 }
 
+/** Foreshorten factor for a disc lying on the floor, seen at a given
+ *  pitch. Straight down (pitch -90) → 1 (full circle). Near the
+ *  horizon → thin ellipse. Clamped so it never fully collapses. */
+function floorForeshorten(pitchDeg: number): number {
+  const rad = (Math.abs(pitchDeg) * Math.PI) / 180;
+  return Math.max(0.18, Math.sin(rad));
+}
+
+/** Creates the DOM for a floor-disc destination marker — a flat ring
+ *  that reads as painted on the ground, with a soft pulse. The disc
+ *  is foreshortened (scaleY) to match the floor perspective at its
+ *  pitch. */
+function createFloorDisc(
+  target: FloorTarget,
+  onClick: () => void
+): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "pano-hs-floor";
+  wrapper.title = target.label;
+  wrapper.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  const sy = floorForeshorten(target.pitch);
+  wrapper.innerHTML = `
+    <div class="pano-hs-floor-disc" style="transform: scaleY(${sy.toFixed(
+      3
+    )});">
+      <div class="pano-hs-floor-ring"></div>
+      <div class="pano-hs-floor-dot"></div>
+    </div>
+    <span class="pano-hs-floor-label">${target.label}</span>
+  `;
+  return wrapper;
+}
+
+/** Build Pannellum hotspot configs for floor-disc targets. */
+function buildFloorTargetConfigs(
+  targets: FloorTarget[],
+  onNav?: (targetId: string, fromPitch?: number, fromYaw?: number) => void
+): Record<string, unknown>[] {
+  return targets.map((t) => ({
+    pitch: t.pitch,
+    yaw: t.yaw,
+    type: "info",
+    createTooltipFunc: (hotSpotDiv: HTMLElement) => {
+      const el = createFloorDisc(t, () => onNav?.(t.sectionId, t.pitch, t.yaw));
+      hotSpotDiv.appendChild(el);
+    },
+    createTooltipArgs: "",
+  }));
+}
+
 function buildHotspotConfigs(
   hotspots: PanoramaHotspot[],
   onNav?: (
@@ -240,11 +310,23 @@ export const PanoramaViewer = forwardRef<
     scenes,
     initialScene,
     onSceneChange,
+    floorTargets,
   },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PannellumViewer | null>(null);
+  /** Floor reticle DOM node (cursor-following ground circle). */
+  const reticleRef = useRef<HTMLDivElement>(null);
+  /** Per-scene floor targets, looked up at click time by current
+   *  scene id. Single-scene mode stores under the synthetic "__solo". */
+  const floorTargetsBySceneRef = useRef<Map<string, FloorTarget[]>>(
+    new Map()
+  );
+  const currentSceneIdRef = useRef<string>("__solo");
+  /** mousedown bookkeeping so we can tell a click (navigate) from a
+   *  drag (look around). */
+  const downRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useImperativeHandle(ref, () => ({
     getPitch: () => viewerRef.current?.getPitch() ?? 0,
@@ -304,21 +386,31 @@ export const PanoramaViewer = forwardRef<
         // Multi-scene mode
         if (scenes && scenes.length > 0) {
           const sceneConfigs: Record<string, Record<string, unknown>> = {};
+          floorTargetsBySceneRef.current = new Map();
 
           for (const scene of scenes) {
+            const sceneFloor = scene.floorTargets || [];
+            floorTargetsBySceneRef.current.set(scene.id, sceneFloor);
             sceneConfigs[scene.id] = {
               type: "equirectangular",
               panorama: scene.imageUrl,
               pitch: scene.initialView?.pitch ?? 0,
               yaw: scene.initialView?.yaw ?? 180,
               hfov: scene.initialView?.hfov ?? 110,
-              hotSpots: buildHotspotConfigs(
-                scene.hotspots || [],
-                onNavigationHotspotClick,
-                onInfoHotspotClick
-              ),
+              hotSpots: [
+                ...buildHotspotConfigs(
+                  scene.hotspots || [],
+                  onNavigationHotspotClick,
+                  onInfoHotspotClick
+                ),
+                ...buildFloorTargetConfigs(
+                  sceneFloor,
+                  onNavigationHotspotClick
+                ),
+              ],
             };
           }
+          currentSceneIdRef.current = initialScene || scenes[0].id;
 
           viewerRef.current = pannellum.viewer(containerRef.current!, {
             default: {
@@ -346,18 +438,27 @@ export const PanoramaViewer = forwardRef<
             scenes: sceneConfigs,
           });
 
-          if (onSceneChange) {
-            viewerRef.current.on("scenechange", (sceneId: unknown) => {
-              onSceneChange(sceneId as string);
-            });
-          }
+          viewerRef.current.on("scenechange", (sceneId: unknown) => {
+            currentSceneIdRef.current = sceneId as string;
+            onSceneChange?.(sceneId as string);
+          });
         } else {
           // Single panorama mode
-          const hotspotConfigs = buildHotspotConfigs(
-            hotspots || [],
-            onNavigationHotspotClick,
-            onInfoHotspotClick
-          );
+          floorTargetsBySceneRef.current = new Map([
+            ["__solo", floorTargets || []],
+          ]);
+          currentSceneIdRef.current = "__solo";
+          const hotspotConfigs = [
+            ...buildHotspotConfigs(
+              hotspots || [],
+              onNavigationHotspotClick,
+              onInfoHotspotClick
+            ),
+            ...buildFloorTargetConfigs(
+              floorTargets || [],
+              onNavigationHotspotClick
+            ),
+          ];
 
           viewerRef.current = pannellum.viewer(containerRef.current!, {
             type: "equirectangular",
@@ -409,12 +510,155 @@ export const PanoramaViewer = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl, scenes, initialScene]);
 
+  // ── Matterport-style floor navigation ──
+  // A cursor-following ground reticle (perspective-matched circle)
+  // plus "click the floor near a viewpoint to go there". Bound once;
+  // reads live state from refs so it survives scene changes.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const currentTargets = () =>
+      floorTargetsBySceneRef.current.get(currentSceneIdRef.current) || [];
+
+    // Wrap a yaw delta into [-180, 180] so distance math doesn't
+    // blow up across the 360° seam.
+    const wrapYaw = (d: number) => ((d + 540) % 360) - 180;
+    const angularDist = (
+      p1: number,
+      y1: number,
+      p2: number,
+      y2: number
+    ) => {
+      const dp = p1 - p2;
+      const dy = wrapYaw(y1 - y2) * Math.cos((p1 * Math.PI) / 180);
+      return Math.sqrt(dp * dp + dy * dy);
+    };
+
+    function handleMove(e: MouseEvent) {
+      const viewer = viewerRef.current;
+      const reticle = reticleRef.current;
+      if (!viewer || !reticle) return;
+      // Only show the reticle when this scene actually has floor
+      // destinations — otherwise it's confusing dead UI.
+      if (currentTargets().length === 0) {
+        reticle.style.opacity = "0";
+        return;
+      }
+      let coords: [number, number] | null = null;
+      try {
+        coords = viewer.mouseEventToCoords(e);
+      } catch {
+        coords = null;
+      }
+      if (!coords) {
+        reticle.style.opacity = "0";
+        return;
+      }
+      const [pitch] = coords;
+      // Only over the floor (looking down past a small margin).
+      if (pitch > -4) {
+        reticle.style.opacity = "0";
+        return;
+      }
+      const rect = el!.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const sy = floorForeshorten(pitch);
+      reticle.style.left = `${x}px`;
+      reticle.style.top = `${y}px`;
+      reticle.style.transform = `translate(-50%, -50%) scaleY(${sy.toFixed(
+        3
+      )})`;
+      reticle.style.opacity = "1";
+    }
+
+    function handleLeave() {
+      if (reticleRef.current) reticleRef.current.style.opacity = "0";
+    }
+
+    function handleDown(e: MouseEvent) {
+      downRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    }
+
+    function handleUp(e: MouseEvent) {
+      const down = downRef.current;
+      downRef.current = null;
+      if (!down) return;
+      // Distinguish click from drag: small movement, quick release.
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      if (moved > 8 || Date.now() - down.t > 500) return;
+
+      const targets = currentTargets();
+      if (targets.length === 0) return;
+
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      let coords: [number, number] | null = null;
+      try {
+        coords = viewer.mouseEventToCoords(e);
+      } catch {
+        coords = null;
+      }
+      if (!coords) return;
+      const [pitch, yaw] = coords;
+      // Find the nearest floor target to where they clicked.
+      let best: FloorTarget | null = null;
+      let bestDist = Infinity;
+      for (const t of targets) {
+        const d = angularDist(pitch, yaw, t.pitch, t.yaw);
+        if (d < bestDist) {
+          bestDist = d;
+          best = t;
+        }
+      }
+      // ~32° tolerance — clicking the "general area" of the floor
+      // near a viewpoint counts, not just the exact disc.
+      if (best && bestDist < 32) {
+        onNavigationHotspotClick?.(best.sectionId, best.pitch, best.yaw);
+      }
+    }
+
+    el.addEventListener("mousemove", handleMove);
+    el.addEventListener("mouseleave", handleLeave);
+    el.addEventListener("mousedown", handleDown);
+    el.addEventListener("mouseup", handleUp);
+    return () => {
+      el.removeEventListener("mousemove", handleMove);
+      el.removeEventListener("mouseleave", handleLeave);
+      el.removeEventListener("mousedown", handleDown);
+      el.removeEventListener("mouseup", handleUp);
+    };
+  }, [onNavigationHotspotClick]);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <div
         ref={containerRef}
         style={{ width: "100%", height: "100%" }}
       />
+
+      {/* Cursor-following floor reticle — a perspective ring that
+          tells the viewer "you can click the ground here to move."
+          Positioned + foreshortened by the floor-nav effect; hidden
+          (opacity 0) unless hovering the floor in a room that has
+          other viewpoints. */}
+      <div
+        ref={reticleRef}
+        className="pano-floor-reticle"
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: 6,
+          transition: "opacity 140ms ease",
+        }}
+      >
+        <div className="pano-floor-reticle-ring" />
+      </div>
 
       {/* Custom controls — bottom right */}
       <div
@@ -561,6 +805,73 @@ export const PanoramaViewer = forwardRef<
         @keyframes pano-info-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.15); }
           50% { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+        }
+
+        /* Floor-disc destination marker (same-room viewpoints).
+           The disc element is foreshortened inline (scaleY) to match
+           the floor perspective; here we just style the ring + dot
+           and pulse. */
+        .pano-hs-floor {
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          transform: translate(-26px, -26px);
+        }
+        .pano-hs-floor-disc {
+          width: 52px;
+          height: 52px;
+          position: relative;
+          transform-origin: center center;
+        }
+        .pano-hs-floor-ring {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.85);
+          background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 60%, transparent 72%);
+          box-shadow: 0 0 12px rgba(0,0,0,0.45);
+          animation: pano-floor-pulse 2.2s ease-in-out infinite;
+        }
+        .pano-hs-floor-dot {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.95);
+          transform: translate(-50%, -50%);
+        }
+        .pano-hs-floor-label {
+          margin-top: 6px;
+          white-space: nowrap;
+          font-size: 0.625rem;
+          font-weight: 300;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,0.85);
+          background: rgba(0,0,0,0.5);
+          padding: 2px 8px;
+          border-radius: 3px;
+          opacity: 0;
+          transition: opacity 0.2s ease;
+          pointer-events: none;
+        }
+        .pano-hs-floor:hover .pano-hs-floor-label { opacity: 1; }
+        @keyframes pano-floor-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.25), 0 0 12px rgba(0,0,0,0.45); }
+          50% { box-shadow: 0 0 0 10px rgba(255,255,255,0), 0 0 12px rgba(0,0,0,0.45); }
+        }
+
+        /* Cursor-following floor reticle */
+        .pano-floor-reticle-ring {
+          width: 46px;
+          height: 46px;
+          border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.9);
+          background: radial-gradient(circle, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.05) 55%, transparent 70%);
+          box-shadow: 0 0 14px rgba(0,0,0,0.5);
         }
 
         /* Hide default pannellum UI */
