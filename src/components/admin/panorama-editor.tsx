@@ -372,19 +372,35 @@ export function PanoramaEditor({
     setEditingHotspotId(id);
   }, []);
 
-  /** Admin-only marker label. For nav hotspots, show the TARGET
-   *  pano's image name (so two "Lobby" rooms are distinguishable
-   *  while wiring); the stored hs.label stays the room name for
-   *  clients. Info hotspots keep their own label. */
+  /** Resolve a section's ROOM name. Prefers the assigned TourRoom's
+   *  name (dropdown sets metadata.roomId → TourRoom.name), then falls
+   *  back to the legacy roomLabel / title / filename. This is the name
+   *  clients see, so the editor markers match the presentation. */
+  const roomNameForSection = useCallback(
+    (s: SectionOption): string => {
+      const meta = (s.metadata || {}) as PanoramaMetadata;
+      if (meta.roomId) {
+        const room = rooms.find((r) => r.id === meta.roomId);
+        if (room?.name?.trim()) return room.name.trim();
+      }
+      return panoramaLabel(s);
+    },
+    [rooms]
+  );
+
+  /** Marker label for a hotspot. For nav hotspots, show the TARGET
+   *  ROOM's name — same as the client sees in the presentation — so
+   *  what you author matches what gets shown. Info hotspots keep their
+   *  own label. */
   const editorLabelFor = useCallback(
     (hs: PanoramaHotspot): string | undefined => {
       if (hs.type === "navigation") {
         const target = allSections.find((s) => s.id === hs.targetSectionId);
-        if (target) return panoFileLabel(target);
+        if (target) return roomNameForSection(target);
       }
       return undefined;
     },
-    [allSections]
+    [allSections, roomNameForSection]
   );
 
   // Initialize Pannellum

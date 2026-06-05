@@ -157,8 +157,16 @@ export function PanoramaWalkthrough({
             }
             continue; // not an arrow
           }
+          // Cross-room nav arrow: ALWAYS show the destination ROOM's
+          // resolved name, not the hotspot's stored label. The stored
+          // label is whatever existed at link time — often the target's
+          // *filename*, because the room name lives on the TourRoom
+          // (keyed by roomId), not in the pano's title. Relabeling here
+          // means clients always read "Conference", never "pano_07".
+          arrowHotspots.push(target ? { ...h, label: target.label } : h);
+          continue;
         }
-        // Cross-room nav + all info hotspots keep their normal style.
+        // Info hotspots keep their own label.
         arrowHotspots.push(h);
       }
 
