@@ -243,6 +243,17 @@ function panoramaLabel(s: SectionOption): string {
   return `Panorama ${s.id.slice(0, 6)}`;
 }
 
+/** DISTINCT label for the link rail — prefers the backing FILE name,
+ *  because two panos can share a room name (e.g. both "Lobby") and
+ *  the admin needs to tell them apart to connect the right ones.
+ *  Falls back to the title, then a short id. */
+function panoFileLabel(s: SectionOption): string {
+  const fromFile = s.file?.originalName?.replace(/\.[^.]+$/, "");
+  if (fromFile) return fromFile;
+  if (s.title?.trim()) return s.title.trim();
+  return `Panorama ${s.id.slice(0, 6)}`;
+}
+
 export function PanoramaEditor({
   sectionId,
   imageUrl,
@@ -261,6 +272,11 @@ export function PanoramaEditor({
   /** IDs of hotspots currently mounted in the Pannellum viewer, so the
    *  sync effect knows what to remove on the next pass. */
   const mountedHotspotIdsRef = useRef<Set<string>>(new Set());
+  /** Holds the latest commitLink so the click-to-place effect (defined
+   *  before commitLink) can call it without a TDZ/ordering problem. */
+  const commitLinkRef = useRef<
+    ((targetId: string, pitch: number, yaw: number) => void) | null
+  >(null);
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("hotspots");
   const [saving, setSaving] = useState(false);
@@ -299,6 +315,10 @@ export function PanoramaEditor({
   const [repositioningHotspotId, setRepositioningHotspotId] = useState<
     string | null
   >(null);
+  /** When set (via clicking a rail thumbnail), the next click on the
+   *  panorama places a navigation link toward this target pano —
+   *  precise placement instead of dropping at the view center. */
+  const [linkingTargetId, setLinkingTargetId] = useState<string | null>(null);
 
   /** Drag-to-link state. Tracks which panorama (from the bottom rail)
    *  is currently being hauled onto the 360° view, so we can show a
@@ -393,11 +413,12 @@ export function PanoramaEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
 
-  // Handle click-to-place (new) OR click-to-reposition (existing).
+  // Handle click-to-place (new), click-to-reposition (existing), or
+  // click-to-place-a-link (precise doorway toward a rail target).
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !ready) return;
-    if (!placingHotspot && !repositioningHotspotId) return;
+    if (!placingHotspot && !repositioningHotspotId && !linkingTargetId) return;
 
     function handleClick(e: MouseEvent) {
       const viewer = viewerRef.current;
@@ -405,6 +426,16 @@ export function PanoramaEditor({
       const coords = viewer.mouseEventToCoords(e);
       if (!coords) return;
       const [pitch, yaw] = coords;
+
+      if (linkingTargetId) {
+        // Place the navigation link exactly where the admin clicked,
+        // toward the rail pano they picked. commitLink persists +
+        // mirrors the reverse hotspot + switches editor.
+        const target = linkingTargetId;
+        setLinkingTargetId(null);
+        commitLinkRef.current?.(target, pitch, yaw);
+        return;
+      }
 
       if (repositioningHotspotId) {
         // Move the existing hotspot to the clicked pitch/yaw, keeping
@@ -428,7 +459,7 @@ export function PanoramaEditor({
 
     el.addEventListener("click", handleClick);
     return () => el.removeEventListener("click", handleClick);
-  }, [ready, placingHotspot, repositioningHotspotId]);
+  }, [ready, placingHotspot, repositioningHotspotId, linkingTargetId]);
 
   // Sync the editable hotspot list into Pannellum so the admin sees
   // markers right where they placed them — no need to switch to the
@@ -589,6 +620,8 @@ export function PanoramaEditor({
     },
     [sectionId, allSections, meta, onSave, onLinkPanorama, onSwitchToPanorama]
   );
+  // Keep the ref current so the click-to-place effect can call it.
+  commitLinkRef.current = commitLink;
 
   const handleLinkDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
@@ -615,21 +648,18 @@ export function PanoramaEditor({
     [sectionId, commitLink]
   );
 
-  /** Click-to-link fallback — clicking a rail thumbnail links it at
-   *  the current view center. More reliable than HTML5 drag-and-drop
-   *  (which silently no-ops on some setups) and more discoverable. */
-  const handleRailClick = useCallback(
-    (targetId: string) => {
-      const viewer = viewerRef.current;
-      // Place the doorway slightly below the current view center so it
-      // reads as "on the floor ahead." Falls back to 0/0 if the
-      // viewer isn't ready.
-      const yaw = viewer ? viewer.getYaw() : 0;
-      const pitch = viewer ? Math.min(viewer.getPitch(), -10) : -10;
-      commitLink(targetId, pitch, yaw);
-    },
-    [commitLink]
-  );
+  /** Click a rail thumbnail → arm precise placement: the next click
+   *  on the panorama drops the doorway exactly there and links. More
+   *  reliable than HTML5 drag (which silently no-ops on some setups)
+   *  and lets the admin pinpoint the spot rather than dropping at the
+   *  view center. */
+  const handleRailClick = useCallback((targetId: string) => {
+    setPlacingHotspot(false);
+    setPendingCoords(null);
+    setEditingHotspotId(null);
+    setRepositioningHotspotId(null);
+    setLinkingTargetId(targetId);
+  }, []);
 
   function handleLinkDragOver(e: React.DragEvent<HTMLDivElement>) {
     if (e.dataTransfer.types.includes("application/x-pano-link")) {
@@ -680,13 +710,24 @@ export function PanoramaEditor({
             style={{ width: "100%", height: "100%", minHeight: 320 }}
           />
 
-          {/* Placement / reposition mode indicator */}
-          {(placingHotspot || repositioningHotspotId) && (
+          {/* Placement / reposition / link-placement indicator */}
+          {(placingHotspot || repositioningHotspotId || linkingTargetId) && (
             <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-brand-600/90 px-3 py-1.5 text-xs text-white backdrop-blur-sm">
               <Crosshair className="h-3.5 w-3.5" />
-              {repositioningHotspotId
-                ? "Click to move the hotspot"
-                : "Click to place hotspot"}
+              {linkingTargetId
+                ? `Click where the doorway to ${panoramaLabel(
+                    allSections.find((s) => s.id === linkingTargetId) ?? {
+                      id: linkingTargetId,
+                      title: null,
+                      type: "panorama",
+                      order: 0,
+                      metadata: null,
+                      file: null,
+                    }
+                  )} should go`
+                : repositioningHotspotId
+                  ? "Click to move the hotspot"
+                  : "Click to place hotspot"}
             </div>
           )}
 
@@ -767,8 +808,8 @@ export function PanoramaEditor({
                           onClick={() => handleRailClick(s.id)}
                           title={
                             alreadyLinked
-                              ? `Already linked to ${panoramaLabel(s)} — click or drag to add another doorway`
-                              : `Click to link, or drag onto the 360° view to place a doorway to ${panoramaLabel(s)}`
+                              ? `Already linked to ${panoFileLabel(s)} — click or drag to add another doorway`
+                              : `Click to link, or drag onto the 360° view to place a doorway to ${panoFileLabel(s)}`
                           }
                           className={`group shrink-0 rounded-md border overflow-hidden cursor-grab active:cursor-grabbing transition-all ${
                             isDragging
@@ -797,7 +838,7 @@ export function PanoramaEditor({
                             )}
                           </div>
                           <div className="px-1 py-0.5 text-[9px] text-slate-200 text-center truncate bg-black/40">
-                            {panoramaLabel(s)}
+                            {panoFileLabel(s)}
                           </div>
                         </div>
                       );
