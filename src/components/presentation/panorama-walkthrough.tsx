@@ -401,8 +401,11 @@ export function PanoramaWalkthrough({
           <div
             style={{
               position: "relative",
-              maxWidth: "min(80vw, 900px)",
-              maxHeight: "72vh",
+              // Match the hover-expanded minimap size (80vw / 80vh) —
+              // the old min(80vw,900px) cap made it small on big
+              // screens.
+              width: "80vw",
+              maxHeight: "80vh",
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -412,8 +415,8 @@ export function PanoramaWalkthrough({
               draggable={false}
               style={{
                 display: "block",
-                maxWidth: "100%",
-                maxHeight: "72vh",
+                width: "100%",
+                maxHeight: "80vh",
                 objectFit: "contain",
               }}
             />
