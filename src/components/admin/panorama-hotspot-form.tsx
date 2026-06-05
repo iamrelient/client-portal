@@ -7,7 +7,7 @@ import type {
   InfoHotspot,
   InfoContent,
 } from "@/types/panorama";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Move, Plus, Trash2 } from "lucide-react";
 
 interface FileOption {
   id: string;
@@ -33,6 +33,9 @@ interface PanoramaHotspotFormProps {
   onSave: (hotspot: PanoramaHotspot) => void;
   onCancel: () => void;
   onDelete?: () => void;
+  /** Optional: arms "click the panorama to move this hotspot" mode.
+   *  Only meaningful when editing an existing hotspot. */
+  onReposition?: () => void;
   /** Optional: lets the admin spin up a brand-new panorama section
    *  right from the Target Room dropdown (pick a project image or
    *  upload one). Resolves to the new section's id so we can auto-
@@ -49,6 +52,7 @@ export function PanoramaHotspotForm({
   onSave,
   onCancel,
   onDelete,
+  onReposition,
   onAddPanorama,
 }: PanoramaHotspotFormProps) {
   const [addingPanorama, setAddingPanorama] = useState(false);
@@ -393,6 +397,16 @@ export function PanoramaHotspotForm({
         >
           Cancel
         </button>
+        {hotspot && onReposition && (
+          <button
+            type="button"
+            onClick={onReposition}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-brand-500/10 hover:text-brand-300 transition-colors"
+            title="Move — click a new spot on the panorama"
+          >
+            <Move className="h-3.5 w-3.5" />
+          </button>
+        )}
         {hotspot && onDelete && (
           <button
             type="button"

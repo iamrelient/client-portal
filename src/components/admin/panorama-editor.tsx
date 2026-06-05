@@ -106,7 +106,7 @@ let pannellumLoadPromise: Promise<void> | null = null;
  *  worrying about hover-to-reveal animations. */
 function buildEditorHotspotConfig(
   hs: PanoramaHotspot,
-  onSwitchToPanorama?: (sectionId: string) => void
+  onSelectHotspot?: (id: string) => void
 ): Record<string, unknown> {
   const isNav = hs.type === "navigation";
   return {
@@ -121,19 +121,19 @@ function buildEditorHotspotConfig(
     // markers were invisible). We append our custom content here.
     createTooltipFunc: (hotSpotDiv: HTMLElement) => {
       const wrapper = document.createElement("div");
-      // Nav hotspots get pointer-events: auto so the click handler
-      // below fires. Info hotspots stay click-through for now — the
-      // form-based editor handles editing them.
+      // Clicking a marker selects it for editing (opens the form +
+      // its Edit / Move / Delete actions). This is the intuitive
+      // "click the thing to change it" behavior.
       wrapper.style.cssText = `
         display: flex;
         flex-direction: column;
         align-items: center;
         transform: translate(-14px, -14px);
-        pointer-events: ${isNav && onSwitchToPanorama ? "auto" : "none"};
-        cursor: ${isNav && onSwitchToPanorama ? "pointer" : "default"};
+        pointer-events: ${onSelectHotspot ? "auto" : "none"};
+        cursor: ${onSelectHotspot ? "pointer" : "default"};
       `;
-      wrapper.title = isNav && onSwitchToPanorama
-        ? "Click to jump to this room's editor"
+      wrapper.title = onSelectHotspot
+        ? "Click to edit this hotspot"
         : hs.label;
       wrapper.innerHTML = `
         <div style="
@@ -167,11 +167,10 @@ function buildEditorHotspotConfig(
         ">${hs.label.replace(/[<>&]/g, "")}</span>
       `;
 
-      if (isNav && onSwitchToPanorama) {
-        const navHs = hs as Extract<PanoramaHotspot, { type: "navigation" }>;
+      if (onSelectHotspot) {
         wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          onSwitchToPanorama(navHs.targetSectionId);
+          onSelectHotspot(hs.id);
         });
       }
 
@@ -271,6 +270,11 @@ export function PanoramaEditor({
     yaw: number;
   } | null>(null);
   const [editingHotspotId, setEditingHotspotId] = useState<string | null>(null);
+  /** When set, the next click on the panorama re-positions THIS
+   *  hotspot (move it) rather than placing a brand-new one. */
+  const [repositioningHotspotId, setRepositioningHotspotId] = useState<
+    string | null
+  >(null);
 
   /** Drag-to-link state. Tracks which panorama (from the bottom rail)
    *  is currently being hauled onto the 360° view, so we can show a
@@ -287,6 +291,18 @@ export function PanoramaEditor({
   const panoramaSections = allSections.filter(
     (s) => s.type === "panorama" && s.id !== sectionId
   );
+
+  /** Clicking a marker on the panorama selects that hotspot for
+   *  editing — opens the Hotspots tab + its edit form (Update /
+   *  Move / Delete). Stable so the Pannellum effects can reference
+   *  it without re-binding. */
+  const handleSelectHotspot = useCallback((id: string) => {
+    setActiveTab("hotspots");
+    setPendingCoords(null);
+    setPlacingHotspot(false);
+    setRepositioningHotspotId(null);
+    setEditingHotspotId(id);
+  }, []);
 
   // Initialize Pannellum
   useEffect(() => {
@@ -305,7 +321,7 @@ export function PanoramaEditor({
       // appear the instant the panorama image finishes loading — no
       // race between Pannellum init and our sync useEffect.
       const initialHotspots = (meta.hotspots ?? []).map((hs) =>
-        buildEditorHotspotConfig(hs, onSwitchToPanorama)
+        buildEditorHotspotConfig(hs, handleSelectHotspot)
       );
       mountedHotspotIdsRef.current = new Set(
         (meta.hotspots ?? []).map((h) => h.id)
@@ -353,26 +369,42 @@ export function PanoramaEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
 
-  // Handle click-to-place hotspot
+  // Handle click-to-place (new) OR click-to-reposition (existing).
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !ready || !placingHotspot) return;
+    if (!el || !ready) return;
+    if (!placingHotspot && !repositioningHotspotId) return;
 
     function handleClick(e: MouseEvent) {
       const viewer = viewerRef.current;
       if (!viewer) return;
-
-      // Pannellum's mouseEventToCoords returns [pitch, yaw]
       const coords = viewer.mouseEventToCoords(e);
       if (!coords) return;
+      const [pitch, yaw] = coords;
 
-      setPendingCoords({ pitch: coords[0], yaw: coords[1] });
+      if (repositioningHotspotId) {
+        // Move the existing hotspot to the clicked pitch/yaw, keeping
+        // everything else (label, target, type). Re-open its editor.
+        const id = repositioningHotspotId;
+        setMeta((prev) => ({
+          ...prev,
+          hotspots: (prev.hotspots || []).map((h) =>
+            h.id === id ? { ...h, pitch, yaw } : h
+          ),
+        }));
+        setRepositioningHotspotId(null);
+        setEditingHotspotId(id);
+        return;
+      }
+
+      // Placing a brand-new hotspot.
+      setPendingCoords({ pitch, yaw });
       setPlacingHotspot(false);
     }
 
     el.addEventListener("click", handleClick);
     return () => el.removeEventListener("click", handleClick);
-  }, [ready, placingHotspot]);
+  }, [ready, placingHotspot, repositioningHotspotId]);
 
   // Sync the editable hotspot list into Pannellum so the admin sees
   // markers right where they placed them — no need to switch to the
@@ -398,7 +430,7 @@ export function PanoramaEditor({
 
     (meta.hotspots ?? []).forEach((hs) => {
       try {
-        viewer.addHotSpot(buildEditorHotspotConfig(hs, onSwitchToPanorama));
+        viewer.addHotSpot(buildEditorHotspotConfig(hs, handleSelectHotspot));
         current.add(hs.id);
       } catch (err) {
         // Don't let one bad hotspot break the rest.
@@ -407,7 +439,7 @@ export function PanoramaEditor({
     });
 
     mountedHotspotIdsRef.current = current;
-  }, [ready, meta.hotspots, onSwitchToPanorama]);
+  }, [ready, meta.hotspots, handleSelectHotspot]);
 
   const handleSaveHotspot = useCallback(
     (hotspot: PanoramaHotspot) => {
@@ -606,11 +638,13 @@ export function PanoramaEditor({
             style={{ width: "100%", height: "100%", minHeight: 320 }}
           />
 
-          {/* Placement mode indicator */}
-          {placingHotspot && (
+          {/* Placement / reposition mode indicator */}
+          {(placingHotspot || repositioningHotspotId) && (
             <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-brand-600/90 px-3 py-1.5 text-xs text-white backdrop-blur-sm">
               <Crosshair className="h-3.5 w-3.5" />
-              Click to place hotspot
+              {repositioningHotspotId
+                ? "Click to move the hotspot"
+                : "Click to place hotspot"}
             </div>
           )}
 
@@ -762,8 +796,30 @@ export function PanoramaEditor({
             {/* Hotspots tab */}
             {activeTab === "hotspots" && (
               <div className="space-y-3">
+                {/* Repositioning prompt — replaces the form while the
+                    admin picks a new spot on the panorama. */}
+                {repositioningHotspotId && (
+                  <div className="rounded-lg border border-brand-500/40 bg-brand-500/[0.06] p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-brand-200">
+                      <Crosshair className="h-3.5 w-3.5" />
+                      Click on the panorama to move this hotspot
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = repositioningHotspotId;
+                        setRepositioningHotspotId(null);
+                        setEditingHotspotId(id);
+                      }}
+                      className="rounded-lg border border-white/[0.1] px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                    >
+                      Cancel move
+                    </button>
+                  </div>
+                )}
+
                 {/* Show form when placing or editing */}
-                {pendingCoords && (
+                {!repositioningHotspotId && pendingCoords && (
                   <PanoramaHotspotForm
                     hotspot={null}
                     pitch={pendingCoords.pitch}
@@ -776,7 +832,7 @@ export function PanoramaEditor({
                   />
                 )}
 
-                {editingHotspot && (
+                {!repositioningHotspotId && editingHotspot && (
                   <PanoramaHotspotForm
                     hotspot={editingHotspot}
                     pitch={editingHotspot.pitch}
@@ -786,12 +842,18 @@ export function PanoramaEditor({
                     onSave={handleSaveHotspot}
                     onCancel={() => setEditingHotspotId(null)}
                     onDelete={() => handleDeleteHotspot(editingHotspot.id)}
+                    onReposition={() => {
+                      // Close the form, arm reposition mode — next
+                      // panorama click moves this hotspot.
+                      setEditingHotspotId(null);
+                      setRepositioningHotspotId(editingHotspot.id);
+                    }}
                     onAddPanorama={onAddPanorama}
                   />
                 )}
 
                 {/* Add hotspot button */}
-                {!pendingCoords && !editingHotspotId && (
+                {!repositioningHotspotId && !pendingCoords && !editingHotspotId && (
                   <>
                     <button
                       onClick={() => setPlacingHotspot(!placingHotspot)}
