@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Eye,
   Upload,
   Settings2,
@@ -145,6 +146,20 @@ export default function EditPresentationPage() {
 
   // Panorama editor
   const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
+  /** Room ids whose grouped panorama rows are collapsed in the
+   *  section list. Default collapsed so a long deck reads cleanly;
+   *  click the room header to expand. */
+  const [collapsedRooms, setCollapsedRooms] = useState<Set<string>>(
+    new Set()
+  );
+  const toggleRoomCollapsed = useCallback((roomId: string) => {
+    setCollapsedRooms((prev) => {
+      const next = new Set(prev);
+      if (next.has(roomId)) next.delete(roomId);
+      else next.add(roomId);
+      return next;
+    });
+  }, []);
   /** Local working copy of tour rooms — owned here so the main
    *  floor-plan map and each panorama editor can both read/write
    *  through the same source. Persisted via PATCH after every
@@ -280,6 +295,25 @@ export default function EditPresentationPage() {
     // migration when sibling actions update the section list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pres, tourRooms.length, persistTourRooms]);
+
+  /** Collapse all room groups once on first load so a long deck
+   *  opens clean. Runs a single time; afterward the admin's manual
+   *  expand/collapse choices stick. */
+  const collapseInitRef = useRef(false);
+  useEffect(() => {
+    if (collapseInitRef.current || !pres) return;
+    const roomIdsWithPanos = new Set<string>();
+    for (const s of pres.sections) {
+      if (s.type !== "panorama") continue;
+      const rid = (s.metadata as Record<string, unknown> | null)?.roomId as
+        | string
+        | undefined;
+      if (rid) roomIdsWithPanos.add(rid);
+    }
+    if (roomIdsWithPanos.size === 0) return;
+    collapseInitRef.current = true;
+    setCollapsedRooms(roomIdsWithPanos);
+  }, [pres]);
 
   /** Update a single tour room (drag, rename, starting-pano).
    *  Updates local state immediately for snappy UX and fires the
@@ -990,8 +1024,67 @@ export default function EditPresentationPage() {
                   panoramaSections.length > 1 &&
                   panoramaSections[0].id === section.id;
 
+                // Room grouping: panoramas assigned to a room collapse
+                // under a per-room header. Unassigned panos render as
+                // normal individual rows.
+                const sectRoomId =
+                  section.type === "panorama"
+                    ? (((section.metadata as Record<string, unknown> | null)
+                        ?.roomId as string | undefined) || undefined)
+                    : undefined;
+                const sectRoom = sectRoomId
+                  ? tourRooms.find((r) => r.id === sectRoomId)
+                  : undefined;
+                const grouped = !!(sectRoomId && sectRoom);
+                const roomPanos = grouped
+                  ? sections.filter(
+                      (s) =>
+                        s.type === "panorama" &&
+                        (((s.metadata as Record<string, unknown> | null)
+                          ?.roomId as string | undefined) || undefined) ===
+                          sectRoomId
+                    )
+                  : [];
+                const isRoomAnchor =
+                  grouped && roomPanos[0]?.id === section.id;
+                const roomCollapsed =
+                  grouped && !!sectRoomId && collapsedRooms.has(sectRoomId);
+
+                // Collapsed, non-anchor pano rows render nothing — the
+                // header (on the anchor) stands in for the group.
+                if (grouped && roomCollapsed && !isRoomAnchor) return null;
+
                 return (
                   <div key={section.id} data-section-id={section.id}>
+                  {isRoomAnchor && sectRoom && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        sectRoomId && toggleRoomCollapsed(sectRoomId)
+                      }
+                      className="w-full px-6 py-2.5 flex items-center gap-2 bg-white/[0.04] border-y border-white/[0.06] hover:bg-white/[0.07] transition-colors text-left"
+                    >
+                      {roomCollapsed ? (
+                        <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-slate-100">
+                        {sectRoom.name}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        · {roomPanos.length} panorama
+                        {roomPanos.length === 1 ? "" : "s"}
+                      </span>
+                      {roomCollapsed && (
+                        <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-wider">
+                          Collapsed
+                        </span>
+                      )}
+                    </button>
+                  )}
+                  {!(grouped && roomCollapsed) && (
+                  <>
                   {isFirstPanorama && (
                     <div className="px-6 py-2 bg-brand-500/[0.06] border-y border-brand-500/20 flex items-center gap-2 text-[11px] text-brand-200">
                       <svg
@@ -1704,6 +1797,8 @@ export default function EditPresentationPage() {
                         }}
                       />
                     )}
+                  </>
+                  )}
                   </div>
                 );
               })}
