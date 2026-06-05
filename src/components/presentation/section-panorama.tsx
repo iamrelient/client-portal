@@ -332,7 +332,11 @@ export function SectionPanorama({
         height: "100%",
         width: "100%",
         position: "relative",
-        backgroundColor: "#060608",
+        // On the space theme keep this transparent so the animated
+        // starfield (rendered behind the deck) shows through around the
+        // contained cover image — a solid fill blacked it out. The
+        // light theme keeps the near-black stage so images pop.
+        backgroundColor: data.theme === "space" ? "transparent" : "#060608",
         overflow: "hidden",
       }}
     >

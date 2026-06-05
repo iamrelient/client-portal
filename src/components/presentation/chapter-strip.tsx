@@ -206,53 +206,72 @@ export const ChapterStrip = memo(function ChapterStrip({
                 pushed the caption + thumbnails off the bottom of the
                 viewport. */}
             <div
-              ref={heroContainerRef}
-              data-clickable
               style={{
-                position: "relative",
                 flex: 1,
                 minHeight: 0,
                 width: "100%",
-                maxWidth: "100%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: "pointer",
               }}
-              onClick={() =>
-                activeSection?.id && setLightboxImageId(activeSection.id)
-              }
             >
-              {sections.map(({ section }, idx) => {
-                if (section.type !== "image" || !section.file) return null;
-                const isActive = idx === activeIndex;
-                // Only render current ±1 for performance
-                if (Math.abs(idx - activeIndex) > 1) return null;
+              {/* Fixed 16:9 frame. Without this, object-fit:contain sized
+                  each image to its own aspect ratio, so a render that's
+                  even slightly off 16:9 came out a different size than the
+                  others ("Conference is larger"). Pinning a 16:9 frame —
+                  capped by the available width AND height — makes every
+                  carousel image occupy an identical footprint on every
+                  screen, regardless of the source's exact dimensions.
+                  On wide screens the frame is a true 16:9; on narrow ones
+                  it's bounded by the area but still identical room-to-room.
+                  Images use object-fit:contain so they're never cropped or
+                  stretched. */}
+              <div
+                ref={heroContainerRef}
+                data-clickable
+                style={{
+                  position: "relative",
+                  height: "100%",
+                  aspectRatio: "16 / 9",
+                  maxWidth: "100%",
+                  cursor: "pointer",
+                }}
+                onClick={() =>
+                  activeSection?.id && setLightboxImageId(activeSection.id)
+                }
+              >
+                {sections.map(({ section }, idx) => {
+                  if (section.type !== "image" || !section.file) return null;
+                  const isActive = idx === activeIndex;
+                  // Only render current ±1 for performance
+                  if (Math.abs(idx - activeIndex) > 1) return null;
 
-                const url = `/api/present/${data.accessToken}/asset/${section.file.id}`;
-                return (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={section.id}
-                    src={url}
-                    alt={section.title || ""}
-                    draggable={false}
-                    ref={isActive ? measureImageOffset : undefined}
-                    onLoad={isActive ? (e) => measureImageOffset(e.currentTarget) : undefined}
-                    style={{
-                      position: "absolute",
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain",
-                      borderRadius: "2px",
-                      boxShadow: "0 4px 40px rgba(0,0,0,0.15)",
-                      opacity: isActive ? 1 : 0,
-                      transition: "opacity 0.5s ease",
-                      pointerEvents: isActive ? "auto" : "none",
-                    }}
-                  />
-                );
-              })}
+                  const url = `/api/present/${data.accessToken}/asset/${section.file.id}`;
+                  return (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={section.id}
+                      src={url}
+                      alt={section.title || ""}
+                      draggable={false}
+                      ref={isActive ? measureImageOffset : undefined}
+                      onLoad={isActive ? (e) => measureImageOffset(e.currentTarget) : undefined}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        borderRadius: "2px",
+                        boxShadow: "0 4px 40px rgba(0,0,0,0.15)",
+                        opacity: isActive ? 1 : 0,
+                        transition: "opacity 0.5s ease",
+                        pointerEvents: isActive ? "auto" : "none",
+                      }}
+                    />
+                  );
+                })}
+              </div>
             </div>
 
             {/* Bottom row — caption + thumbnails. Fixed height, always
@@ -358,7 +377,11 @@ export const ChapterStrip = memo(function ChapterStrip({
         {/* Non-image section — full viewport */}
         {!isActiveImage && activeSection && (
           <div style={{ width: "100%", height: "100%", position: "relative" }}>
-            {chapterTitle && (
+            {/* Panoramas (the 360° tour) are a self-contained immersive
+                experience with their own cover + chrome — a floating
+                chapter title over them ("Lobby") just clutters the cover,
+                so suppress it here. Video/text sections still get it. */}
+            {chapterTitle && activeSection.type !== "panorama" && (
               <div
                 style={{
                   position: "absolute",
