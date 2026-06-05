@@ -144,7 +144,10 @@ export const ChapterStrip = memo(function ChapterStrip({
               flexDirection: "column",
               alignItems: "center",
               height: "100%",
-              padding: "0 60px 80px",
+              // Tighter bottom padding so the thumbnail track + caption
+              // stay on-screen alongside the title. The image area
+              // (flex:1, min-height:0) absorbs the rest.
+              padding: "0 60px 24px",
             }}
           >
             {/* Chapter title — above image */}
@@ -152,7 +155,7 @@ export const ChapterStrip = memo(function ChapterStrip({
               <div
                 style={{
                   textAlign: "center",
-                  padding: "1.5rem 2rem 0.5rem",
+                  padding: "1rem 2rem 0.4rem",
                   flexShrink: 0,
                 }}
               >
@@ -170,13 +173,18 @@ export const ChapterStrip = memo(function ChapterStrip({
               </div>
             )}
 
-            {/* Hero image — cross-fade between adjacent images */}
+            {/* Hero image — cross-fade between adjacent images.
+                min-height: 0 is essential: without it a flex child
+                won't shrink below its image's intrinsic size, which
+                pushed the caption + thumbnails off the bottom of the
+                viewport. */}
             <div
               ref={heroContainerRef}
               data-clickable
               style={{
                 position: "relative",
                 flex: 1,
+                minHeight: 0,
                 width: "100%",
                 maxWidth: "calc(100vw - 120px)",
                 display: "flex",
