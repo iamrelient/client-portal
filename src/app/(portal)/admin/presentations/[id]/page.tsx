@@ -23,6 +23,8 @@ import {
   X,
 } from "lucide-react";
 import { FilePickerModal } from "@/components/file-picker-modal";
+import { chunkedUpload } from "@/lib/chunked-upload";
+import { detectPanoramaFromFile } from "@/lib/pano-utils";
 import { PanoramaEditor } from "@/components/admin/panorama-editor";
 import type { PanoramaMetadata } from "@/types/panorama";
 import { Model3DEditor } from "@/components/admin/model-3d-editor";
@@ -446,19 +448,49 @@ export default function EditPresentationPage() {
     setUploading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      // Flag so the project's file tree / carousel stays clean —
-      // this upload is for the presentation only.
-      formData.append("isPresentationAsset", "true");
+      // Route through the chunked pipeline — a single-shot FormData POST
+      // dies on Vercel's 4.5 MB body limit, so big 360° panos (16 MB+)
+      // uploaded straight from the panorama area used to fail. This is
+      // the same path the file picker uses.
+      const isPanorama = await detectPanoramaFromFile(file);
 
-      const res = await fetch(`/api/projects/${pres.project.id}/files`, {
-        method: "POST",
-        body: formData,
+      const { driveFileId, size } = await chunkedUpload({
+        file,
+        projectId: pres.project.id,
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      const finalizeRes = await fetch(
+        `/api/projects/${pres.project.id}/upload-complete`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            driveFileId,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size,
+            isPanorama,
+            // Flag so the project's file tree / carousel stays clean —
+            // this upload is for the presentation only.
+            isPresentationAsset: true,
+          }),
+        }
+      );
+
+      if (finalizeRes.ok) {
+        const data = await finalizeRes.json();
+        const fileId: string | undefined = data?.fileId;
+
+        // Kick off viewer-derivative generation in the background
+        // (heavy Sharp downscale). Fire-and-forget — failure can't
+        // affect the upload, and the asset route falls back to
+        // serve-time handling.
+        if (fileId) {
+          fetch(`/api/files/${fileId}/generate-viewer`, {
+            method: "POST",
+          }).catch(() => {});
+        }
+
         // Refresh file list (include presentation-only assets).
         const filesRes = await fetch(
           `/api/projects/${pres.project.id}/files?includePresentationAssets=true`
@@ -476,13 +508,14 @@ export default function EditPresentationPage() {
           }
         }
         // Call the context callback with the new file ID
-        uploadContextRef.current?.onUploaded(data.fileId);
+        if (fileId) uploadContextRef.current?.onUploaded(fileId);
         toast.success("File uploaded");
       } else {
-        toast.error("Upload failed");
+        const body = await finalizeRes.json().catch(() => ({}));
+        toast.error((body as { error?: string }).error || "Upload failed");
       }
-    } catch {
-      toast.error("Something went wrong");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     }
     setUploading(false);
   }
