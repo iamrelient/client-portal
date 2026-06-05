@@ -77,22 +77,25 @@ export function SpaceBackground({
   // Star shadow strings — memoized so they only build once per
   // (seed, density) tuple, not on every render of the parent.
   const stars = useMemo(() => {
-    const density = variant === "rich" ? 1.4 : 1;
+    // Denser fields than before so the sky reads as obviously
+    // starry rather than a faint sprinkle, especially behind the
+    // translucent carousel scrim.
+    const density = variant === "rich" ? 1.8 : 1.4;
     return {
       small: buildStarShadows(
-        Math.round(160 * density),
+        Math.round(240 * density),
         2000,
         seed + 1,
-        "rgba(255,255,255,0.85)"
-      ),
-      medium: buildStarShadows(
-        Math.round(60 * density),
-        2000,
-        seed + 2,
         "rgba(255,255,255,0.95)"
       ),
+      medium: buildStarShadows(
+        Math.round(95 * density),
+        2000,
+        seed + 2,
+        "rgba(255,255,255,1)"
+      ),
       bright: buildStarShadows(
-        Math.round(18 * density),
+        Math.round(30 * density),
         2000,
         seed + 3,
         "rgba(220,235,255,1)"
@@ -217,17 +220,17 @@ export function SpaceBackground({
           animation: space-twinkle-3 3.5s ease-in-out infinite;
         }
         @keyframes space-twinkle-1 {
-          0%, 100% { opacity: 0.55; }
-          50% { opacity: 0.95; }
+          0%, 100% { opacity: 0.75; }
+          50% { opacity: 1; }
         }
         @keyframes space-twinkle-2 {
-          0%, 100% { opacity: 0.45; }
-          40% { opacity: 0.85; }
-          70% { opacity: 0.6; }
+          0%, 100% { opacity: 0.7; }
+          40% { opacity: 1; }
+          70% { opacity: 0.82; }
         }
         @keyframes space-twinkle-3 {
-          0%, 100% { opacity: 0.7; }
-          25% { opacity: 0.35; }
+          0%, 100% { opacity: 0.85; }
+          25% { opacity: 0.6; }
           55% { opacity: 1; }
         }
         @keyframes space-planet-drift-1 {

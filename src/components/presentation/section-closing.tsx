@@ -47,6 +47,8 @@ export function SectionClosing({ data }: SectionClosingProps) {
           transition: `opacity 1s cubic-bezier(0.25,0.1,0.25,1) ${delay}ms, transform 1s cubic-bezier(0.25,0.1,0.25,1) ${delay}ms`,
         };
 
+  const isSpace = data.theme === "space";
+
   return (
     <div
       ref={ref}
@@ -55,7 +57,11 @@ export function SectionClosing({ data }: SectionClosingProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#060608",
+        // Space theme: translucent scrim so the deck's starfield
+        // shows through the closing/footer slide too. A touch
+        // darker than the carousel scrim so the centered logo +
+        // text stay legible against the busier corner planets.
+        backgroundColor: isSpace ? "rgba(6,6,8,0.3)" : "#060608",
         position: "relative",
       }}
     >
