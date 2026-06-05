@@ -92,14 +92,11 @@ export const ChapterStrip = memo(function ChapterStrip({
   const chapterTitle =
     divider?.title || sections[0]?.section.chapter || null;
 
-  // Spacer height — the carousel is now ONE viewport plus a short
-  // "catch" zone (~0.3 vh). Scrolling into it briefly pins the
-  // sticky panel (about half a wheel-notch), then you scroll past to
-  // the next section — without stepping through every image. Images
-  // are browsed via the thumbnail track + auto-advance instead.
-  const catchExtra = 0.3;
-  const spacerHeight =
-    vh > 0 ? vh * (1 + catchExtra) : `${100 + catchExtra * 100}vh`;
+  // Spacer height — exactly one viewport. The carousel scrolls past
+  // like any normal section (no snap/catch — that felt awkward).
+  // Images are browsed via the thumbnail track + auto-advance, not
+  // by scrolling.
+  const spacerHeight = vh > 0 ? vh : "100vh";
 
   // Selecting an image is now just local state — no container scroll.
   const navigateToItem = useCallback((itemIndex: number) => {
@@ -123,10 +120,7 @@ export const ChapterStrip = memo(function ChapterStrip({
             ? `${spacerHeight}px`
             : spacerHeight,
         position: "relative",
-        // Brief catch: the strip snaps to the top of the viewport,
-        // so scrolling in pauses on it for a moment — then the
-        // container's `proximity` snap lets you keep scrolling past.
-        scrollSnapAlign: "start",
+        // No scroll-snap on the carousel — it scrolls past freely.
       }}
     >
       <div
