@@ -1215,43 +1215,82 @@ export default function EditPresentationPage() {
                               ))}
                             </select>
                           )}
-                          <input
-                            type="text"
-                            defaultValue={section.title || ""}
-                            placeholder={
-                              section.type === "panorama"
-                                ? "Room name (e.g. Lobby) — shown in the tour"
-                                : "Caption title (optional)"
-                            }
-                            onBlur={(e) =>
-                              handleUpdateSection(section.id, {
-                                title: e.target.value || null,
-                              })
-                            }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            defaultValue={section.description || ""}
-                            placeholder="Caption description (optional)"
-                            onBlur={(e) =>
-                              handleUpdateSection(section.id, {
-                                description: e.target.value || null,
-                              })
-                            }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            defaultValue={section.chapter || ""}
-                            placeholder="Chapter (e.g. Main Lobby)"
-                            onBlur={(e) =>
-                              handleUpdateSection(section.id, {
-                                chapter: e.target.value || null,
-                              })
-                            }
-                            className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
-                          />
+                          {section.type === "panorama" ? (
+                            // Panorama: pick which ROOM this pano belongs
+                            // to from the rooms you've placed on the floor
+                            // plan — no free-text. The room's name is what
+                            // shows in the tour. (No caption/chapter for
+                            // panoramas; they collapse into one tour slide.)
+                            <div className="sm:col-span-2">
+                              <select
+                                value={
+                                  ((section.metadata as Record<string, unknown> | null)
+                                    ?.roomId as string) || ""
+                                }
+                                onChange={(e) =>
+                                  handleUpdateSection(section.id, {
+                                    metadata: {
+                                      ...((section.metadata as Record<
+                                        string,
+                                        unknown
+                                      > | null) || {}),
+                                      roomId: e.target.value || null,
+                                    },
+                                  })
+                                }
+                                className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+                              >
+                                <option value="">— Which room? —</option>
+                                {tourRooms.map((r) => (
+                                  <option key={r.id} value={r.id}>
+                                    {r.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {tourRooms.length === 0 && (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  No rooms yet — add them on the Floor Plan
+                                  above, then assign this pano to one.
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <input
+                                type="text"
+                                defaultValue={section.title || ""}
+                                placeholder="Caption title (optional)"
+                                onBlur={(e) =>
+                                  handleUpdateSection(section.id, {
+                                    title: e.target.value || null,
+                                  })
+                                }
+                                className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                defaultValue={section.description || ""}
+                                placeholder="Caption description (optional)"
+                                onBlur={(e) =>
+                                  handleUpdateSection(section.id, {
+                                    description: e.target.value || null,
+                                  })
+                                }
+                                className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                defaultValue={section.chapter || ""}
+                                placeholder="Chapter (groups image slides in the timeline)"
+                                onBlur={(e) =>
+                                  handleUpdateSection(section.id, {
+                                    chapter: e.target.value || null,
+                                  })
+                                }
+                                className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none"
+                              />
+                            </>
+                          )}
                         </div>
                       )}
 

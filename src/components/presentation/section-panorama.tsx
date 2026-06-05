@@ -141,30 +141,36 @@ export function SectionPanorama({
   // to both the section's `title` (admin-set Room Name) and the
   // backing file. Downstream components (minimap, room list, top
   // bar) just read room.label.
-  const tourRooms = useMemo(
-    () =>
-      walkthroughActive
-        ? data.sections
-            .filter((s) => s.type === "panorama" && s.file)
-            .sort((a, b) => a.order - b.order)
-            .map((s, idx) => {
-              const meta = (s.metadata || {}) as PanoramaMetadata;
-              const fromFile = s.file!.originalName.replace(/\.[^.]+$/, "");
-              const label =
-                meta.roomLabel?.trim() ||
-                s.title?.trim() ||
-                fromFile ||
-                `Room ${idx + 1}`;
-              return {
-                sectionId: s.id,
-                imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
-                metadata: meta,
-                label,
-              };
-            })
-        : [],
-    [walkthroughActive, data.sections, data.accessToken]
-  );
+  const tourRooms = useMemo(() => {
+    if (!walkthroughActive) return [];
+    // Resolve a pano's display name from its assigned room first
+    // (the dropdown sets metadata.roomId → TourRoom.name), then fall
+    // back to legacy roomLabel / section title / filename.
+    const storedRooms = readTourRooms(data.tourRooms);
+    const roomNameById = new Map(storedRooms.map((r) => [r.id, r.name]));
+    return data.sections
+      .filter((s) => s.type === "panorama" && s.file)
+      .sort((a, b) => a.order - b.order)
+      .map((s, idx) => {
+        const meta = (s.metadata || {}) as PanoramaMetadata;
+        const fromRoom = meta.roomId
+          ? roomNameById.get(meta.roomId)?.trim()
+          : undefined;
+        const fromFile = s.file!.originalName.replace(/\.[^.]+$/, "");
+        const label =
+          fromRoom ||
+          meta.roomLabel?.trim() ||
+          s.title?.trim() ||
+          fromFile ||
+          `Room ${idx + 1}`;
+        return {
+          sectionId: s.id,
+          imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
+          metadata: meta,
+          label,
+        };
+      });
+  }, [walkthroughActive, data.sections, data.accessToken, data.tourRooms]);
 
   /** Logical tour rooms (one per floor plan dot). Pulled from the
    *  presentation's tourRooms when present; falls back to deriving
