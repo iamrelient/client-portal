@@ -129,6 +129,56 @@ export function SectionPanorama({
     ? `/api/present/${data.accessToken}/asset/${section.file.id}`
     : null;
 
+  // ── Prefetch tour images while the client dwells on the cover ──
+  // The *first* panorama load is the slow one: a cache-miss has to
+  // round-trip to Google Drive (1–4 s). By warming the browser + edge
+  // cache the moment the tour cover scrolls into view — while the
+  // client is still reading the play screen — the scene is already
+  // downloaded by the time they click in, so the click feels instant.
+  // No quality change: this fetches the exact same 4K viewer image the
+  // tour would load anyway, just earlier. Order: the entry scene and
+  // the floor-plan images (shown first in the start-on-map chooser) go
+  // first; the remaining rooms follow so hotspot/room jumps are warm
+  // too. On Data Saver / slow links we only warm the entry scene.
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (!visible || prefetchedRef.current) return;
+    prefetchedRef.current = true;
+
+    const warm = (url: string) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+    };
+
+    // 1. Entry scene — what loads the instant they click (non-map start).
+    if (assetUrl) warm(assetUrl);
+
+    // 2. Floor-plan images — shown first when start-on-map is enabled.
+    for (const r of readTourRooms(data.tourRooms)) {
+      if (r.floorPlanImageFileId) {
+        warm(`/api/present/${data.accessToken}/asset/${r.floorPlanImageFileId}`);
+      }
+    }
+
+    // 3. The rest of the rooms — skip on Data Saver / slow connections.
+    const conn = (
+      navigator as Navigator & {
+        connection?: { saveData?: boolean; effectiveType?: string };
+      }
+    ).connection;
+    const frugal =
+      conn?.saveData === true ||
+      (conn?.effectiveType ? /2g|3g/.test(conn.effectiveType) : false);
+    if (!frugal) {
+      for (const s of data.sections) {
+        if (s.type === "panorama" && s.file && s.id !== section.id) {
+          warm(`/api/present/${data.accessToken}/asset/${s.file.id}`);
+        }
+      }
+    }
+  }, [visible, assetUrl, data.sections, data.accessToken, data.tourRooms, section.id]);
+
   // Every panorama in the deck becomes a scene in the walkthrough.
   // Sorted by section order so the room list reads top-to-bottom the
   // way the admin authored it. Memoized so PanoramaWalkthrough's
