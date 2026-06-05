@@ -454,20 +454,52 @@ export function PanoramaEditor({
 
   // Handle click-to-place (new), click-to-reposition (existing), or
   // click-to-place-a-link (precise doorway toward a rail target).
+  //
+  // Pannellum is a draggable viewer with drag *momentum*: after a pan
+  // the view keeps coasting for a moment after you release. A plain
+  // `click` handler reads mouseEventToCoords at mouseup — by which time
+  // the view may have drifted — so the marker landed where the view
+  // *ended up*, not where the admin pressed ("shifts weirdly / can't
+  // pinpoint where I'm clicking"). Instead we capture the coordinate at
+  // mousedown: pressing halts any momentum, so the view is stable and
+  // the point is exactly under the cursor. We only commit on mouseup if
+  // the pointer barely moved — a tap places, a real drag still lets the
+  // admin look around without dropping a marker.
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !ready) return;
     if (!placingHotspot && !repositioningHotspotId && !linkingTargetId) return;
 
-    function handleClick(e: MouseEvent) {
+    // Movement (px) beyond which a press counts as a look-around drag,
+    // not a placement tap.
+    const DRAG_THRESHOLD = 6;
+    let downCoords: [number, number] | null = null;
+    let downX = 0;
+    let downY = 0;
+
+    function handleDown(e: MouseEvent) {
       const viewer = viewerRef.current;
       if (!viewer) return;
-      const coords = viewer.mouseEventToCoords(e);
+      downX = e.clientX;
+      downY = e.clientY;
+      // Snapshot the coordinate at the stable press point, before any
+      // drag/momentum can move the view.
+      downCoords = viewer.mouseEventToCoords(e) ?? null;
+    }
+
+    function handleUp(e: MouseEvent) {
+      const coords = downCoords;
+      downCoords = null;
       if (!coords) return;
+      const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+      // A deliberate pan — leave the view where the admin dragged it,
+      // don't drop a marker.
+      if (moved > DRAG_THRESHOLD) return;
+
       const [pitch, yaw] = coords;
 
       if (linkingTargetId) {
-        // Place the navigation link exactly where the admin clicked,
+        // Place the navigation link exactly where the admin pressed,
         // toward the rail pano they picked. commitLink persists +
         // mirrors the reverse hotspot + switches editor.
         const target = linkingTargetId;
@@ -477,7 +509,7 @@ export function PanoramaEditor({
       }
 
       if (repositioningHotspotId) {
-        // Move the existing hotspot to the clicked pitch/yaw, keeping
+        // Move the existing hotspot to the pressed pitch/yaw, keeping
         // everything else (label, target, type). Re-open its editor.
         const id = repositioningHotspotId;
         setMeta((prev) => ({
@@ -496,8 +528,12 @@ export function PanoramaEditor({
       setPlacingHotspot(false);
     }
 
-    el.addEventListener("click", handleClick);
-    return () => el.removeEventListener("click", handleClick);
+    el.addEventListener("mousedown", handleDown);
+    el.addEventListener("mouseup", handleUp);
+    return () => {
+      el.removeEventListener("mousedown", handleDown);
+      el.removeEventListener("mouseup", handleUp);
+    };
   }, [ready, placingHotspot, repositioningHotspotId, linkingTargetId]);
 
   // Sync the editable hotspot list into Pannellum so the admin sees
