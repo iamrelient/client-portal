@@ -44,6 +44,10 @@ interface FilePickerModalProps {
    *  Defaults to true since every current call site is the presentation
    *  editor. */
   uploadIsPresentationAsset?: boolean;
+  /** Restrict the grid to 360° panoramas only (isPanorama files).
+   *  Used when picking a panorama for the tour — normal flat images
+   *  aren't valid 360 sources and just clutter the choices. */
+  onlyPanoramas?: boolean;
   /** Receives an array of selected file ids. In single-select mode it
    *  has exactly one element. */
   onPick: (fileIds: string[]) => void;
@@ -89,6 +93,7 @@ export function FilePickerModal({
   multiSelect = false,
   allowUpload = true,
   uploadIsPresentationAsset = true,
+  onlyPanoramas = false,
   onPick,
   onClose,
 }: FilePickerModalProps) {
@@ -130,7 +135,13 @@ export function FilePickerModal({
    *  again after every successful upload so the grid stays current. */
   async function refreshFiles() {
     try {
-      const res = await fetch(`/api/projects/${projectId}/files`);
+      // Include presentation-only assets — the picker lives in the
+      // presentation editor, where bulk-uploaded panoramas (flagged
+      // isPresentationAsset) need to be selectable. Without this they
+      // upload fine but never reappear in the grid.
+      const res = await fetch(
+        `/api/projects/${projectId}/files?includePresentationAssets=true`
+      );
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFiles(Array.isArray(data) ? data : []);
@@ -376,8 +387,11 @@ export function FilePickerModal({
     const q = query.trim().toLowerCase();
     return files
       .filter((f) => matchesAccept(f.mimeType, accept))
+      // Tour panorama picks: only show 360° images. Flat renders
+      // aren't valid equirectangular sources and just add noise.
+      .filter((f) => (onlyPanoramas ? !!f.isPanorama : true))
       .filter((f) => (q ? f.originalName.toLowerCase().includes(q) : true));
-  }, [files, accept, query]);
+  }, [files, accept, query, onlyPanoramas]);
 
   const anyUploadInFlight = uploads.some((u) => u.status === "uploading");
   const completedUploads = uploads.filter((u) => u.status === "done").length;
@@ -488,7 +502,9 @@ export function FilePickerModal({
               <p>
                 {query
                   ? "No matches for that search."
-                  : "No files in this project match the expected type."}
+                  : onlyPanoramas
+                    ? "No 360° panoramas yet — upload equirectangular (2:1) images to add them."
+                    : "No files in this project match the expected type."}
               </p>
               {allowUpload && !query && (
                 <button

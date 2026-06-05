@@ -9,7 +9,7 @@ import sharp from "sharp";
 import { randomBytes } from "crypto";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
   const session = await getServerSession(authOptions);
@@ -19,12 +19,24 @@ export async function GET(
   }
 
   try {
+    // Presentation-only uploads (isPresentationAsset) are hidden from
+    // the project's main file tree so they don't clutter what the
+    // client sees. BUT the presentation editor + its file picker need
+    // to see them — that's where they were uploaded and where they
+    // get assigned to panorama sections. Callers in that context pass
+    // ?includePresentationAssets=true. Without it the old behavior
+    // (hide them) holds, so the client-facing file manager is
+    // unaffected.
+    const url = new URL(req.url);
+    const includePresentationAssets =
+      url.searchParams.get("includePresentationAssets") === "true";
+
     const files = await prisma.file.findMany({
       where: {
         projectId: params.id,
-        // Presentation-only uploads live on the same project but should be
-        // hidden from the project's file list.
-        isPresentationAsset: false,
+        ...(includePresentationAssets
+          ? {}
+          : { isPresentationAsset: false }),
       },
       select: {
         id: true,

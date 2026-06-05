@@ -133,6 +133,8 @@ export default function EditPresentationPage() {
     accept: string;
     title: string;
     multiSelect: boolean;
+    /** Restrict the grid to 360° panoramas (isPanorama files). */
+    onlyPanoramas?: boolean;
     onPick: (fileIds: string[]) => void;
     /** Called when the modal closes without a pick (X / Esc / backdrop)
      *  so Promise-wrapped callers can resolve to null. */
@@ -191,8 +193,12 @@ export default function EditPresentationPage() {
         setTourRooms(readTourRooms(data.tourRooms));
         setLoading(false);
 
-        // Load project files
-        fetch(`/api/projects/${data.project.id}/files`)
+        // Load project files. Include presentation-only assets so
+        // panoramas uploaded via the picker / bulk-add (flagged
+        // isPresentationAsset) show in the section dropdowns + map.
+        fetch(
+          `/api/projects/${data.project.id}/files?includePresentationAssets=true`
+        )
           .then((r) => r.json())
           .then((files) => {
             if (Array.isArray(files)) {
@@ -344,7 +350,8 @@ export default function EditPresentationPage() {
    *  if the modal was closed without a pick. Single-select for now. */
   function triggerPickerAsync(
     accept: string,
-    title: string
+    title: string,
+    opts?: { onlyPanoramas?: boolean }
   ): Promise<string[] | null> {
     let resolved = false;
     return new Promise((resolve) => {
@@ -352,6 +359,7 @@ export default function EditPresentationPage() {
         accept,
         title,
         multiSelect: false,
+        onlyPanoramas: opts?.onlyPanoramas,
         onPick: (ids) => {
           if (resolved) return;
           resolved = true;
@@ -371,7 +379,8 @@ export default function EditPresentationPage() {
    *  bulk-add-panoramas flow to batch-create sections. */
   function triggerPickerAsyncMulti(
     accept: string,
-    title: string
+    title: string,
+    opts?: { onlyPanoramas?: boolean }
   ): Promise<string[] | null> {
     let resolved = false;
     return new Promise((resolve) => {
@@ -379,6 +388,7 @@ export default function EditPresentationPage() {
         accept,
         title,
         multiSelect: true,
+        onlyPanoramas: opts?.onlyPanoramas,
         onPick: (ids) => {
           if (resolved) return;
           resolved = true;
@@ -411,8 +421,10 @@ export default function EditPresentationPage() {
 
       if (res.ok) {
         const data = await res.json();
-        // Refresh file list
-        const filesRes = await fetch(`/api/projects/${pres.project.id}/files`);
+        // Refresh file list (include presentation-only assets).
+        const filesRes = await fetch(
+          `/api/projects/${pres.project.id}/files?includePresentationAssets=true`
+        );
         if (filesRes.ok) {
           const files = await filesRes.json();
           if (Array.isArray(files)) {
@@ -531,7 +543,8 @@ export default function EditPresentationPage() {
     try {
       const ids = await triggerPickerAsyncMulti(
         "image/*",
-        "Upload or pick panoramas to add"
+        "Upload or pick panoramas to add",
+        { onlyPanoramas: true }
       );
       if (!ids || ids.length === 0) return;
 
@@ -1494,7 +1507,8 @@ export default function EditPresentationPage() {
                           // new panorama section and return its id.
                           const ids = await triggerPickerAsync(
                             "image/*",
-                            "Pick a 360° panorama for the new room"
+                            "Pick a 360° panorama for the new room",
+                            { onlyPanoramas: true }
                           );
                           const fileId = ids?.[0];
                           if (!fileId) return null;
@@ -1967,6 +1981,7 @@ export default function EditPresentationPage() {
           accept={picker.accept}
           title={picker.title}
           multiSelect={picker.multiSelect}
+          onlyPanoramas={picker.onlyPanoramas}
           onPick={picker.onPick}
           onClose={() => {
             if (picker.onCancel) picker.onCancel();
