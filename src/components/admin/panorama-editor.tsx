@@ -125,52 +125,71 @@ function buildEditorHotspotConfig(
     // element doesn't attach it to anything (that mistake is why the
     // markers were invisible). We append our custom content here.
     createTooltipFunc: (hotSpotDiv: HTMLElement) => {
+      // ZERO-SIZE anchor. Pannellum centers the hotspot element on the
+      // (pitch,yaw) point using the element's own size — so a normal
+      // block (circle + label) gets its *block center* placed on the
+      // point, landing the visible dot above/left of where you
+      // clicked. A 0×0 wrapper has no size to offset, so its origin
+      // sits exactly on the point; the dot is then centered on that
+      // origin with its own translate(-50%,-50%), and the label is
+      // absolutely positioned below (out of flow, so it can't shift
+      // the anchor). Net: the dot lands precisely where you clicked.
       const wrapper = document.createElement("div");
-      // Clicking a marker selects it for editing (opens the form +
-      // its Edit / Move / Delete actions). This is the intuitive
-      // "click the thing to change it" behavior.
       wrapper.style.cssText = `
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        transform: translate(-14px, -14px);
+        position: relative;
+        width: 0;
+        height: 0;
         pointer-events: ${onSelectHotspot ? "auto" : "none"};
         cursor: ${onSelectHotspot ? "pointer" : "default"};
       `;
       wrapper.title = onSelectHotspot
         ? "Click to edit this hotspot"
         : hs.label;
-      wrapper.innerHTML = `
-        <div style="
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          border: 2px solid white;
-          background: ${isNav ? "rgba(59,130,246,0.85)" : "rgba(245,158,11,0.85)"};
-          box-shadow: 0 2px 12px rgba(0,0,0,0.5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-size: 13px;
-          font-weight: 700;
-          line-height: 1;
-        ">${isNav ? "↗" : "i"}</div>
-        <span style="
-          margin-top: 4px;
-          font-size: 10px;
-          color: white;
-          background: rgba(0,0,0,0.6);
-          padding: 2px 6px;
-          border-radius: 3px;
-          white-space: nowrap;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-          max-width: 160px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        ">${(displayLabel ?? hs.label).replace(/[<>&]/g, "")}</span>
+
+      const dot = document.createElement("div");
+      dot.style.cssText = `
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform: translate(-50%, -50%);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background: ${isNav ? "rgba(59,130,246,0.9)" : "rgba(245,158,11,0.9)"};
+        box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1;
       `;
+      dot.textContent = isNav ? "↗" : "i";
+
+      const label = document.createElement("span");
+      label.style.cssText = `
+        position: absolute;
+        left: 0;
+        top: 20px;
+        transform: translateX(-50%);
+        font-size: 10px;
+        color: white;
+        background: rgba(0,0,0,0.6);
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+      label.textContent = displayLabel ?? hs.label;
+
+      wrapper.appendChild(dot);
+      wrapper.appendChild(label);
 
       if (onSelectHotspot) {
         wrapper.addEventListener("click", (e) => {
@@ -381,15 +400,15 @@ export function PanoramaEditor({
       const pannellum = (window as unknown as { pannellum: PannellumGlobal })
         .pannellum;
 
-      // Build the initial hotspot configs from current meta so they
-      // appear the instant the panorama image finishes loading — no
-      // race between Pannellum init and our sync useEffect.
-      const initialHotspots = (meta.hotspots ?? []).map((hs) =>
-        buildEditorHotspotConfig(hs, handleSelectHotspot, editorLabelFor(hs))
-      );
-      mountedHotspotIdsRef.current = new Set(
-        (meta.hotspots ?? []).map((h) => h.id)
-      );
+      // IMPORTANT: do NOT seed hotspots via the initial config.
+      // Hotspots are managed solely by the sync effect (addHotSpot /
+      // removeHotSpot, keyed by id). Adding them here too created a
+      // second copy per hotspot — Pannellum then held a config-copy
+      // AND an addHotSpot-copy, so deleting/moving one left the other
+      // behind as a ghost. Single source of truth = no ghosts. The
+      // sync effect fires the instant `ready` flips (on load), so
+      // there's no visible delay.
+      mountedHotspotIdsRef.current = new Set();
 
       viewerRef.current = pannellum.viewer(containerRef.current!, {
         type: "equirectangular",
@@ -404,7 +423,7 @@ export function PanoramaEditor({
         draggable: true,
         pitch: meta.initialView?.pitch || 0,
         yaw: meta.initialView?.yaw || 180,
-        hotSpots: initialHotspots,
+        hotSpots: [],
       });
 
       // Wait for the image to actually finish loading before flagging

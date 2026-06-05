@@ -176,12 +176,17 @@ function createNavigationTooltip(
   });
 
   // Arrow SVG — larger + stronger fill/stroke so it reads against
-  // busy panoramas instead of blending in.
+  // busy panoramas instead of blending in. The arrow sits in an
+  // anchor span that centers it exactly on the hotspot point (see
+  // the zero-size .pano-hs-nav wrapper); the svg's own bob animation
+  // is independent of that centering.
   wrapper.innerHTML = `
-    <svg width="48" height="48" viewBox="0 0 36 36" fill="none" class="pano-hs-nav-arrow">
-      <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.95)" stroke-width="2" fill="rgba(0,0,0,0.35)"/>
-      <path d="M18 9 L25 21 L18 17.5 L11 21 Z" fill="rgba(255,255,255,0.98)"/>
-    </svg>
+    <span class="pano-hs-nav-anchor">
+      <svg width="48" height="48" viewBox="0 0 36 36" fill="none" class="pano-hs-nav-arrow">
+        <circle cx="18" cy="18" r="16" stroke="rgba(255,255,255,0.95)" stroke-width="2" fill="rgba(0,0,0,0.35)"/>
+        <path d="M18 9 L25 21 L18 17.5 L11 21 Z" fill="rgba(255,255,255,0.98)"/>
+      </svg>
+    </span>
     <span class="pano-hs-nav-label">${hotspot.label}</span>
   `;
 
@@ -234,10 +239,12 @@ function createFloorDisc(
   });
   const sy = floorForeshorten(target.pitch);
   // Same-room viewpoints: just the circle, no text label (the title
-  // attr still gives a hover tooltip for accessibility). The room
-  // name would be redundant — you're already in that room.
+  // attr still gives a hover tooltip for accessibility). The disc is
+  // centered on the point via translate(-50%,-50%) (zero-size
+  // wrapper), with the floor foreshorten scaleY folded into the same
+  // transform.
   wrapper.innerHTML = `
-    <div class="pano-hs-floor-disc" style="transform: scaleY(${sy.toFixed(
+    <div class="pano-hs-floor-disc" style="transform: translate(-50%, -50%) scaleY(${sy.toFixed(
       3
     )});">
       <div class="pano-hs-floor-ring"></div>
@@ -724,20 +731,34 @@ export const PanoramaViewer = forwardRef<
 
       {/* Hotspot + default UI styles */}
       <style>{`
-        /* Navigation hotspot */
+        /* Navigation hotspot — ZERO-SIZE anchor so the arrow centers
+           exactly on the (pitch,yaw) point. Pannellum centers the
+           hotspot element by its own size; a 0×0 wrapper has none to
+           offset, so children placed via translate(-50%,-50%) land on
+           the point precisely. */
         .pano-hs-nav {
+          position: relative;
+          width: 0;
+          height: 0;
           cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          transform: translate(-24px, -24px);
+        }
+        .pano-hs-nav-anchor {
+          position: absolute;
+          left: 0;
+          top: 0;
+          transform: translate(-50%, -50%);
+          display: block;
         }
         .pano-hs-nav-arrow {
+          display: block;
           animation: pano-nav-bob 2s ease-in-out infinite;
           filter: drop-shadow(0 2px 10px rgba(0,0,0,0.7));
         }
         .pano-hs-nav-label {
-          margin-top: 6px;
+          position: absolute;
+          left: 0;
+          top: 30px;
+          transform: translateX(-50%);
           white-space: nowrap;
           font-size: 0.8125rem;
           font-weight: 500;
@@ -748,29 +769,30 @@ export const PanoramaViewer = forwardRef<
           padding: 4px 12px;
           border-radius: 4px;
           box-shadow: 0 2px 10px rgba(0,0,0,0.5);
-          /* Always visible — the room arrow used to hide its label
-             until hover, which made it blend in. */
           opacity: 1;
           pointer-events: none;
         }
         @media (pointer: coarse) {
-          .pano-hs-nav { transform: translate(-28px, -28px); }
           .pano-hs-nav-arrow { width: 56px; height: 56px; }
+          .pano-hs-nav-label { top: 34px; }
         }
         @keyframes pano-nav-bob {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
         }
 
-        /* Info hotspot */
+        /* Info hotspot — zero-size anchor, same precise centering. */
         .pano-hs-info {
+          position: relative;
+          width: 0;
+          height: 0;
           cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          transform: translate(-14px, -14px);
         }
         .pano-hs-info-circle {
+          position: absolute;
+          left: 0;
+          top: 0;
+          transform: translate(-50%, -50%);
           width: 28px;
           height: 28px;
           border-radius: 50%;
@@ -787,7 +809,10 @@ export const PanoramaViewer = forwardRef<
           backdrop-filter: blur(4px);
         }
         .pano-hs-info-label {
-          margin-top: 4px;
+          position: absolute;
+          left: 0;
+          top: 22px;
+          transform: translateX(-50%);
           white-space: nowrap;
           font-size: 0.6875rem;
           font-weight: 300;
@@ -805,9 +830,8 @@ export const PanoramaViewer = forwardRef<
           opacity: 1;
         }
         @media (pointer: coarse) {
-          .pano-hs-info { transform: translate(-22px, -22px); }
           .pano-hs-info-circle { width: 44px; height: 44px; font-size: 20px; }
-          .pano-hs-info-label { opacity: 1; }
+          .pano-hs-info-label { opacity: 1; top: 30px; }
         }
         @keyframes pano-info-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.15); }
@@ -815,21 +839,24 @@ export const PanoramaViewer = forwardRef<
         }
 
         /* Floor-disc destination marker (same-room viewpoints).
-           The disc element is foreshortened inline (scaleY) to match
-           the floor perspective; here we just style the ring + dot
-           and pulse. */
+           Zero-size anchor; the disc is centered + foreshortened via
+           an inline transform (translate(-50%,-50%) scaleY). */
         .pano-hs-floor {
+          position: relative;
+          width: 0;
+          height: 0;
           cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          transform: translate(-26px, -26px);
         }
         .pano-hs-floor-disc {
+          position: absolute;
+          left: 0;
+          top: 0;
           width: 52px;
           height: 52px;
-          position: relative;
           transform-origin: center center;
+          /* transform (translate(-50%,-50%) scaleY) set inline —
+             centers the disc on the anchor + applies floor
+             foreshorten in one shot. */
         }
         .pano-hs-floor-ring {
           position: absolute;
