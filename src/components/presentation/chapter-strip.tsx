@@ -46,12 +46,35 @@ export const ChapterStrip = memo(function ChapterStrip({
 
   const totalItems = sections.length;
 
-  // Active index from scroll progress
-  const activeIndex = useMemo(() => {
-    if (totalItems === 0) return 0;
-    const idx = Math.floor(progress * totalItems);
-    return Math.max(0, Math.min(idx, totalItems - 1));
-  }, [progress, totalItems]);
+  // Active image is now local state (not scroll-driven). Scrolling no
+  // longer steps through every image — the strip catches briefly then
+  // lets you scroll past. Images are browsed via the thumbnail track
+  // and a gentle auto-advance. `progress` is intentionally unused now.
+  void progress;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Keep the index valid if the section set shrinks.
+  useEffect(() => {
+    if (activeIndex > totalItems - 1) setActiveIndex(0);
+  }, [totalItems, activeIndex]);
+
+  // Auto-advance only when the whole strip is images (a gallery) —
+  // mixed strips (a video/panorama in the chapter) stay manual so we
+  // don't skip past playing media. Pauses on hover.
+  const allImages = useMemo(
+    () =>
+      sections.length > 0 &&
+      sections.every((s) => s.section.type === "image"),
+    [sections]
+  );
+  useEffect(() => {
+    if (!allImages || totalItems <= 1 || paused) return;
+    const t = setInterval(() => {
+      setActiveIndex((i) => (i + 1) % totalItems);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [allImages, totalItems, paused]);
 
   const activeSection = sections[activeIndex]?.section;
   const isActiveImage = activeSection?.type === "image";
@@ -69,48 +92,19 @@ export const ChapterStrip = memo(function ChapterStrip({
   const chapterTitle =
     divider?.title || sections[0]?.section.chapter || null;
 
-  // Spacer height — controls how much scrolling it takes to step
-  // through the carousel. Was `totalItems * vh` (one full viewport
-  // per image), which felt like an endurance test for a 6-image
-  // chapter (600vh of scroll to get past it). New formula gives
-  // the first image a full viewport (so it gets focused attention
-  // when scrolling in) and then half a viewport per additional
-  // image. A 6-image strip is now 350vh instead of 600vh — ~42%
-  // less wheel-spin, the carousel still feels paced rather than
-  // flashy.
-  const perItemAfterFirst = 0.5;
+  // Spacer height — the carousel is now ONE viewport plus a short
+  // "catch" zone (~0.3 vh). Scrolling into it briefly pins the
+  // sticky panel (about half a wheel-notch), then you scroll past to
+  // the next section — without stepping through every image. Images
+  // are browsed via the thumbnail track + auto-advance instead.
+  const catchExtra = 0.3;
   const spacerHeight =
-    vh > 0
-      ? vh + (totalItems - 1) * vh * perItemAfterFirst
-      : `${100 + (totalItems - 1) * perItemAfterFirst * 100}vh`;
+    vh > 0 ? vh * (1 + catchExtra) : `${100 + catchExtra * 100}vh`;
 
-  // Navigate to a specific item index by scrolling the parent container
-  const navigateToItem = useCallback(
-    (itemIndex: number) => {
-      const segmentEl = document.querySelector(
-        `[data-segment-index="${segmentIndex}"]`
-      ) as HTMLElement;
-      if (!segmentEl?.parentElement) return;
-
-      const container = segmentEl.parentElement;
-      const scrollable =
-        segmentEl.getBoundingClientRect().height - window.innerHeight;
-      const targetProgress =
-        totalItems > 1 ? itemIndex / (totalItems - 1) : 0;
-
-      container.scrollTo({
-        top: segmentEl.offsetTop + targetProgress * Math.max(0, scrollable),
-        behavior: "smooth",
-      });
-    },
-    [segmentIndex, totalItems]
-  );
-
-  // Arrow-key navigation is handled globally in PresentationShell so it
-  // can walk through every section — across chapter boundaries and into
-  // fullscreen sections (hero, closing, 3D). The per-chapter handler
-  // that used to live here would have fought the global one.
-  void navigateToItem;
+  // Selecting an image is now just local state — no container scroll.
+  const navigateToItem = useCallback((itemIndex: number) => {
+    setActiveIndex(itemIndex);
+  }, []);
 
   // Measure rendered image left offset within hero container
   const measureImageOffset = useCallback((img: HTMLImageElement | null) => {
@@ -129,10 +123,16 @@ export const ChapterStrip = memo(function ChapterStrip({
             ? `${spacerHeight}px`
             : spacerHeight,
         position: "relative",
+        // Brief catch: the strip snaps to the top of the viewport,
+        // so scrolling in pauses on it for a moment — then the
+        // container's `proximity` snap lets you keep scrolling past.
+        scrollSnapAlign: "start",
       }}
     >
       <div
         className="sticky top-0 h-screen w-screen overflow-hidden"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
         style={{
           // Space theme: let the starfield show through behind the
           // carousel. A faint translucent scrim keeps image contrast

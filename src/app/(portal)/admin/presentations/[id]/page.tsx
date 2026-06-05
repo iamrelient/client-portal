@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Eye,
   Upload,
   Settings2,
@@ -722,6 +723,24 @@ export default function EditPresentationPage() {
     await handleUpdateSection(section.id, { removeFileIds: [fileId] });
   }
 
+  /** Move a carousel image one slot left/right. Sends the full
+   *  reordered list (setFileIds) so the server persists the new
+   *  order + syncs section.fileId to the new first image. */
+  async function moveImageInSection(
+    section: SectionRow,
+    fileId: string,
+    dir: "left" | "right"
+  ) {
+    const ids = sectionImageIds(section);
+    const i = ids.indexOf(fileId);
+    if (i < 0) return;
+    const j = dir === "left" ? i - 1 : i + 1;
+    if (j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    [next[i], next[j]] = [next[j], next[i]];
+    await handleUpdateSection(section.id, { setFileIds: next });
+  }
+
   async function handleUpdateSection(
     sectionId: string,
     updates: Record<string, unknown>
@@ -1221,7 +1240,7 @@ export default function EditPresentationPage() {
                             return (
                               <div className="sm:col-span-2">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  {ids.map((id) => {
+                                  {ids.map((id, imgIdx) => {
                                     const f = projectFiles.find((pf) => pf.id === id);
                                     return (
                                       <div
@@ -1244,6 +1263,32 @@ export default function EditPresentationPage() {
                                         >
                                           <X className="h-3 w-3" />
                                         </button>
+                                        {/* Reorder arrows — appear on hover at the
+                                            bottom edge. Disabled at the ends. */}
+                                        <div className="absolute inset-x-0 bottom-0 flex justify-between px-0.5 pb-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                          <button
+                                            type="button"
+                                            disabled={imgIdx === 0}
+                                            onClick={() =>
+                                              moveImageInSection(section, id, "left")
+                                            }
+                                            className="rounded bg-black/70 px-1 text-white hover:bg-brand-600 disabled:opacity-30"
+                                            title="Move left"
+                                          >
+                                            <ChevronLeft className="h-3 w-3" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={imgIdx === ids.length - 1}
+                                            onClick={() =>
+                                              moveImageInSection(section, id, "right")
+                                            }
+                                            className="rounded bg-black/70 px-1 text-white hover:bg-brand-600 disabled:opacity-30"
+                                            title="Move right"
+                                          >
+                                            <ChevronRight className="h-3 w-3" />
+                                          </button>
+                                        </div>
                                       </div>
                                     );
                                   })}

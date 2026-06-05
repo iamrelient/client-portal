@@ -35,6 +35,7 @@ export async function PATCH(
       metadata,
       appendFileIds,
       removeFileIds,
+      setFileIds,
     } = body;
 
     const data: Record<string, unknown> = {};
@@ -80,6 +81,21 @@ export async function PATCH(
       data.metadata = { ...currentMeta, fileIds: next };
       if (!("fileId" in body)) {
         data.fileId = next[0] ?? null;
+      }
+    }
+
+    // Reorder: set the full ordered fileIds list (carousel drag/move).
+    // Validates membership stays the same set so a stale client can't
+    // accidentally drop images. section.fileId tracks the first id.
+    if (Array.isArray(setFileIds)) {
+      const ordered = (setFileIds as unknown[]).filter(
+        (v): v is string => typeof v === "string"
+      );
+      const currentMeta =
+        (section.metadata as Record<string, unknown> | null) || {};
+      data.metadata = { ...currentMeta, fileIds: ordered };
+      if (!("fileId" in body)) {
+        data.fileId = ordered[0] ?? null;
       }
     }
 
