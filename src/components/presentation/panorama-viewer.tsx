@@ -556,8 +556,9 @@ export const PanoramaViewer = forwardRef<
         return;
       }
       const [pitch] = coords;
-      // Only over the floor (looking down past a small margin).
-      if (pitch > -4) {
+      // Show over the floor (at/below the horizon). The "you can
+      // click the ground here" affordance — Matterport-style.
+      if (pitch > 2) {
         reticle.style.opacity = "0";
         return;
       }
@@ -602,7 +603,14 @@ export const PanoramaViewer = forwardRef<
       }
       if (!coords) return;
       const [pitch, yaw] = coords;
-      // Find the nearest floor target to where they clicked.
+      // Only treat clicks at/below the horizon as floor navigation —
+      // clicking up at the ceiling shouldn't teleport you.
+      if (pitch > 8) return;
+      // Find the nearest floor target to where they clicked, then go.
+      // No tight radius: 3D-Vista-style "click the general direction
+      // and it picks the closest viewpoint." A generous cap (75°)
+      // just avoids navigating when they clicked nearly opposite
+      // every target.
       let best: FloorTarget | null = null;
       let bestDist = Infinity;
       for (const t of targets) {
@@ -612,9 +620,7 @@ export const PanoramaViewer = forwardRef<
           best = t;
         }
       }
-      // ~32° tolerance — clicking the "general area" of the floor
-      // near a viewpoint counts, not just the exact disc.
-      if (best && bestDist < 32) {
+      if (best && bestDist < 75) {
         onNavigationHotspotClick?.(best.sectionId, best.pitch, best.yaw);
       }
     }

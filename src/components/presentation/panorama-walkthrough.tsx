@@ -106,41 +106,75 @@ export function PanoramaWalkthrough({
   // nowhere, stuck on the entry room." Memoizing by `rooms` keeps
   // the reference stable across state-only re-renders.
   const scenes: PanoramaScene[] = useMemo(() => {
-    // Map each pano section → its room id, so we can tell whether a
-    // navigation hotspot points to a viewpoint in the SAME room
-    // (→ floor-disc / click-the-ground navigation) or a different
-    // room (→ keep the arrow, it's a real doorway between spaces).
-    const roomBySection = new Map<string, string | undefined>();
-    for (const r of rooms) {
-      roomBySection.set(r.sectionId, r.metadata.roomId);
-    }
+    // Group panos into rooms. Prefer the explicit roomId; fall back
+    // to matching label (case-insensitive) so "named them both
+    // Lobby" groups even without a room assignment.
+    const roomKey = (r: RoomData) =>
+      r.metadata.roomId?.trim() ||
+      `label:${r.label.trim().toLowerCase()}`;
 
     return rooms.map((room) => {
-      const myRoom = room.metadata.roomId;
+      const myKey = roomKey(room);
       const allHotspots = room.metadata.hotspots ?? [];
 
-      const floorTargets: PanoramaScene["floorTargets"] = [];
+      // Same-room nav hotspots the admin explicitly placed — their
+      // drop pitch/yaw is the exact floor spot toward the target, so
+      // we honor it. Keyed by target section id.
+      const explicit = new Map<
+        string,
+        { pitch: number; yaw: number }
+      >();
       const arrowHotspots: typeof allHotspots = [];
 
       for (const h of allHotspots) {
         if (h.type === "navigation") {
-          const targetRoom = roomBySection.get(h.targetSectionId);
-          const sameRoom =
-            !!myRoom && !!targetRoom && targetRoom === myRoom;
-          if (sameRoom) {
-            // Same room → floor navigation (no arrow).
-            floorTargets.push({
-              sectionId: h.targetSectionId,
-              pitch: h.pitch,
-              yaw: h.yaw,
-              label: h.label,
-            });
-            continue;
+          const target = rooms.find(
+            (r) => r.sectionId === h.targetSectionId
+          );
+          if (target && roomKey(target) === myKey) {
+            explicit.set(h.targetSectionId, { pitch: h.pitch, yaw: h.yaw });
+            continue; // floor nav, not an arrow
           }
         }
         // Cross-room nav + all info hotspots keep their normal style.
         arrowHotspots.push(h);
       }
+
+      // EVERY other pano in the same room becomes a floor target —
+      // no manual wiring required (matches 3D Vista: drop multiple
+      // shots in a room, click the ground to move between them).
+      // Use the explicit drop spot when present; otherwise auto-
+      // place on the floor, spread around the view so several
+      // viewpoints don't stack.
+      const others = rooms.filter(
+        (r) => r.sectionId !== room.sectionId && roomKey(r) === myKey
+      );
+      const baseYaw = room.metadata.initialView?.yaw ?? 0;
+      const floorTargets: PanoramaScene["floorTargets"] = others.map(
+        (o, i) => {
+          const ex = explicit.get(o.sectionId);
+          if (ex) {
+            return {
+              sectionId: o.sectionId,
+              pitch: ex.pitch,
+              yaw: ex.yaw,
+              label: o.label,
+            };
+          }
+          // Auto placement: a single other viewpoint sits straight
+          // ahead on the floor; multiple spread evenly around so
+          // they're distinguishable.
+          const spread =
+            others.length === 1 ? 0 : (i / others.length) * 300 - 150;
+          const yaw = ((baseYaw + spread + 540) % 360) - 180;
+          return {
+            sectionId: o.sectionId,
+            pitch: -38,
+            yaw,
+            label: o.label,
+          };
+        }
+      );
 
       return {
         id: room.sectionId,
