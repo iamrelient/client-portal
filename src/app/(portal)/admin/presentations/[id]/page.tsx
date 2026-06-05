@@ -840,6 +840,64 @@ export default function EditPresentationPage() {
 
   const sections = [...pres.sections].sort((a, b) => a.order - b.order);
 
+  /** Add-section + bulk-add controls. Rendered both above and below
+   *  the section list so a long deck doesn't force a scroll to the
+   *  bottom just to add another section. `edge` only changes which
+   *  border the row carries so it reads cleanly in either spot. */
+  const renderAddControls = (edge: "top" | "bottom") => (
+    <div
+      className={`px-6 py-3 ${
+        edge === "top"
+          ? "border-b border-white/[0.06]"
+          : "border-t border-white/[0.06]"
+      } flex flex-wrap items-center gap-2`}
+    >
+      <select
+        value={addingType}
+        onChange={(e) => setAddingType(e.target.value)}
+        className="block rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
+      >
+        <option value="">Add section...</option>
+        {SECTION_TYPES.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={handleAddSection}
+        disabled={!addingType || addingSectionLoading}
+        className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+      >
+        {addingSectionLoading ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Plus className="h-3 w-3" />
+        )}
+        Add
+      </button>
+
+      <div className="h-4 w-px bg-white/[0.1] mx-1" />
+
+      {/* Bulk panorama add — opens the picker in multi-select +
+          upload mode and creates one panorama section per file in one
+          shot. */}
+      <button
+        onClick={handleBulkAddPanoramas}
+        disabled={bulkAddingPanoramas}
+        title="Upload or pick multiple 360° images at once. Each one becomes its own panorama section."
+        className="inline-flex items-center gap-1 rounded-lg border border-white/[0.15] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/[0.25] disabled:opacity-50 transition-colors"
+      >
+        {bulkAddingPanoramas ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Upload className="h-3 w-3" />
+        )}
+        Bulk add panoramas
+      </button>
+    </div>
+  );
+
   return (
     <div>
       <input
@@ -906,6 +964,9 @@ export default function EditPresentationPage() {
             <div className="px-6 py-4 border-b border-white/[0.06]">
               <h2 className="text-sm font-medium text-slate-100">Sections</h2>
             </div>
+            {/* Top add controls — so a long deck doesn't require
+                scrolling to the bottom to add a section. */}
+            {renderAddControls("top")}
             <div className="divide-y divide-white/[0.06]">
               {sections.map((section, idx) => {
                 const isFixed =
@@ -1648,53 +1709,8 @@ export default function EditPresentationPage() {
               })}
             </div>
 
-            {/* Add section */}
-            <div className="px-6 py-3 border-t border-white/[0.06] flex flex-wrap items-center gap-2">
-              <select
-                value={addingType}
-                onChange={(e) => setAddingType(e.target.value)}
-                className="block rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-1.5 text-xs text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
-              >
-                <option value="">Add section...</option>
-                {SECTION_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddSection}
-                disabled={!addingType || addingSectionLoading}
-                className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-              >
-                {addingSectionLoading ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Plus className="h-3 w-3" />
-                )}
-                Add
-              </button>
-
-              <div className="h-4 w-px bg-white/[0.1] mx-1" />
-
-              {/* Bulk panorama add — opens the picker in multi-select +
-                  upload mode and creates one panorama section per file
-                  in one shot. Designed for the "load all my shots in
-                  before wiring hotspots" workflow. */}
-              <button
-                onClick={handleBulkAddPanoramas}
-                disabled={bulkAddingPanoramas}
-                title="Upload or pick multiple 360° images at once. Each one becomes its own panorama section."
-                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.15] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/[0.25] disabled:opacity-50 transition-colors"
-              >
-                {bulkAddingPanoramas ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Upload className="h-3 w-3" />
-                )}
-                Bulk add panoramas
-              </button>
-            </div>
+            {/* Bottom add controls */}
+            {renderAddControls("bottom")}
           </div>
         </div>
 
