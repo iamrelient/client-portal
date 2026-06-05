@@ -1,28 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 interface SpaceBackgroundProps {
-  /** Visual intensity. "subtle" is what we use for the deck
-   *  background (the panels between slides shouldn't fight the
-   *  content); "rich" turns up the planets / stars for a divider
-   *  hero treatment. */
+  /** Visual intensity. "subtle" for the deck background (panels
+   *  between slides shouldn't fight content); "rich" turns up the
+   *  planets / stars for a divider hero or the loading splash. */
   variant?: "subtle" | "rich";
-  /** Optional seed so two SpaceBackgrounds on the same page draw
-   *  distinct star patterns (e.g. deck background + a divider's
-   *  background). Same seed = same pattern, so re-renders don't
-   *  reshuffle the sky beneath the user. */
+  /** Seed so two backgrounds on one page draw distinct skies.
+   *  Same seed = same pattern (stable across re-renders). */
   seed?: number;
-  /** When true, render absolutely-positioned inside the parent.
-   *  When false (default), render position: fixed covering the
-   *  viewport — the right choice for the deck background. */
+  /** Absolute inside the parent (true) vs fixed to the viewport
+   *  (false, default — the right choice for the deck background). */
   inline?: boolean;
+  /** When provided, the starfield reacts to this element's scroll
+   *  velocity with a "lightspeed" vertical streak — stars elongate
+   *  and brighten while scrolling, snap back when it stops. Pass the
+   *  presentation's scroll container. Omit for a static (twinkle-
+   *  only) field, e.g. on the loading splash. */
+  scrollContainer?: React.RefObject<HTMLElement | null>;
 }
 
-/** Deterministic, seedable PRNG — a tiny LCG. Same seed always
- *  produces the same sequence, so star fields stay put across
- *  re-renders. Plain Math.random would jitter the sky on every
- *  render of a parent and look terrible. */
+/** Deterministic seedable PRNG (tiny LCG) — keeps star fields put
+ *  across re-renders instead of reshuffling on every parent render. */
 function seededRandom(seed: number): () => number {
   let s = seed || 1;
   return () => {
@@ -31,16 +31,11 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-/** Build a CSS `box-shadow` string with N tiny "stars" at random
- *  positions inside a virtual `size × size` canvas. The element
- *  the shadow is attached to is 1×1 px; the shadows do all the
- *  visual work. This trick avoids creating N DOM nodes — one node
- *  paints hundreds of stars with no layout cost.
- *
- *  The shadow grid tiles to fill the viewport via the parent's
- *  background-size + repeat, since shadows themselves don't tile.
- *  Instead we just pick a big enough canvas (default 2000 px) that
- *  most screens are covered; the slight repetition isn't visible. */
+/** Build a box-shadow string of N stars spread in a `size × size`
+ *  canvas *centered on the origin* (coords in [-size/2, +size/2]).
+ *  Centering matters: the layer's anchor sits at the viewport
+ *  center, so a scaleY warp stretches stars symmetrically out from
+ *  the middle of the screen — the classic hyperspace look. */
 function buildStarShadows(
   count: number,
   size: number,
@@ -48,55 +43,41 @@ function buildStarShadows(
   color: string
 ): string {
   const rand = seededRandom(seed);
+  const half = size / 2;
   const parts: string[] = [];
   for (let i = 0; i < count; i++) {
-    const x = Math.round(rand() * size);
-    const y = Math.round(rand() * size);
+    const x = Math.round(rand() * size - half);
+    const y = Math.round(rand() * size - half);
     parts.push(`${x}px ${y}px ${color}`);
   }
   return parts.join(", ");
 }
 
-/** Animated space-themed background — starfield + slow-drifting
- *  distant planets. Pure CSS, no JS in the render path beyond
- *  the one-shot shadow string build, so even rich variants don't
- *  cost the main thread anything once mounted.
- *
- *  Layers, painted back-to-front:
- *    1. Deep navy gradient base (the void).
- *    2. Three star layers at different sizes / twinkle phases for
- *       parallax depth.
- *    3. One or two planets — large radial gradients positioned off
- *       the edges, drifting on a 60–90 s loop.
- *    4. Soft vignette so corners don't look flat. */
 export function SpaceBackground({
   variant = "subtle",
   seed = 42,
   inline = false,
+  scrollContainer,
 }: SpaceBackgroundProps) {
-  // Star shadow strings — memoized so they only build once per
-  // (seed, density) tuple, not on every render of the parent.
   const stars = useMemo(() => {
-    // Denser fields than before so the sky reads as obviously
-    // starry rather than a faint sprinkle, especially behind the
-    // translucent carousel scrim.
     const density = variant === "rich" ? 1.8 : 1.4;
+    const SIZE = 2400;
     return {
       small: buildStarShadows(
         Math.round(240 * density),
-        2000,
+        SIZE,
         seed + 1,
         "rgba(255,255,255,0.95)"
       ),
       medium: buildStarShadows(
         Math.round(95 * density),
-        2000,
+        SIZE,
         seed + 2,
         "rgba(255,255,255,1)"
       ),
       bright: buildStarShadows(
         Math.round(30 * density),
-        2000,
+        SIZE,
         seed + 3,
         "rgba(220,235,255,1)"
       ),
@@ -104,6 +85,84 @@ export function SpaceBackground({
   }, [variant, seed]);
 
   const planetIntensity = variant === "rich" ? 1 : 0.7;
+
+  // Refs to the three star-layer anchors so the warp loop can write
+  // transforms straight to the DOM (no React re-render per frame).
+  const layer1 = useRef<HTMLDivElement>(null);
+  const layer2 = useRef<HTMLDivElement>(null);
+  const layer3 = useRef<HTMLDivElement>(null);
+
+  // ── Scroll-velocity "lightspeed" warp ──
+  useEffect(() => {
+    if (!scrollContainer) return;
+    if (typeof window !== "undefined") {
+      const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+      if (mql.matches) return; // honor reduced-motion: no warp
+    }
+
+    const layers = [layer1.current, layer2.current, layer3.current];
+    // Per-layer parallax weight — nearer (bright) stars streak more
+    // than distant (small) ones, which sells depth during the warp.
+    const weights = [0.7, 1, 1.5];
+
+    let raf = 0;
+    let running = true;
+    let lastScroll =
+      scrollContainer.current?.scrollTop ?? window.scrollY ?? 0;
+    let velocity = 0;
+
+    const tick = () => {
+      if (!running) return;
+      const cur = scrollContainer.current?.scrollTop ?? window.scrollY ?? 0;
+      const delta = cur - lastScroll;
+      lastScroll = cur;
+
+      // Smooth the raw per-frame delta into a decaying velocity so
+      // the streak trails off naturally after the user stops.
+      velocity = velocity * 0.82 + Math.abs(delta) * 0.18;
+
+      // Normalize: ~70 px/frame of scroll = full warp. Capped at 1.
+      const v = Math.min(velocity / 70, 1);
+
+      layers.forEach((el, i) => {
+        if (!el) return;
+        if (v < 0.004) {
+          // Idle — clear transforms so the twinkle reads cleanly.
+          el.style.transform = "translate(-50%, -50%) scaleY(1)";
+          el.style.filter = "none";
+          return;
+        }
+        const w = weights[i];
+        const stretch = 1 + v * 16 * w; // up to ~17–25x at full warp
+        const blur = v * 1.4 * w;
+        const bright = 1 + v * 0.6;
+        el.style.transform = `translate(-50%, -50%) scaleY(${stretch})`;
+        el.style.filter = `blur(${blur}px) brightness(${bright})`;
+      });
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+  }, [scrollContainer]);
+
+  // Shared base style for the three centered star anchors. They sit
+  // at the viewport center; box-shadows (centered coords) spread the
+  // stars out around them. transform keeps the translate(-50%,-50%)
+  // centering so the warp's scaleY happens around screen center.
+  const anchorBase: React.CSSProperties = {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%) scaleY(1)",
+    background: "transparent",
+    borderRadius: "50%",
+    willChange: "transform, filter",
+  };
 
   return (
     <div
@@ -114,50 +173,25 @@ export function SpaceBackground({
         zIndex: -1,
         pointerEvents: "none",
         overflow: "hidden",
-        // Deep-space gradient. Slightly desaturated so it doesn't
-        // fight the content overlaying it.
         background:
           "radial-gradient(ellipse at 60% 40%, #1a1f3a 0%, #0a0d1f 45%, #050714 100%)",
       }}
     >
       {/* Star layers */}
       <div
+        ref={layer1}
         className="space-bg-stars-small"
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          top: 0,
-          left: 0,
-          background: "transparent",
-          boxShadow: stars.small,
-        }}
+        style={{ ...anchorBase, width: 1, height: 1, boxShadow: stars.small }}
       />
       <div
+        ref={layer2}
         className="space-bg-stars-medium"
-        style={{
-          position: "absolute",
-          width: 2,
-          height: 2,
-          top: 0,
-          left: 0,
-          background: "transparent",
-          borderRadius: "50%",
-          boxShadow: stars.medium,
-        }}
+        style={{ ...anchorBase, width: 2, height: 2, boxShadow: stars.medium }}
       />
       <div
+        ref={layer3}
         className="space-bg-stars-bright"
-        style={{
-          position: "absolute",
-          width: 3,
-          height: 3,
-          top: 0,
-          left: 0,
-          background: "transparent",
-          borderRadius: "50%",
-          boxShadow: stars.bright,
-        }}
+        style={{ ...anchorBase, width: 3, height: 3, boxShadow: stars.bright }}
       />
 
       {/* Planet 1 — large, off-edge */}
@@ -246,7 +280,7 @@ export function SpaceBackground({
           .space-bg-stars-medium,
           .space-bg-stars-bright {
             animation: none;
-            opacity: 0.7;
+            opacity: 0.85;
           }
         }
       `}</style>

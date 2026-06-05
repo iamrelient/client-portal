@@ -7,6 +7,7 @@ import {
   type PresentationData,
 } from "@/components/presentation/presentation-shell";
 import { RayRendersIcon } from "@/components/ui/ray-renders-icon";
+import { SpaceBackground } from "@/components/presentation/space-background";
 
 type LoadState =
   | { status: "loading" }
@@ -73,8 +74,15 @@ function LoadingSplash({
         // so the splash doesn't tease before data is ready.
         cursor: readyForGesture ? "pointer" : "default",
         userSelect: "none",
+        overflow: "hidden",
       }}
     >
+      {/* Animated space background — branded loader instead of a flat
+          dark screen. Rich variant for the fuller planet treatment;
+          no scrollContainer so it's twinkle + drift only (the splash
+          doesn't scroll). Sits behind the logo + prompt. */}
+      <SpaceBackground variant="rich" seed={108} inline />
+
       {/* Logo with fill effect */}
       <div
         style={{
