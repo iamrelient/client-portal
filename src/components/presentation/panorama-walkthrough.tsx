@@ -261,6 +261,24 @@ export function PanoramaWalkthrough({
   const currentRoom = rooms.find((r) => r.sectionId === currentRoomId);
   const currentLabel = currentRoom?.label ?? "Room";
 
+  /** All viewpoints that belong to the same room as the current one,
+   *  so a room with multiple shoot points exposes a switcher (you
+   *  shouldn't have to wire a hotspot just to see the 2nd Lobby
+   *  shot). Grouped by roomId when set; otherwise by matching label
+   *  (case-insensitive) so "named them both Lobby" works even
+   *  without an explicit room assignment. Stable order by the room
+   *  list / section order they arrived in. */
+  const sameRoomViewpoints = useMemo(() => {
+    if (!currentRoom) return [];
+    const key =
+      currentRoom.metadata.roomId?.trim() ||
+      `label:${currentRoom.label.trim().toLowerCase()}`;
+    const groupKey = (r: RoomData) =>
+      r.metadata.roomId?.trim() ||
+      `label:${r.label.trim().toLowerCase()}`;
+    return rooms.filter((r) => groupKey(r) === key);
+  }, [rooms, currentRoom]);
+
   return (
     <div
       style={{
@@ -449,6 +467,80 @@ export function PanoramaWalkthrough({
           </button>
         </div>
       </div>
+
+      {/* Same-room viewpoint switcher — appears when the current
+          room has more than one panorama (multiple shoot points).
+          Lets the client step through every viewpoint in the room
+          without needing a wired hotspot. Bottom-center, above the
+          minimap. */}
+      {sameRoomViewpoints.length > 1 && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "1.5rem",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 25,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.5rem 0.75rem",
+            background: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(10px)",
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "0.625rem",
+              fontWeight: 300,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.6)",
+              paddingRight: "0.25rem",
+            }}
+          >
+            {currentLabel} · view
+          </span>
+          {sameRoomViewpoints.map((vp, idx) => {
+            const isCurrent = vp.sectionId === currentRoomId;
+            return (
+              <button
+                key={vp.sectionId}
+                onClick={() => {
+                  if (!isCurrent) handleNavigate(vp.sectionId);
+                }}
+                data-cursor-label={isCurrent ? "Current view" : "Switch view"}
+                title={`View ${idx + 1}`}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.6875rem",
+                  fontWeight: 400,
+                  cursor: isCurrent ? "default" : "pointer",
+                  color: isCurrent
+                    ? "rgba(255,255,255,0.95)"
+                    : "rgba(255,255,255,0.7)",
+                  background: isCurrent
+                    ? "rgba(59,130,246,0.85)"
+                    : "rgba(255,255,255,0.08)",
+                  border: isCurrent
+                    ? "1px solid rgba(255,255,255,0.5)"
+                    : "1px solid rgba(255,255,255,0.12)",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {idx + 1}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Mini-map or room list */}
       {rooms.length > 1 && (
