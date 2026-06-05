@@ -71,15 +71,6 @@ export function SpaceBackground({
         seed + 3,
         "rgba(220,235,255,1)"
       ),
-      // Dedicated "sparkle" layer — fewer, larger stars that flash
-      // hard (near-invisible → full bright + glow) so the field
-      // visibly twinkles rather than just gently breathing.
-      sparkle: buildStarShadows(
-        Math.round(22 * density),
-        SIZE,
-        seed + 4,
-        "rgba(255,255,255,1)"
-      ),
     };
   }, [variant, seed]);
 
@@ -137,20 +128,6 @@ export function SpaceBackground({
           boxShadow: stars.bright,
         }}
       />
-      {/* Sparkle layer — dramatic flashing on top */}
-      <div
-        className="space-bg-stars-sparkle"
-        style={{
-          position: "absolute",
-          width: 2,
-          height: 2,
-          top: 0,
-          left: 0,
-          background: "transparent",
-          borderRadius: "50%",
-          boxShadow: stars.sparkle,
-        }}
-      />
 
       {/* Planet 1 — large, off-edge */}
       <div
@@ -202,44 +179,52 @@ export function SpaceBackground({
       />
 
       <style>{`
-        /* Faster cycles + wider opacity swings than before so the
-           field visibly twinkles rather than gently breathing. */
+        /* Each layer combines TWO animations: a slow smooth opacity
+           fade (gentle ease-in-out, no hard flashes), and an even
+           slower drift (subtle translate) so the whole field glides
+           — like a slowly turning sky. Different durations per layer
+           keep them from syncing, and the staggered drift directions
+           add depth. Long cycles = calm, not busy. */
         .space-bg-stars-small {
-          animation: space-twinkle-1 3.2s ease-in-out infinite;
+          animation: space-fade-1 9s ease-in-out infinite,
+            space-drift-1 140s ease-in-out infinite;
         }
         .space-bg-stars-medium {
-          animation: space-twinkle-2 2.4s ease-in-out infinite;
+          animation: space-fade-2 12s ease-in-out infinite,
+            space-drift-2 110s ease-in-out infinite;
         }
         .space-bg-stars-bright {
-          animation: space-twinkle-3 1.8s ease-in-out infinite;
+          animation: space-fade-3 15s ease-in-out infinite,
+            space-drift-3 170s ease-in-out infinite;
         }
-        .space-bg-stars-sparkle {
-          animation: space-sparkle 2.6s steps(1, end) infinite;
+        /* Smooth fades — wide but gentle, always eased so a star
+           glides between dim and bright instead of blinking. */
+        @keyframes space-fade-1 {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.9; }
         }
-        @keyframes space-twinkle-1 {
-          0%, 100% { opacity: 0.45; }
+        @keyframes space-fade-2 {
+          0%, 100% { opacity: 0.5; }
           50% { opacity: 1; }
         }
-        @keyframes space-twinkle-2 {
-          0%, 100% { opacity: 0.55; }
-          35% { opacity: 1; }
-          70% { opacity: 0.7; }
+        @keyframes space-fade-3 {
+          0%, 100% { opacity: 0.45; }
+          50% { opacity: 0.95; }
         }
-        @keyframes space-twinkle-3 {
-          0%, 100% { opacity: 0.5; }
-          40% { opacity: 1; }
+        /* Subtle fluid drift — small translate so stars never leave
+           gaps; opposed directions per layer for parallax depth. */
+        @keyframes space-drift-1 {
+          0%, 100% { transform: translate(0px, 0px); }
+          50% { transform: translate(-28px, 18px); }
         }
-        /* Hard flash — most sparkle stars sit dim, then a brief
-           full-bright pop with a glow, staggered by the steps()
-           timing so they don't all flash together. */
-        @keyframes space-sparkle {
-          0%, 100% { opacity: 0.15; filter: none; }
-          45% { opacity: 0.2; filter: none; }
-          50% {
-            opacity: 1;
-            filter: drop-shadow(0 0 3px rgba(255,255,255,0.9));
-          }
-          55% { opacity: 0.2; filter: none; }
+        @keyframes space-drift-2 {
+          0%, 100% { transform: translate(0px, 0px); }
+          50% { transform: translate(22px, -16px); }
+        }
+        @keyframes space-drift-3 {
+          0%, 100% { transform: translate(0px, 0px); }
+          33% { transform: translate(16px, 20px); }
+          66% { transform: translate(-18px, 10px); }
         }
         @keyframes space-planet-drift-1 {
           0%, 100% { transform: translate(0, 0); }
@@ -252,10 +237,9 @@ export function SpaceBackground({
         @media (prefers-reduced-motion: reduce) {
           .space-bg-stars-small,
           .space-bg-stars-medium,
-          .space-bg-stars-bright,
-          .space-bg-stars-sparkle {
+          .space-bg-stars-bright {
             animation: none;
-            opacity: 0.85;
+            opacity: 0.8;
           }
         }
       `}</style>
