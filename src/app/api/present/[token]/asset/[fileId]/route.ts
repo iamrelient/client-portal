@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { downloadFile } from "@/lib/google-drive";
 import { applyFloorWatermark, isWatermarkable } from "@/lib/watermark";
 import { isPanoramaAspect } from "@/lib/pano-utils";
+import { buildViewerDerivative } from "@/lib/image-derivatives";
 import sharp from "sharp";
 
 // Floor-watermarking buffers the entire image in memory and runs sharp,
@@ -157,6 +158,73 @@ export async function GET(
 
     const { stream } = await downloadFile(file.path);
 
+    // ── Panorama without a stored derivative: downscale on the fly ──
+    // CRITICAL for fresh uploads: most GPUs cap WebGL textures at
+    // 4096px, so handing Pannellum a raw 6K equirectangular makes the
+    // scene fail to load — the tour appears to "kick back" to the entry
+    // room because the new scene never becomes ready. The fast path
+    // above serves the pre-baked ≤4K derivative, but that's generated
+    // fire-and-forget after upload, so for a few seconds (or if that
+    // job failed) there's no derivative. Rather than stream the
+    // un-renderable original, downscale (and floor-watermark, if
+    // enabled) to a viewer-safe JPEG here. The CDN edge-caches the
+    // result, so only the first viewer pays; once generate-viewer
+    // finishes, the fast path takes over. Gated on isPanorama so plain
+    // carousel/lightbox images stay a cheap full-res passthrough.
+    if (file.isPanorama) {
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) chunks.push(value);
+      }
+      const original = Buffer.concat(chunks);
+      try {
+        const onTheFly = await buildViewerDerivative(original, file.mimeType, {
+          isPanorama: true,
+          watermark: wantsWatermark,
+        });
+        const out = onTheFly?.buffer ?? original;
+        const outMime = onTheFly?.mimeType ?? file.mimeType;
+        const body = out.buffer.slice(
+          out.byteOffset,
+          out.byteOffset + out.byteLength
+        ) as ArrayBuffer;
+        return new NextResponse(body, {
+          headers: {
+            "Content-Type": outMime,
+            "Content-Disposition": `inline; filename="${file.originalName}"`,
+            "Content-Length": String(out.length),
+            "Cache-Control": cacheControl,
+            "X-Content-Type-Options": "nosniff",
+            "X-Asset-Path": onTheFly
+              ? "on-the-fly-derivative"
+              : "passthrough-pano",
+          },
+        });
+      } catch (err) {
+        console.error(
+          "On-the-fly panorama derivative failed; serving original:",
+          err
+        );
+        const body = original.buffer.slice(
+          original.byteOffset,
+          original.byteOffset + original.byteLength
+        ) as ArrayBuffer;
+        return new NextResponse(body, {
+          headers: {
+            "Content-Type": file.mimeType,
+            "Content-Disposition": `inline; filename="${file.originalName}"`,
+            "Content-Length": String(original.length),
+            "Cache-Control": cacheControl,
+            "X-Content-Type-Options": "nosniff",
+            "X-Asset-Path": "passthrough-pano",
+          },
+        });
+      }
+    }
+
     // ── Slow path: per-serve floor watermark for legacy files ──
     // Only kicks in for files without a baked derivative — older
     // uploads, or fresh ones whose derivative-build failed. We
@@ -183,7 +251,7 @@ export async function GET(
       // for files uploaded via paths that didn't detect aspect. Re-check
       // here from the actual buffer and self-heal the DB so future
       // serves can short-circuit if we ever skip the buffer step again.
-      let actuallyPanorama = file.isPanorama;
+      let actuallyPanorama: boolean = file.isPanorama;
       if (!actuallyPanorama) {
         try {
           const meta = await sharp(original).metadata();
