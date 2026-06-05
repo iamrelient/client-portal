@@ -6,6 +6,7 @@ import {
   Check,
   FileText,
   Loader2,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -101,6 +102,8 @@ export function FilePickerModal({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** Files currently being deleted (spinner on the tile). */
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   /** All uploads attempted in this modal session (success + failure +
    *  in-flight). Kept around so admins can see what happened even
@@ -114,6 +117,48 @@ export function FilePickerModal({
    *  flickers. We track depth instead. */
   const dragDepthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /** Permanently delete a project file (with confirm). Used to clear
+   *  out photos you don't want. Refreshes the grid + drops it from
+   *  the current selection. */
+  async function handleDeleteFile(
+    e: React.MouseEvent,
+    file: PickerFile
+  ) {
+    e.stopPropagation();
+    if (deletingIds.has(file.id)) return;
+    const ok = window.confirm(
+      `Delete "${file.originalName}" from this project?\n\n` +
+        "This permanently removes the file. Any presentation section " +
+        "using it will lose it. This can't be undone."
+    );
+    if (!ok) return;
+    setDeletingIds((prev) => new Set(prev).add(file.id));
+    try {
+      const res = await fetch(`/api/files/${file.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        window.alert(
+          (body as { error?: string }).error || "Failed to delete file"
+        );
+        return;
+      }
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(file.id);
+        return next;
+      });
+      await refreshFiles();
+    } catch {
+      window.alert("Something went wrong deleting the file");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(file.id);
+        return next;
+      });
+    }
+  }
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -589,6 +634,23 @@ export function FilePickerModal({
                           <Check className="h-3.5 w-3.5" />
                         </span>
                       )}
+                      {/* Delete from project — bottom-right, on hover.
+                          A span (not a button) since the tile itself is
+                          a button; stopPropagation keeps the click from
+                          also selecting/picking the tile. */}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => handleDeleteFile(e, f)}
+                        title="Delete from project"
+                        className="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-all hover:bg-red-500 group-hover:opacity-100"
+                      >
+                        {deletingIds.has(f.id) ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3 w-3" />
+                        )}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2 px-3 py-2">
                       <span className="truncate text-sm text-slate-200">
