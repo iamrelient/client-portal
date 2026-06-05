@@ -306,8 +306,8 @@ export function SectionPanorama({
                 className="pano-play-button"
                 style={{
                   position: "relative",
-                  width: 96,
-                  height: 96,
+                  width: 128,
+                  height: 128,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -320,17 +320,17 @@ export function SectionPanorama({
                     borderRadius: "50%",
                     background: "rgba(255,255,255,0.12)",
                     backdropFilter: "blur(6px)",
-                    border: "1.5px solid rgba(255,255,255,0.5)",
+                    border: "2px solid rgba(255,255,255,0.55)",
                   }}
                 />
                 <svg
-                  width="32"
-                  height="32"
+                  width="44"
+                  height="44"
                   viewBox="0 0 32 32"
                   fill="none"
                   style={{
                     position: "relative",
-                    marginLeft: 4, // optical center for a triangle
+                    marginLeft: 5, // optical center for a triangle
                   }}
                 >
                   <path
@@ -350,30 +350,16 @@ export function SectionPanorama({
               >
                 <span
                   style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 300,
-                    letterSpacing: "0.18em",
+                    fontSize: "1.25rem",
+                    fontWeight: 400,
+                    letterSpacing: "0.16em",
                     textTransform: "uppercase",
-                    color: "rgba(255,255,255,0.95)",
-                    textShadow: "0 2px 12px rgba(0,0,0,0.55)",
+                    color: "rgba(255,255,255,0.98)",
+                    textShadow: "0 2px 14px rgba(0,0,0,0.6)",
                   }}
                 >
                   Click to view a 360&deg; tour
                 </span>
-                {allPanoramaSectionIds.size > 1 && (
-                  <span
-                    style={{
-                      fontSize: "0.625rem",
-                      fontWeight: 300,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.6)",
-                      textShadow: "0 1px 8px rgba(0,0,0,0.5)",
-                    }}
-                  >
-                    {allPanoramaSectionIds.size} rooms
-                  </span>
-                )}
               </div>
             </div>
 
