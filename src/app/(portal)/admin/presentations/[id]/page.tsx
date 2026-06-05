@@ -20,6 +20,7 @@ import {
   Upload,
   Settings2,
   Images,
+  Sparkles,
   X,
 } from "lucide-react";
 import { FilePickerModal } from "@/components/file-picker-modal";
@@ -185,6 +186,13 @@ export default function EditPresentationPage() {
   /** True while a batch of "add panoramas" sections is being POSTed.
    *  Disables the bulk button so spam-clicks can't double-create. */
   const [bulkAddingPanoramas, setBulkAddingPanoramas] = useState(false);
+  /** Progress of the "optimize panoramas" pass — pre-bakes the ≤4K
+   *  viewer copy for every panorama so clients never pay the on-the-fly
+   *  downscale. null when idle. */
+  const [optimizeProgress, setOptimizeProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/presentations/${params.id}`)
@@ -934,6 +942,68 @@ export default function EditPresentationPage() {
    *  the section list so a long deck doesn't force a scroll to the
    *  bottom just to add another section. `edge` only changes which
    *  border the row carries so it reads cleanly in either spot. */
+  /** Pre-bake the ≤4K viewer copy ("derivative") for every panorama in
+   *  the deck. The viewer needs a ≤4096px image (WebGL texture cap), and
+   *  the asset route will downscale 6K originals on the fly — but that
+   *  makes the *first* viewer of each room wait. Running it here means
+   *  that cost is paid once, by the admin, ahead of time; afterwards
+   *  every client on every device loads the fast cached copy. The
+   *  endpoint is idempotent (skips panos that already have a copy), so
+   *  this is safe to re-run after adding new panoramas. */
+  async function handleOptimizePanoramas() {
+    if (!pres || optimizeProgress) return;
+
+    // Unique backing file ids for every panorama section in the deck.
+    const fileIds = Array.from(
+      new Set(
+        pres.sections
+          .filter((s) => s.type === "panorama" && s.fileId)
+          .map((s) => s.fileId as string)
+      )
+    );
+
+    if (fileIds.length === 0) {
+      toast.error("No panoramas to optimize");
+      return;
+    }
+
+    setOptimizeProgress({ done: 0, total: fileIds.length });
+    let failures = 0;
+
+    // Run a few at a time — each is a heavy Sharp job on the server, so
+    // we don't want to fire 20 at once, but serial would be slow.
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    async function worker() {
+      while (cursor < fileIds.length) {
+        const id = fileIds[cursor++];
+        try {
+          const res = await fetch(`/api/files/${id}/generate-viewer`, {
+            method: "POST",
+          });
+          if (!res.ok) failures++;
+        } catch {
+          failures++;
+        }
+        setOptimizeProgress((p) =>
+          p ? { ...p, done: p.done + 1 } : p
+        );
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, fileIds.length) }, worker)
+    );
+
+    setOptimizeProgress(null);
+    if (failures === 0) {
+      toast.success(`Optimized ${fileIds.length} panorama${fileIds.length === 1 ? "" : "s"}`);
+    } else {
+      toast.error(
+        `Optimized ${fileIds.length - failures} of ${fileIds.length}; ${failures} failed — try again`
+      );
+    }
+  }
+
   const renderAddControls = (edge: "top" | "bottom") => (
     <div
       className={`px-6 py-3 ${
@@ -984,6 +1054,25 @@ export default function EditPresentationPage() {
           <Upload className="h-3 w-3" />
         )}
         Bulk add panoramas
+      </button>
+
+      {/* Optimize panoramas — pre-bakes the ≤4K viewer copy for every
+          panorama so clients (especially on Mac/Safari) load instantly
+          instead of paying the first-view on-the-fly downscale. */}
+      <button
+        onClick={handleOptimizePanoramas}
+        disabled={!!optimizeProgress}
+        title="Generate the optimized viewer copy of every 360° panorama now, so clients load them instantly on any device. Safe to re-run after adding panoramas."
+        className="inline-flex items-center gap-1 rounded-lg border border-white/[0.15] bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/[0.06] hover:border-white/[0.25] disabled:opacity-50 transition-colors"
+      >
+        {optimizeProgress ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Sparkles className="h-3 w-3" />
+        )}
+        {optimizeProgress
+          ? `Optimizing ${optimizeProgress.done}/${optimizeProgress.total}…`
+          : "Optimize panoramas"}
       </button>
     </div>
   );
