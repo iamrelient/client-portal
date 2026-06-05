@@ -596,6 +596,24 @@ export const PanoramaViewer = forwardRef<
       const down = downRef.current;
       downRef.current = null;
       if (!down) return;
+
+      // If the click landed ON a hotspot (a nav arrow / door, info
+      // marker, or floor disc), let THAT hotspot's own click handler
+      // do the navigating — don't also run floor-nav. Without this, a
+      // doorway-exit click was getting stolen: floor-nav runs on
+      // `mouseup` (before the hotspot's `click`), picked the nearest
+      // in-room floor dot, and started a transition that made the
+      // arrow's "go to the next room" click a no-op. Net effect: the
+      // exit arrow just shuffled you across the same room.
+      const tgt = e.target as HTMLElement | null;
+      if (
+        tgt?.closest?.(
+          ".pnlm-hotspot, .pano-hs-nav, .pano-hs-info, .pano-hs-floor"
+        )
+      ) {
+        return;
+      }
+
       // Distinguish click from drag: small movement, quick release.
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       if (moved > 8 || Date.now() - down.t > 500) return;
