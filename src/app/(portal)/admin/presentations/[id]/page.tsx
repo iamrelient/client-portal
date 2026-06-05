@@ -2054,58 +2054,53 @@ export default function EditPresentationPage() {
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Tour Cover Image
                 </label>
-                <div className="flex gap-1.5">
-                  <select
-                    value={tourHeroFileId}
-                    onChange={(e) => setTourHeroFileId(e.target.value)}
-                    className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
-                  >
-                    <option value="">
-                      Use 360° preview (default)
-                    </option>
-                    {projectFiles
-                      .filter((f) => f.mimeType.startsWith("image/"))
-                      .map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.originalName}
-                        </option>
-                      ))}
-                  </select>
+                {/* Thumbnail-based picker. Clicking the tile opens the
+                    image grid (all project images — normal photos AND
+                    360s — with upload), so you pick visually instead
+                    of scanning filenames. */}
+                <div className="flex items-start gap-2">
                   <button
                     type="button"
                     onClick={() =>
-                      triggerPicker("image/*", "Pick a tour cover image", (ids) =>
-                        setTourHeroFileId(ids[0] ?? "")
+                      triggerPicker(
+                        "image/*",
+                        "Pick a tour cover image",
+                        (ids) => setTourHeroFileId(ids[0] ?? "")
                       )
                     }
-                    className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                    title="Browse project images"
+                    title="Choose a cover image"
+                    className="group relative h-24 w-40 shrink-0 overflow-hidden rounded-lg border border-white/[0.12] bg-white/[0.04] hover:border-brand-500/50 transition-colors"
                   >
-                    <Images className="h-4 w-4" />
+                    {tourHeroFileId ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/files/${tourHeroFileId}/download?inline=true`}
+                          alt="Tour cover"
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 transition-all">
+                          Change
+                        </span>
+                      </>
+                    ) : (
+                      <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+                        <Images className="h-5 w-5" />
+                        <span className="text-[10px]">Choose image</span>
+                      </span>
+                    )}
                   </button>
                   {tourHeroFileId && (
                     <button
                       type="button"
                       onClick={() => setTourHeroFileId("")}
                       className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-red-400 transition-colors"
-                      title="Clear cover image"
+                      title="Clear cover image (use 360° preview)"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>
-                {/* Live preview of the chosen cover so it's obvious
-                    which image is set (and that a change took). */}
-                {tourHeroFileId && (
-                  <div className="mt-2 overflow-hidden rounded-lg border border-white/[0.1]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`/api/files/${tourHeroFileId}/download?inline=true`}
-                      alt="Tour cover preview"
-                      className="block w-full h-28 object-cover"
-                    />
-                  </div>
-                )}
                 <p className="text-[11px] text-slate-500 mt-1">
                   Shown as a darkened cover with a play button on the
                   tour slide. Falls back to a cropped 360° preview
