@@ -117,13 +117,16 @@ export function PanoramaWalkthrough({
       const myKey = roomKey(room);
       const allHotspots = room.metadata.hotspots ?? [];
 
-      // Same-room nav hotspots the admin explicitly placed — their
-      // drop pitch/yaw is the exact floor spot toward the target, so
-      // we honor it. Keyed by target section id.
-      const explicit = new Map<
-        string,
-        { pitch: number; yaw: number }
-      >();
+      // Floor targets come ONLY from same-room nav hotspots the admin
+      // explicitly placed — rendered at the exact spot they dropped
+      // them. (We used to auto-create a floor dot to EVERY other pano
+      // in the room and scatter them at arbitrary positions, which
+      // produced phantom dots "at your feet" linking to rooms you
+      // never wired. Gone — what you place is what shows.)
+      // Dedup by target so a forward + auto-reverse to the same pano
+      // doesn't stack two discs.
+      const seenTargets = new Set<string>();
+      const floorTargets: PanoramaScene["floorTargets"] = [];
       const arrowHotspots: typeof allHotspots = [];
 
       for (const h of allHotspots) {
@@ -132,49 +135,22 @@ export function PanoramaWalkthrough({
             (r) => r.sectionId === h.targetSectionId
           );
           if (target && roomKey(target) === myKey) {
-            explicit.set(h.targetSectionId, { pitch: h.pitch, yaw: h.yaw });
-            continue; // floor nav, not an arrow
+            // Same-room link → floor disc at the placed spot.
+            if (!seenTargets.has(h.targetSectionId)) {
+              seenTargets.add(h.targetSectionId);
+              floorTargets.push({
+                sectionId: h.targetSectionId,
+                pitch: h.pitch,
+                yaw: h.yaw,
+                label: target.label,
+              });
+            }
+            continue; // not an arrow
           }
         }
         // Cross-room nav + all info hotspots keep their normal style.
         arrowHotspots.push(h);
       }
-
-      // EVERY other pano in the same room becomes a floor target —
-      // no manual wiring required (matches 3D Vista: drop multiple
-      // shots in a room, click the ground to move between them).
-      // Use the explicit drop spot when present; otherwise auto-
-      // place on the floor, spread around the view so several
-      // viewpoints don't stack.
-      const others = rooms.filter(
-        (r) => r.sectionId !== room.sectionId && roomKey(r) === myKey
-      );
-      const baseYaw = room.metadata.initialView?.yaw ?? 0;
-      const floorTargets: PanoramaScene["floorTargets"] = others.map(
-        (o, i) => {
-          const ex = explicit.get(o.sectionId);
-          if (ex) {
-            return {
-              sectionId: o.sectionId,
-              pitch: ex.pitch,
-              yaw: ex.yaw,
-              label: o.label,
-            };
-          }
-          // Auto placement: a single other viewpoint sits straight
-          // ahead on the floor; multiple spread evenly around so
-          // they're distinguishable.
-          const spread =
-            others.length === 1 ? 0 : (i / others.length) * 300 - 150;
-          const yaw = ((baseYaw + spread + 540) % 360) - 180;
-          return {
-            sectionId: o.sectionId,
-            pitch: -38,
-            yaw,
-            label: o.label,
-          };
-        }
-      );
 
       return {
         id: room.sectionId,
