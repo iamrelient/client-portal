@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { downloadFile } from "@/lib/google-drive";
-import { isWatermarkable } from "@/lib/watermark";
-import { isPanoramaAspect } from "@/lib/pano-utils";
 import { buildViewerDerivative } from "@/lib/image-derivatives";
-import sharp from "sharp";
 
 // Floor-watermarking buffers the entire image in memory and runs sharp,
 // which can take a few seconds on an 8K panorama (more on 16K). On
@@ -158,28 +155,25 @@ export async function GET(
 
     const { stream } = await downloadFile(file.path);
 
-    // ── No stored derivative: build a viewer-safe image on the fly ──
+    // ── Panorama without a stored derivative: downscale on the fly ──
     //
-    // CRITICAL cross-device fix. Most GPUs cap WebGL textures at 4096px,
-    // and Safari/Mac is far stricter than Chrome about decoding huge
-    // images — so handing Pannellum a raw 6K equirectangular renders
-    // fine on a Windows/Chrome machine but FAILS on a Mac. When the
-    // target scene fails to load, Pannellum stays on the current scene,
-    // so navigation looks broken: "I click the gallery and it puts me
-    // right back in the same room." The fast path above serves the
-    // pre-baked ≤4K derivative, but that's generated fire-and-forget
-    // after upload — so for fresh uploads, files whose derivative job
-    // failed, or older pre-derivative uploads, we must downscale here
-    // rather than stream the un-renderable original.
+    // Gated strictly to panoramas. Most GPUs cap WebGL textures at
+    // 4096px and Safari/Mac is strict about decoding huge images, so a
+    // raw 6K equirectangular fails to load in the tour (and the viewer
+    // appears to "snap back" to the entry room). The fast path above
+    // serves the pre-baked ≤4K derivative; this handles the window
+    // before that exists (fresh upload, or a derivative job that hasn't
+    // run). buildViewerDerivative downscales to ≤4K (+ floor watermark
+    // when enabled); the CDN edge-caches the result so only the first
+    // viewer pays.
     //
-    // We detect a panorama by the stored flag OR by aspect ratio (so
-    // legacy uploads that never got the flag are still handled), and
-    // self-heal the flag for next time. buildViewerDerivative downscales
-    // to ≤4K (+ floor watermark when enabled) and returns null for an
-    // already-small clean image, in which case we pass the original
-    // through untouched. The CDN edge-caches whatever we return, so only
-    // the first viewer pays the cost.
-    if (isWatermarkable(file.mimeType)) {
+    // IMPORTANT: do NOT do this for non-panorama images. Plain photos
+    // have no texture cap (they're <img> tags), and buffering + Sharp on
+    // every regular carousel/lightbox image — serialized by Sharp's
+    // single-thread limit — turned a whole deck's load into a crawl.
+    // Those stream straight through, full-res, exactly as before. (Run
+    // "Optimize panoramas" to give panos their permanent fast copy.)
+    if (file.isPanorama) {
       const reader = stream.getReader();
       const chunks: Uint8Array[] = [];
       while (true) {
@@ -189,38 +183,11 @@ export async function GET(
       }
       const original = Buffer.concat(chunks);
 
-      // Detect panorama: trust the flag, else check aspect from the
-      // actual bytes and self-heal the DB so the fast path / derivative
-      // logic can short-circuit next time.
-      let actuallyPanorama: boolean = file.isPanorama;
-      if (!actuallyPanorama) {
-        try {
-          const meta = await sharp(original).metadata();
-          if (
-            meta.width &&
-            meta.height &&
-            isPanoramaAspect(meta.width, meta.height)
-          ) {
-            actuallyPanorama = true;
-            prisma.file
-              .update({ where: { id: file.id }, data: { isPanorama: true } })
-              .catch(() => {});
-          }
-        } catch {
-          /* not a sharp-readable image — fall through to passthrough */
-        }
-      }
-
       try {
         const derivative = await buildViewerDerivative(
           original,
           file.mimeType,
-          {
-            isPanorama: actuallyPanorama,
-            // Floor watermark only matters for panoramas; for non-panos
-            // buildViewerDerivative just downscales oversized images.
-            watermark: wantsWatermark && actuallyPanorama,
-          }
+          { isPanorama: true, watermark: wantsWatermark }
         );
         const out = derivative?.buffer ?? original;
         const outMime = derivative?.mimeType ?? file.mimeType;
@@ -237,14 +204,11 @@ export async function GET(
             "X-Content-Type-Options": "nosniff",
             "X-Asset-Path": derivative
               ? "on-the-fly-derivative"
-              : "passthrough-original",
+              : "passthrough-pano",
           },
         });
       } catch (err) {
-        console.error(
-          "On-the-fly derivative failed; serving original:",
-          err
-        );
+        console.error("On-the-fly panorama derivative failed:", err);
         const body = original.buffer.slice(
           original.byteOffset,
           original.byteOffset + original.byteLength
@@ -256,13 +220,14 @@ export async function GET(
             "Content-Length": String(original.length),
             "Cache-Control": cacheControl,
             "X-Content-Type-Options": "nosniff",
-            "X-Asset-Path": "passthrough-original",
+            "X-Asset-Path": "passthrough-pano",
           },
         });
       }
     }
 
-    // Non-image file (PDF, etc.) — stream through untouched.
+    // Everything else — regular images, PDFs — stream straight through,
+    // untouched and full-res. Cheap: no buffering, no Sharp.
     return new NextResponse(stream, {
       headers: {
         "Content-Type": file.mimeType,
