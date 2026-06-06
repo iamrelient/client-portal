@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from "react";
 import type {
   PanoramaMetadata,
   PanoramaHotspot,
@@ -61,6 +68,22 @@ export function PanoramaWalkthrough({
   const accent = accentColor?.trim() || null;
   const stripeColor = accent || "rgba(255,255,255,0.9)";
   const eyebrowColor = accent || "rgba(255,255,255,0.65)";
+
+  // ── Decorative nameplate for the room title ──
+  // Uses a fixed-size banner graphic (public/presentation/room-nameplate
+  // .png) with the room name auto-shrunk to fit its flat center, so every
+  // room's plaque is identical and the metal frame never distorts. If the
+  // image is missing we fall back to the frosted chip below.
+  const titleBoxRef = useRef<HTMLDivElement>(null);
+  const titleTextRef = useRef<HTMLSpanElement>(null);
+  const [bannerFailed, setBannerFailed] = useState(false);
+  const [fitTick, setFitTick] = useState(0);
+
+  useEffect(() => {
+    const onResize = () => setFitTick((t) => t + 1);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const viewerRef = useRef<PanoramaViewerHandle>(null);
   const [currentRoomId, setCurrentRoomId] = useState(initialRoomId);
   /** When true, show the room-chooser overlay instead of the live
@@ -302,6 +325,21 @@ export function PanoramaWalkthrough({
   const currentRoom = rooms.find((r) => r.sectionId === currentRoomId);
   const currentLabel = currentRoom?.label ?? "Room";
 
+  // Auto-fit: scale the room name down until it fits the nameplate's safe
+  // inner width. Runs whenever the label, banner load, or window size
+  // changes. useLayoutEffect so it's sized before paint (no flicker).
+  useLayoutEffect(() => {
+    const box = titleBoxRef.current;
+    const txt = titleTextRef.current;
+    if (!box || !txt) return;
+    txt.style.transform = "scale(1)";
+    const avail = box.clientWidth;
+    const needed = txt.scrollWidth;
+    if (avail > 0 && needed > avail) {
+      txt.style.transform = `scale(${(avail / needed).toFixed(3)})`;
+    }
+  }, [currentLabel, fitTick, bannerFailed]);
+
   /** All viewpoints that belong to the same room as the current one,
    *  so a room with multiple shoot points exposes a switcher (you
    *  shouldn't have to wire a hotspot just to see the 2nd Lobby
@@ -540,78 +578,140 @@ export function PanoramaWalkthrough({
           pointerEvents: "none",
         }}
       >
-        {/* Branded room-title chip — frosted dark glass card with a
-            brand-color accent stripe, the company name as a small
-            eyebrow, and the room name in clean, high-contrast type so
-            it reads against any panorama (the old plain low-opacity
-            label vanished on bright scenes). */}
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "stretch",
-            background: "rgba(8,10,14,0.55)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            borderRadius: 12,
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
-            maxWidth: "60vw",
-          }}
-        >
-          {/* Brand accent stripe */}
+        {/* Room-title nameplate. Decorative banner graphic at a FIXED
+            size (so the metal frame is identical on every room and never
+            distorts), with the room name auto-shrunk to fit its flat
+            center via the useLayoutEffect above. White type with a soft
+            shadow for legibility. Falls back to the frosted chip if the
+            banner image isn't present. */}
+        {!bannerFailed ? (
           <div
             style={{
-              width: 4,
-              flexShrink: 0,
-              background: stripeColor,
-              boxShadow: accent ? `0 0 12px ${stripeColor}` : "none",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              gap: 2,
-              padding: "0.5rem 0.95rem",
-              minWidth: 0,
+              position: "relative",
+              display: "inline-block",
+              height: "clamp(54px, 8vh, 80px)",
+              maxWidth: "60vw",
             }}
           >
-            {companyName && (
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/presentation/room-nameplate.png"
+              alt=""
+              onError={() => setBannerFailed(true)}
+              onLoad={() => setFitTick((t) => t + 1)}
+              style={{
+                height: "100%",
+                width: "auto",
+                maxWidth: "100%",
+                display: "block",
+                objectFit: "contain",
+                // The decorative drop-shadow baked into the PNG plus a
+                // little extra lift off bright scenes.
+                filter: "drop-shadow(0 4px 14px rgba(0,0,0,0.4))",
+              }}
+            />
+            {/* Text safe-area: inset to clear the metal frame (left) and
+                the angled notch (right). Tune percentages to the art. */}
+            <div
+              ref={titleBoxRef}
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: "11%",
+                right: "13%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              <span
+                ref={titleTextRef}
+                style={{
+                  color: "#fff",
+                  whiteSpace: "nowrap",
+                  fontWeight: 600,
+                  fontSize: "clamp(0.85rem, 1.7vw, 1.2rem)",
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  transformOrigin: "center center",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.6)",
+                }}
+              >
+                {currentLabel}
+              </span>
+            </div>
+          </div>
+        ) : (
+          /* Fallback — frosted glass chip with brand accent stripe. */
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "stretch",
+              background: "rgba(8,10,14,0.55)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              borderRadius: 12,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.10)",
+              boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
+              maxWidth: "60vw",
+            }}
+          >
+            <div
+              style={{
+                width: 4,
+                flexShrink: 0,
+                background: stripeColor,
+                boxShadow: accent ? `0 0 12px ${stripeColor}` : "none",
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                gap: 2,
+                padding: "0.5rem 0.95rem",
+                minWidth: 0,
+              }}
+            >
+              {companyName && (
+                <span
+                  style={{
+                    fontSize: "0.5rem",
+                    fontWeight: 600,
+                    letterSpacing: "0.22em",
+                    textTransform: "uppercase",
+                    color: eyebrowColor,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                  }}
+                >
+                  {companyName}
+                </span>
+              )}
               <span
                 style={{
-                  fontSize: "0.5rem",
-                  fontWeight: 600,
-                  letterSpacing: "0.22em",
-                  textTransform: "uppercase",
-                  color: eyebrowColor,
+                  fontSize: "clamp(0.95rem, 2.2vw, 1.2rem)",
+                  fontWeight: 500,
+                  letterSpacing: "0.02em",
+                  color: "#fff",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.55)",
+                  lineHeight: 1.15,
                 }}
               >
-                {companyName}
+                {currentLabel}
               </span>
-            )}
-            <span
-              style={{
-                fontSize: "clamp(0.95rem, 2.2vw, 1.2rem)",
-                fontWeight: 500,
-                letterSpacing: "0.02em",
-                color: "#fff",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                textShadow: "0 1px 4px rgba(0,0,0,0.55)",
-                lineHeight: 1.15,
-              }}
-            >
-              {currentLabel}
-            </span>
+            </div>
           </div>
-        </div>
+        )}
         <div
           style={{
             display: "flex",
