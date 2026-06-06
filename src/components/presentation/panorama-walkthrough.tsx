@@ -37,6 +37,12 @@ interface PanoramaWalkthroughProps {
   /** Open on the floor-plan room chooser instead of dropping into
    *  the starting panorama (only when there are mapped rooms). */
   startOnMap?: boolean;
+  /** Client brand accent color (hex/rgb) from presentation settings —
+   *  used to brand the room-title chip. Null falls back to neutral. */
+  accentColor?: string | null;
+  /** Company / client name — shown as a small eyebrow above the room
+   *  name in the title chip. Null hides the eyebrow. */
+  companyName?: string | null;
   onExit: () => void;
 }
 
@@ -46,8 +52,15 @@ export function PanoramaWalkthrough({
   initialRoomId,
   accessToken,
   startOnMap,
+  accentColor,
+  companyName,
   onExit,
 }: PanoramaWalkthroughProps) {
+  // Brand the room-title chip with the client's accent color. Fall back
+  // to a clean neutral when none is set so it still looks intentional.
+  const accent = accentColor?.trim() || null;
+  const stripeColor = accent || "rgba(255,255,255,0.9)";
+  const eyebrowColor = accent || "rgba(255,255,255,0.65)";
   const viewerRef = useRef<PanoramaViewerHandle>(null);
   const [currentRoomId, setCurrentRoomId] = useState(initialRoomId);
   /** When true, show the room-chooser overlay instead of the live
@@ -527,17 +540,78 @@ export function PanoramaWalkthrough({
           pointerEvents: "none",
         }}
       >
-        <span
+        {/* Branded room-title chip — frosted dark glass card with a
+            brand-color accent stripe, the company name as a small
+            eyebrow, and the room name in clean, high-contrast type so
+            it reads against any panorama (the old plain low-opacity
+            label vanished on bright scenes). */}
+        <div
           style={{
-            fontSize: "0.75rem",
-            fontWeight: 300,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: "rgba(255,255,255,0.7)",
+            display: "inline-flex",
+            alignItems: "stretch",
+            background: "rgba(8,10,14,0.55)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            borderRadius: 12,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.10)",
+            boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
+            maxWidth: "60vw",
           }}
         >
-          {currentLabel}
-        </span>
+          {/* Brand accent stripe */}
+          <div
+            style={{
+              width: 4,
+              flexShrink: 0,
+              background: stripeColor,
+              boxShadow: accent ? `0 0 12px ${stripeColor}` : "none",
+            }}
+          />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              gap: 2,
+              padding: "0.5rem 0.95rem",
+              minWidth: 0,
+            }}
+          >
+            {companyName && (
+              <span
+                style={{
+                  fontSize: "0.5rem",
+                  fontWeight: 600,
+                  letterSpacing: "0.22em",
+                  textTransform: "uppercase",
+                  color: eyebrowColor,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                }}
+              >
+                {companyName}
+              </span>
+            )}
+            <span
+              style={{
+                fontSize: "clamp(0.95rem, 2.2vw, 1.2rem)",
+                fontWeight: 500,
+                letterSpacing: "0.02em",
+                color: "#fff",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                textShadow: "0 1px 4px rgba(0,0,0,0.55)",
+                lineHeight: 1.15,
+              }}
+            >
+              {currentLabel}
+            </span>
+          </div>
+        </div>
         <div
           style={{
             display: "flex",

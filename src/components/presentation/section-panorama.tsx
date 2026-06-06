@@ -521,6 +521,8 @@ export function SectionPanorama({
           initialRoomId={section.id}
           accessToken={data.accessToken}
           startOnMap={!!data.tourStartOnMap}
+          accentColor={data.clientAccentColor}
+          companyName={data.project?.company || data.project?.name || null}
           onExit={handleWalkthroughExit}
         />
       )}
