@@ -111,19 +111,35 @@ export function PresentationCursor() {
 
   if (!enabled || !mounted) return null;
 
-  // Determine cursor size and style — frosted ring with glow
+  // Determine cursor size and style.
+  //
+  // Visibility on ANY background (the old all-white ring vanished on
+  // white slides) is achieved with a DUAL-TONE treatment, the same trick
+  // OS cursors use: a bright white ring wrapped in a dark outline + soft
+  // drop shadow. The white edge reads on dark backgrounds; the dark
+  // outline/shadow reads on white; both give contrast over gray and busy
+  // photos. No per-frame background sampling needed.
+  //
+  // `glow` stacks three shadows:
+  //   1. a crisp 1.5px dark ring hugging the white border (the key to
+  //      white-background visibility),
+  //   2. a soft dark drop shadow for separation/depth, and
+  //   3. a faint white outer glow that lifts it off dark backdrops.
   let size = 18;
-  let border = "1.5px solid rgba(255,255,255,0.45)";
-  let glow = "0 0 8px rgba(255,255,255,0.12)";
+  let border = "2px solid rgba(255,255,255,0.95)";
+  let glow =
+    "0 0 0 1.5px rgba(0,0,0,0.40), 0 1px 5px rgba(0,0,0,0.45), 0 0 10px rgba(255,255,255,0.12)";
 
   if (overClickable) {
     size = 36;
-    border = "1.5px solid rgba(255,255,255,0.6)";
-    glow = "0 0 14px rgba(255,255,255,0.2)";
+    border = "2px solid rgba(255,255,255,0.98)";
+    glow =
+      "0 0 0 1.5px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.5), 0 0 16px rgba(255,255,255,0.18)";
   } else if (overImage) {
     size = 24;
-    border = "1.5px solid rgba(255,255,255,0.5)";
-    glow = "0 0 10px rgba(255,255,255,0.15)";
+    border = "2px solid rgba(255,255,255,0.96)";
+    glow =
+      "0 0 0 1.5px rgba(0,0,0,0.42), 0 2px 8px rgba(0,0,0,0.48), 0 0 12px rgba(255,255,255,0.15)";
   }
 
   // Radial mask: transparent center → opaque edge = refraction ring
@@ -177,10 +193,13 @@ export function PresentationCursor() {
           <span
             style={{
               fontSize: "0.5rem",
-              fontWeight: 300,
+              fontWeight: 400,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              color: "rgba(255,255,255,0.7)",
+              color: "rgba(255,255,255,0.95)",
+              // Dark shadow so the white label stays legible on light
+              // slides (matches the cursor's dual-tone treatment).
+              textShadow: "0 1px 3px rgba(0,0,0,0.85)",
               whiteSpace: "nowrap",
               userSelect: "none",
               position: "relative",
