@@ -153,6 +153,7 @@ export const ChapterStrip = memo(function ChapterStrip({
             bottom of the viewport, so thumbnails never hide under it. */}
         {isActiveImage && (
           <div
+            className="cs-carousel-col"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -167,6 +168,21 @@ export const ChapterStrip = memo(function ChapterStrip({
               paddingBottom: "clamp(72px, 9vh, 92px)",
             }}
           >
+            {/* MOBILE-ONLY layout overrides (≤640px). On a tall phone the
+                greedy flex:1 image area filled the screen and the 16:9
+                image floated as a small band far above the thumbnails.
+                Here we let the image size to its width, stop the area
+                from growing, and center the whole title+image+thumbnails
+                group — so the thumbnails sit right under the image and
+                everything fits one screen. Desktop is untouched. */}
+            <style>{`
+              @media (max-width: 640px) {
+                .cs-carousel-col { justify-content: center; padding-bottom: 64px; }
+                .cs-carousel-imgarea { flex: 0 0 auto !important; }
+                .cs-carousel-frame { height: auto !important; width: 100% !important; }
+                .cs-carousel-bottom { height: auto !important; margin-top: 0.5rem !important; }
+              }
+            `}</style>
             {/* Chapter title — fixed-height row so the image area below
                 is the same size on every room. */}
             <div
@@ -206,6 +222,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                 pushed the caption + thumbnails off the bottom of the
                 viewport. */}
             <div
+              className="cs-carousel-imgarea"
               style={{
                 flex: 1,
                 minHeight: 0,
@@ -229,6 +246,7 @@ export const ChapterStrip = memo(function ChapterStrip({
               <div
                 ref={heroContainerRef}
                 data-clickable
+                className="cs-carousel-frame"
                 style={{
                   position: "relative",
                   height: "100%",
@@ -278,6 +296,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                 reserved (even on single-image rooms) so the image area
                 above stays the same size across the whole tour. */}
             <div
+              className="cs-carousel-bottom"
               style={{
                 flexShrink: 0,
                 width: "100%",
