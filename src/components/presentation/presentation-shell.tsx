@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Maximize, Minimize } from "lucide-react";
 import { TimelineNavigator } from "./chapter-menu";
 import { ChapterStrip } from "./chapter-strip";
-import { RayRendersLogo } from "@/components/ui/ray-renders-logo";
 import { SectionHero } from "./section-hero";
 import { SectionClosing } from "./section-closing";
 import { SectionImage } from "./section-image";
@@ -437,10 +436,10 @@ export function PresentationShell({
         );
       })}
 
-      {/* Branding — hidden during walkthrough */}
-      {!walkthroughActive && (
-        <RayRendersLogo className="fixed top-6 left-6 w-48 text-neutral-900 opacity-40 z-50 pointer-events-none" />
-      )}
+      {/* Studio logo overlay removed — it floated over arbitrary content
+          (read as "random") and the studio watermark is already baked
+          into the renders. Client branding still shows via the client
+          logo on the hero/cover. */}
 
       {/* Timeline navigator — hidden during walkthrough */}
       {!walkthroughActive && (
