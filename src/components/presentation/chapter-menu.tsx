@@ -170,7 +170,37 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         WebkitBackdropFilter: "blur(12px)",
       }}
     >
-      <div className="relative mx-auto max-w-4xl px-12 pt-5 pb-6">
+      {/* Responsive: on phones the per-dot labels can't fit (they
+          overlapped into an illegible smear), so we hide them and show
+          only the ACTIVE section's name, centered above the dots.
+          Desktop keeps a label under every dot. */}
+      <style>{`
+        @media (max-width: 640px) {
+          .timeline-dot-label { display: none !important; }
+        }
+        @media (min-width: 641px) {
+          .timeline-active-label { display: none !important; }
+        }
+      `}</style>
+      <div className="relative mx-auto max-w-4xl px-4 sm:px-12 pt-4 sm:pt-5 pb-5 sm:pb-6">
+        {/* Mobile-only active section label */}
+        <div
+          className="timeline-active-label"
+          style={{
+            textAlign: "center",
+            marginBottom: "0.7rem",
+            fontSize: "0.7rem",
+            fontWeight: 400,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.75)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {dots[activeDotIdx]?.label}
+        </div>
         <div className="relative">
           {/* Re-draw progress fill inside this container for accurate width */}
           <div
@@ -259,9 +289,9 @@ export const TimelineNavigator = memo(function TimelineNavigator({
                     />
                   </div>
 
-                  {/* Label */}
+                  {/* Label (hidden on mobile — see timeline-dot-label) */}
                   <span
-                    className="transition-colors duration-300"
+                    className="timeline-dot-label transition-colors duration-300"
                     style={{
                       fontSize: "0.6rem",
                       fontWeight: 300,
