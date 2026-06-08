@@ -258,15 +258,18 @@ export function SectionPanorama({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "1.25rem",
+          // Shrinks the CTA on phones (it dwarfed the cover there) while
+          // staying at today's size on desktop — clamp maxes out on wide
+          // viewports, so PC is unchanged.
+          gap: "clamp(0.6rem, 2vw, 1.25rem)",
         }}
       >
         <div
           className="pano-play-button"
           style={{
             position: "relative",
-            width: 128,
-            height: 128,
+            width: "clamp(72px, 16vw, 128px)",
+            height: "clamp(72px, 16vw, 128px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -283,18 +286,18 @@ export function SectionPanorama({
             }}
           />
           <svg
-            width="44"
-            height="44"
+            width="38%"
+            height="38%"
             viewBox="0 0 32 32"
             fill="none"
-            style={{ position: "relative", marginLeft: 5 }}
+            style={{ position: "relative", marginLeft: "4%" }}
           >
             <path d="M8 6 L26 16 L8 26 Z" fill="rgba(255,255,255,0.95)" />
           </svg>
         </div>
         <span
           style={{
-            fontSize: "1.25rem",
+            fontSize: "clamp(0.8rem, 3.2vw, 1.25rem)",
             fontWeight: 400,
             letterSpacing: "0.16em",
             textTransform: "uppercase",
@@ -345,8 +348,12 @@ export function SectionPanorama({
           /* Custom cover: framed like a carousel image — object-fit
              contain, centered, with the deck background showing
              around it, so it's consistent with the image slides.
-             The scrim + play CTA sit on the image box only. */
+             The scrim + play CTA sit on the image box only.
+             On MOBILE (≤640px) it instead fills the screen (object-fit
+             cover) so the cover isn't a tiny letterboxed thumbnail —
+             see the media query below. Desktop is unchanged. */
           <div
+            className="pano-cover-pad"
             style={{
               position: "absolute",
               inset: 0,
@@ -356,9 +363,23 @@ export function SectionPanorama({
               padding: "40px 60px",
             }}
           >
+            <style>{`
+              @media (max-width: 640px) {
+                .pano-cover-pad { padding: 0 !important; }
+                .pano-cover-box { width: 100% !important; height: 100% !important; }
+                .pano-cover-img {
+                  width: 100% !important;
+                  height: 100% !important;
+                  max-height: none !important;
+                  object-fit: cover !important;
+                  border-radius: 0 !important;
+                }
+              }
+            `}</style>
             <div
               onClick={handleActivate}
               data-cursor-label="Play tour"
+              className="pano-cover-box"
               style={{
                 position: "relative",
                 display: "inline-flex",
@@ -375,6 +396,7 @@ export function SectionPanorama({
                 alt={section.title || "Tour cover"}
                 loading="lazy"
                 draggable={false}
+                className="pano-cover-img"
                 style={{
                   display: "block",
                   maxWidth: "100%",
