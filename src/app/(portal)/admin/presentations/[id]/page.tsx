@@ -971,20 +971,33 @@ export default function EditPresentationPage() {
     let failures = 0;
 
     // Run a few at a time — each is a heavy Sharp job on the server, so
-    // we don't want to fire 20 at once, but serial would be slow.
+    // we don't want to fire 20 at once, but serial would be slow. Per
+    // file we bake BOTH artifacts: the 4K equirect derivative (fast
+    // fallback + cover/preview) and the multires tile pyramid (what the
+    // tour actually streams — full 6K sharpness on zoom, faster first
+    // paint). Both endpoints are idempotent, so re-running only does
+    // new work. The pyramid call is the long one (~1 min per pano:
+    // ~130 tile uploads to Drive).
     const CONCURRENCY = 3;
     let cursor = 0;
     async function worker() {
       while (cursor < fileIds.length) {
         const id = fileIds[cursor++];
+        let fileFailed = false;
         try {
           const res = await fetch(`/api/files/${id}/generate-viewer`, {
             method: "POST",
           });
-          if (!res.ok) failures++;
+          if (!res.ok) fileFailed = true;
+          const multiresRes = await fetch(
+            `/api/files/${id}/generate-multires`,
+            { method: "POST" }
+          );
+          if (!multiresRes.ok) fileFailed = true;
         } catch {
-          failures++;
+          fileFailed = true;
         }
+        if (fileFailed) failures++;
         setOptimizeProgress((p) =>
           p ? { ...p, done: p.done + 1 } : p
         );

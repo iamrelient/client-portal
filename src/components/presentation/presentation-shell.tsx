@@ -69,6 +69,14 @@ export interface SectionData {
     originalName: string;
     mimeType: string;
     size: number;
+    /** Multires tile pyramid params (panoramas only) — present when a
+     *  pyramid exists AND matches the deck's watermark intent. The
+     *  viewer streams cube tiles instead of one big equirect JPEG. */
+    multires?: {
+      maxLevel: number;
+      cubeRes: number;
+      tileRes: number;
+    } | null;
   } | null;
   /** For image sections with metadata.fileIds set, this is the full
    *  list of files resolved server-side so the carousel can render. */

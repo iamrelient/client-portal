@@ -10,7 +10,16 @@ export async function GET(
     const presentation = await prisma.presentation.findUnique({
       where: { accessToken: params.token },
       include: {
-        project: { select: { id: true, name: true, company: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            company: true,
+            // Needed to decide whether a pano's tile pyramid matches the
+            // current watermark intent (see enrichedSections below).
+            watermarkEnabled: true,
+          },
+        },
         sections: {
           orderBy: { order: "asc" },
           include: {
@@ -20,6 +29,16 @@ export async function GET(
                 originalName: true,
                 mimeType: true,
                 size: true,
+                // Multires pyramid params — the viewer needs these to
+                // build the tile-streaming config. The manifest itself
+                // is fetched only to derive a has-pyramid boolean and
+                // is stripped before the response (it's ~130 entries
+                // of Drive ids the client has no use for).
+                multiresManifest: true,
+                multiresMaxLevel: true,
+                multiresCubeRes: true,
+                multiresTileRes: true,
+                multiresHasWatermark: true,
               },
             },
           },
@@ -105,6 +124,15 @@ export async function GET(
       for (const f of carouselFiles) carouselFileMap.set(f.id, f);
     }
 
+    // Watermark intent for panoramas in THIS presentation. A pyramid
+    // baked with a different intent (e.g. watermarking was toggled
+    // after generation) must not be served — the viewer falls back to
+    // the equirect asset path, which handles intent per request.
+    const wantsPanoWatermark =
+      presentation.project.watermarkEnabled &&
+      presentation.watermarkEnabled &&
+      presentation.panoramaFloorWatermark;
+
     const enrichedSections = presentation.sections.map((s) => {
       const meta = s.metadata as Record<string, unknown> | null;
       const ids = meta && Array.isArray(meta.fileIds)
@@ -115,7 +143,38 @@ export async function GET(
       const carouselFiles = ids
         .map((id) => carouselFileMap.get(id))
         .filter((f): f is NonNullable<typeof f> => !!f);
-      return { ...s, carouselFiles };
+
+      // Collapse the raw multires columns into either a ready-to-use
+      // param object or null, and strip the manifest from the payload.
+      let file: Record<string, unknown> | null = null;
+      if (s.file) {
+        const {
+          multiresManifest,
+          multiresMaxLevel,
+          multiresCubeRes,
+          multiresTileRes,
+          multiresHasWatermark,
+          ...rest
+        } = s.file;
+        const hasPyramid =
+          !!multiresManifest &&
+          !!multiresMaxLevel &&
+          !!multiresCubeRes &&
+          !!multiresTileRes &&
+          multiresHasWatermark === wantsPanoWatermark;
+        file = {
+          ...rest,
+          multires: hasPyramid
+            ? {
+                maxLevel: multiresMaxLevel,
+                cubeRes: multiresCubeRes,
+                tileRes: multiresTileRes,
+              }
+            : null,
+        };
+      }
+
+      return { ...s, file, carouselFiles };
     });
 
     return NextResponse.json({ ...data, sections: enrichedSections });

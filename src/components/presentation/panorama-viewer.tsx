@@ -31,6 +31,9 @@ export interface PanoramaViewerProps {
   /** Single-scene-mode floor targets (same-room viewpoints). In
    *  multi-scene mode each PanoramaScene carries its own. */
   floorTargets?: FloorTarget[];
+  /** Single-scene-mode tile pyramid (multi-scene mode reads it off
+   *  each PanoramaScene instead). */
+  multires?: MultiresInfo | null;
 }
 
 /** A same-room viewpoint reachable by clicking the floor (Matterport
@@ -44,6 +47,33 @@ export interface FloorTarget {
   label: string;
 }
 
+/** Multiresolution tile pyramid parameters for a scene. When present,
+ *  the viewer streams cube-face tiles (Matterport-style) instead of one
+ *  big equirectangular JPEG: faster first paint, and full source
+ *  sharpness on zoom (the 4096px WebGL texture cap applies per TILE,
+ *  not per panorama). basePath points at the presentation tile route. */
+export interface MultiresInfo {
+  basePath: string;
+  maxLevel: number;
+  cubeRes: number;
+  tileRes: number;
+}
+
+/** Pannellum `multiRes` config for a scene. Tile URL template matches
+ *  the generate-multires naming: {basePath}/{level}/{face}{y}_{x}.jpg
+ *  with whole-face fallbacks at {basePath}/fallback/{face}.jpg. */
+function multiResConfig(m: MultiresInfo): Record<string, unknown> {
+  return {
+    basePath: m.basePath,
+    path: "/%l/%s%y_%x",
+    fallbackPath: "/fallback/%s",
+    extension: "jpg",
+    tileResolution: m.tileRes,
+    maxLevel: m.maxLevel,
+    cubeResolution: m.cubeRes,
+  };
+}
+
 export interface PanoramaScene {
   id: string;
   imageUrl: string;
@@ -52,6 +82,9 @@ export interface PanoramaScene {
   /** Same-room viewpoints shown as floor discs + reachable by
    *  clicking the ground, rather than arrow hotspots. */
   floorTargets?: FloorTarget[];
+  /** When set, render via tile streaming instead of the single
+   *  equirect imageUrl (which remains as a fallback). */
+  multires?: MultiresInfo | null;
 }
 
 export interface PanoramaViewerHandle {
@@ -321,6 +354,7 @@ export const PanoramaViewer = forwardRef<
     initialScene,
     onSceneChange,
     floorTargets,
+    multires,
   },
   ref
 ) {
@@ -402,8 +436,11 @@ export const PanoramaViewer = forwardRef<
             const sceneFloor = scene.floorTargets || [];
             floorTargetsBySceneRef.current.set(scene.id, sceneFloor);
             sceneConfigs[scene.id] = {
-              type: "equirectangular",
-              panorama: scene.imageUrl,
+              // Tile streaming when a pyramid exists; single equirect
+              // JPEG otherwise. Same camera + hotspot config either way.
+              ...(scene.multires
+                ? { type: "multires", multiRes: multiResConfig(scene.multires) }
+                : { type: "equirectangular", panorama: scene.imageUrl }),
               pitch: scene.initialView?.pitch ?? 0,
               yaw: scene.initialView?.yaw ?? 180,
               hfov: scene.initialView?.hfov ?? 110,
@@ -471,8 +508,9 @@ export const PanoramaViewer = forwardRef<
           ];
 
           viewerRef.current = pannellum.viewer(containerRef.current!, {
-            type: "equirectangular",
-            panorama: imageUrl,
+            ...(multires
+              ? { type: "multires", multiRes: multiResConfig(multires) }
+              : { type: "equirectangular", panorama: imageUrl }),
             autoLoad: true,
             autoRotate: autoRotate,
             compass: false,

@@ -101,6 +101,20 @@ model File {
   viewerWidth         Int?
   viewerHeight        Int?
   viewerHasWatermark  Boolean @default(false)
+  // Multiresolution tile pyramid (Matterport-style). Built by
+  // /api/files/[id]/generate-multires: the equirectangular source is
+  // converted to 6 cube faces and sliced into a Pannellum "multires"
+  // pyramid of 512px tiles (plus 1024px fallback faces), stored as
+  // individual JPEGs in a per-pano Drive subfolder. The manifest maps
+  // tile path ("1/f0_0", "fallback/f") → Drive file id so the tile
+  // route can serve them. Lets the viewer stream only the tiles in
+  // view at the detail needed — full 6K sharpness on zoom without the
+  // 4096px single-texture WebGL cap, and a much faster first paint.
+  multiresManifest     Json?
+  multiresMaxLevel     Int?
+  multiresCubeRes      Int?
+  multiresTileRes      Int?
+  multiresHasWatermark Boolean @default(false)
   version         Int      @default(1)
   fileGroupId     String?
   folderId        String?

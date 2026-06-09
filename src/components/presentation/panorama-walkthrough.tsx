@@ -29,6 +29,9 @@ interface RoomData {
    *  panorama from metadata.roomLabel → section.title → filename.
    *  Children (minimap, room list, top bar) just render this. */
   label: string;
+  /** Tile pyramid params + basePath when this pano has one baked —
+   *  passed straight through to the viewer's scene config. */
+  multires?: import("./panorama-viewer").MultiresInfo | null;
 }
 
 interface PanoramaWalkthroughProps {
@@ -122,6 +125,10 @@ export function PanoramaWalkthrough({
     if (typeof window === "undefined") return;
     const preloads: HTMLImageElement[] = [];
     for (const room of rooms) {
+      // Multires rooms stream tiles on demand — Pannellum fetches the
+      // tiny base level instantly on scene entry, so prefetching the
+      // full equirect would waste exactly the bandwidth tiling saves.
+      if (room.multires) continue;
       const img = new Image();
       img.src = room.imageUrl;
       preloads.push(img);
@@ -212,6 +219,7 @@ export function PanoramaWalkthrough({
         initialView: room.metadata.initialView,
         hotspots: arrowHotspots,
         floorTargets,
+        multires: room.multires ?? null,
       };
     });
   }, [rooms]);

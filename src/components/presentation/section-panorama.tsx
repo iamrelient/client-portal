@@ -218,6 +218,15 @@ export function SectionPanorama({
           imageUrl: `/api/present/${data.accessToken}/asset/${s.file!.id}`,
           metadata: meta,
           label,
+          // Tile-streaming params when this pano has a baked pyramid —
+          // the viewer then loads cube tiles from the tiles route
+          // instead of the single equirect JPEG.
+          multires: s.file!.multires
+            ? {
+                ...s.file!.multires,
+                basePath: `/api/present/${data.accessToken}/tiles/${s.file!.id}`,
+              }
+            : null,
         };
       });
   }, [walkthroughActive, data.sections, data.accessToken, data.tourRooms]);
@@ -476,6 +485,14 @@ export function SectionPanorama({
         <>
           <PanoViewer
             imageUrl={assetUrl}
+            multires={
+              section.file?.multires
+                ? {
+                    ...section.file.multires,
+                    basePath: `/api/present/${data.accessToken}/tiles/${section.file.id}`,
+                  }
+                : null
+            }
             initialView={metadata.initialView}
             hotspots={metadata.hotspots}
             onNavigationHotspotClick={(targetId) => {
