@@ -396,7 +396,11 @@ export function PresentationShell({
               data-segment-index={i}
               className="relative w-screen"
               style={{
-                height: "100vh",
+                // dvh (dynamic viewport height) so the slide fills the
+                // VISIBLE area on mobile as the address bar collapses,
+                // instead of 100vh overshooting it. On desktop dvh === vh,
+                // so PC is unchanged.
+                height: "100dvh",
                 // Snap fullscreen slides to viewport top. Combined
                 // with the container's scrollSnapType: y proximity,
                 // this means if the user scrolls and stops near a

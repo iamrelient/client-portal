@@ -34,6 +34,19 @@ function LoadingSplash({
   onGesture,
 }: LoadingSplashProps) {
   const [started, setStarted] = useState(false);
+  // Whether this device can actually go fullscreen. iPhone (all iOS
+  // browsers run on WebKit) has no Fullscreen API for web pages, so
+  // requestFullscreen is undefined there — in that case we don't promise
+  // "Opens in fullscreen" since it can't. Checked client-side after
+  // mount to avoid an SSR/client mismatch.
+  const [canFullscreen, setCanFullscreen] = useState(false);
+
+  useEffect(() => {
+    setCanFullscreen(
+      typeof document !== "undefined" &&
+        !!document.documentElement.requestFullscreen
+    );
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setStarted(true), 100);
@@ -161,17 +174,19 @@ function LoadingSplash({
         >
           Tap to begin
         </span>
-        <span
-          style={{
-            fontSize: "0.625rem",
-            fontWeight: 300,
-            letterSpacing: "0.1em",
-            color: "rgba(255,255,255,0.4)",
-            fontFamily: "'Inter Tight', 'Inter', sans-serif",
-          }}
-        >
-          Opens in fullscreen
-        </span>
+        {canFullscreen && (
+          <span
+            style={{
+              fontSize: "0.625rem",
+              fontWeight: 300,
+              letterSpacing: "0.1em",
+              color: "rgba(255,255,255,0.4)",
+              fontFamily: "'Inter Tight', 'Inter', sans-serif",
+            }}
+          >
+            Opens in fullscreen
+          </span>
+        )}
       </div>
 
       <style>{`

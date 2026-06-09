@@ -400,7 +400,7 @@ export function SectionPanorama({
                 style={{
                   display: "block",
                   maxWidth: "100%",
-                  maxHeight: "calc(100vh - 80px)",
+                  maxHeight: "calc(100dvh - 80px)",
                   objectFit: "contain",
                   borderRadius: "2px",
                   boxShadow: "0 4px 40px rgba(0,0,0,0.35)",

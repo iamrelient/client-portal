@@ -96,7 +96,7 @@ export const ChapterStrip = memo(function ChapterStrip({
   // like any normal section (no snap/catch — that felt awkward).
   // Images are browsed via the thumbnail track + auto-advance, not
   // by scrolling.
-  const spacerHeight = vh > 0 ? vh : "100vh";
+  const spacerHeight = vh > 0 ? vh : "100dvh";
 
   // Selecting an image is now just local state — no container scroll.
   const navigateToItem = useCallback((itemIndex: number) => {
@@ -124,7 +124,7 @@ export const ChapterStrip = memo(function ChapterStrip({
       }}
     >
       <div
-        className="sticky top-0 h-screen w-screen overflow-hidden"
+        className="sticky top-0 h-[100dvh] w-screen overflow-hidden"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         style={{
