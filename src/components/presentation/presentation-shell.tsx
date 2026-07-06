@@ -12,6 +12,7 @@ import { SectionText } from "./section-text";
 import { SectionDivider } from "./section-divider";
 import { SectionPanorama } from "./section-panorama";
 import { SpaceBackground } from "./space-background";
+import { AuroraBackground } from "./aurora-background";
 import { Section3DModel } from "./section-3d-model";
 import { PresentationCursor } from "./presentation-cursor";
 import { Model3DPiP } from "./model-3d-pip";
@@ -378,7 +379,7 @@ export function PresentationShell({
     <div
       ref={scrollContainerRef}
       className={`presentation-shell fixed inset-0 overflow-y-auto overflow-x-hidden select-none scrollbar-hide ${
-        data.theme === "space" ? "" : "bg-neutral-50"
+        data.theme === "space" || data.theme === "aurora" ? "" : "bg-neutral-50"
       }`}
       style={{
         fontFamily: "'Inter Tight', 'Inter', sans-serif",
@@ -393,9 +394,13 @@ export function PresentationShell({
         // pattern doesn't tile to every viewport corner. Light
         // theme stays on the bg-neutral-50 class above.
         ...(data.theme === "space" ? { backgroundColor: "#050714" } : {}),
+        ...(data.theme === "aurora" ? { backgroundColor: "#0a0c10" } : {}),
       }}
     >
       {data.theme === "space" && <SpaceBackground variant="subtle" />}
+      {data.theme === "aurora" && (
+        <AuroraBackground accent={data.clientAccentColor} />
+      )}
       {segments.map((seg, i) => {
         if (seg.kind === "fullscreen") {
           return (
@@ -585,6 +590,7 @@ function FullscreenSection({
         <SectionDivider
           section={section}
           accentColor={data.clientAccentColor}
+          deckTheme={data.theme}
         />
       );
 

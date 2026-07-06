@@ -8,6 +8,7 @@ import {
 } from "@/components/presentation/presentation-shell";
 import { RayRendersIcon } from "@/components/ui/ray-renders-icon";
 import { SpaceBackground } from "@/components/presentation/space-background";
+import { AuroraBackground } from "@/components/presentation/aurora-background";
 
 type LoadState =
   | { status: "loading" }
@@ -26,12 +27,18 @@ interface LoadingSplashProps {
    *  invoked from a real user gesture so the fullscreen API accepts.
    *  We listen on the whole splash so a tap anywhere works. */
   onGesture: () => void;
+  /** Deck theme once known (null while loading). The splash backdrop
+   *  matches it: stars only for space decks, aurora for aurora — a
+   *  light-theme deck used to get the starfield here regardless of
+   *  what the admin picked. */
+  theme: string | null;
 }
 
 function LoadingSplash({
   visible,
   readyForGesture,
   onGesture,
+  theme,
 }: LoadingSplashProps) {
   const [started, setStarted] = useState(false);
   // Whether this device can actually go fullscreen. iPhone (all iOS
@@ -90,11 +97,12 @@ function LoadingSplash({
         overflow: "hidden",
       }}
     >
-      {/* Animated space background — branded loader instead of a flat
-          dark screen. Rich variant for the fuller planet treatment;
-          no scrollContainer so it's twinkle + drift only (the splash
-          doesn't scroll). Sits behind the logo + prompt. */}
-      <SpaceBackground variant="rich" seed={108} inline />
+      {/* Animated backdrop matching the deck's theme. While the deck
+          is still loading (theme null) the splash stays a plain dark
+          stage — no theme flash, and light-theme decks never see
+          stars. */}
+      {theme === "space" && <SpaceBackground variant="rich" seed={108} inline />}
+      {theme === "aurora" && <AuroraBackground inline />}
 
       {/* Logo with fill effect */}
       <div
@@ -317,6 +325,7 @@ export default function PresentClient() {
         visible={splashVisible}
         readyForGesture={readyForGesture}
         onGesture={handleBegin}
+        theme={state.status === "loaded" ? state.data.theme ?? null : null}
       />
 
       {/* Presentation — render underneath splash once data is ready */}

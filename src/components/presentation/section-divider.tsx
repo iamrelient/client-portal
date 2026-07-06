@@ -23,9 +23,18 @@ const ALL_STYLES: AmbientStyle[] = [
 
 function pickStyle(
   configured: string | null | undefined,
-  fallbackSeed: string
+  fallbackSeed: string,
+  deckTheme: string | null | undefined
 ): AmbientStyle {
-  if (configured && (ALL_STYLES as string[]).includes(configured)) {
+  // The starfield ambient only belongs on space-themed decks — it used
+  // to sit in the random pool for EVERY deck, so light-theme decks
+  // could roll a stars divider ("I picked light and still see stars").
+  const pool: AmbientStyle[] =
+    deckTheme === "space"
+      ? ALL_STYLES
+      : ALL_STYLES.filter((s) => s !== "space");
+
+  if (configured && (pool as string[]).includes(configured)) {
     return configured as AmbientStyle;
   }
   // Deterministic per-section fallback — same section picks the same style
@@ -34,7 +43,7 @@ function pickStyle(
   for (let i = 0; i < fallbackSeed.length; i++) {
     hash = (hash * 31 + fallbackSeed.charCodeAt(i)) | 0;
   }
-  return ALL_STYLES[Math.abs(hash) % ALL_STYLES.length];
+  return pool[Math.abs(hash) % pool.length];
 }
 
 interface SectionDividerProps {
@@ -48,6 +57,9 @@ interface SectionDividerProps {
    *  and "line-pulse" ambient styles so a presentation's branded accent
    *  shows through. */
   accentColor?: string | null;
+  /** Deck-level visual theme ("space" | "aurora" | null). Gates the
+   *  starfield ambient to space decks only. */
+  deckTheme?: string | null;
 }
 
 /** Full-screen divider / title slide with an animated backdrop. Renders
@@ -55,7 +67,11 @@ interface SectionDividerProps {
  *  scrolls out of it to reach what's next. Replaces the older "text"
  *  section concept: the divider now carries title + description and
  *  always sits on a branded backdrop. */
-export function SectionDivider({ section, accentColor }: SectionDividerProps) {
+export function SectionDivider({
+  section,
+  accentColor,
+  deckTheme,
+}: SectionDividerProps) {
   const [reduced, setReduced] = useState(false);
   const [visible, setVisible] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -79,7 +95,8 @@ export function SectionDivider({ section, accentColor }: SectionDividerProps) {
 
   const ambient = pickStyle(
     (section.metadata as Record<string, string> | null)?.ambientStyle,
-    section.id
+    section.id,
+    deckTheme
   );
   const accent = accentColor || "#2a6ff3";
 

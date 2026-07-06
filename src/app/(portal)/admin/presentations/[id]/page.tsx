@@ -2278,12 +2278,16 @@ export default function EditPresentationPage() {
                   className="block w-full rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 py-2 text-sm text-white [&>option]:text-black focus:border-brand-500 focus:outline-none"
                 >
                   <option value="">Light (default)</option>
+                  <option value="aurora">
+                    Aurora — animated gradient (modern, any client)
+                  </option>
                   <option value="space">Space — animated stars + planets</option>
                 </select>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Space adds a slow starfield + drifting distant
-                  planets behind the deck and as a divider ambient
-                  style.
+                  Aurora is a slow, neutral gradient drift subtly tinted
+                  with your client accent color — works for any brand.
+                  Space adds a starfield + drifting planets (only shows
+                  on decks that pick it).
                 </p>
               </div>
 

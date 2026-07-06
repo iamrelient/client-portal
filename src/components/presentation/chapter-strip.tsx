@@ -128,12 +128,15 @@ export const ChapterStrip = memo(function ChapterStrip({
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         style={{
-          // Space theme: let the starfield show through behind the
-          // carousel. A faint translucent scrim keeps image contrast
-          // without hiding the stars. Light theme keeps the original
-          // solid near-black so images pop on a neutral stage.
+          // Animated themes (space/aurora): let the backdrop show
+          // through behind the carousel. A faint translucent scrim
+          // keeps image contrast without hiding the animation. Light
+          // theme keeps the original solid near-black so images pop on
+          // a neutral stage.
           backgroundColor:
-            data.theme === "space" ? "rgba(6,6,8,0.2)" : "#060608",
+            data.theme === "space" || data.theme === "aurora"
+              ? "rgba(6,6,8,0.2)"
+              : "#060608",
         }}
       >
         {/* Image hero view.

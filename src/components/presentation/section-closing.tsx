@@ -47,7 +47,9 @@ export function SectionClosing({ data }: SectionClosingProps) {
           transition: `opacity 1s cubic-bezier(0.25,0.1,0.25,1) ${delay}ms, transform 1s cubic-bezier(0.25,0.1,0.25,1) ${delay}ms`,
         };
 
-  const isSpace = data.theme === "space";
+  // Any animated theme (space/aurora) → translucent stage so the
+  // backdrop shows through; light theme keeps solid near-black.
+  const isSpace = data.theme === "space" || data.theme === "aurora";
 
   return (
     <div
