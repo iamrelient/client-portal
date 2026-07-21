@@ -133,21 +133,18 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
       return;
     }
 
-    if (!showControls) {
-      // Reveal controls.
-      setShowControls(true);
-      hideControlsAfterDelay();
+    // A single click toggles play/pause immediately (and reveals the
+    // controls) — no "click once to show controls, click again to
+    // pause" two-step, which made pausing feel unresponsive.
+    if (video.paused) {
+      video.play().then(() => setPlaying(true)).catch(() => {});
     } else {
-      // Controls visible: toggle play/pause
-      if (video.paused) {
-        video.play().then(() => setPlaying(true)).catch(() => {});
-      } else {
-        video.pause();
-        setPlaying(false);
-      }
-      hideControlsAfterDelay();
+      video.pause();
+      setPlaying(false);
     }
-  }, [started, handleStart, showControls, hideControlsAfterDelay]);
+    setShowControls(true);
+    hideControlsAfterDelay();
+  }, [started, handleStart, hideControlsAfterDelay]);
 
   const handleMuteToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -233,7 +230,9 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
             ref={videoRef}
             src={assetUrl}
             playsInline
-            preload="metadata"
+            // Metadata-only until the viewer starts, then let the
+            // browser buffer ahead so playback stalls less.
+            preload={started ? "auto" : "metadata"}
             onEnded={() => {
               setPlaying(false);
               setShowControls(true);
