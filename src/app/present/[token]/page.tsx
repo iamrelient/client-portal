@@ -55,8 +55,10 @@ export async function generateMetadata({
       .filter(Boolean)
       .join(" · ");
 
-  // Pick a hero thumbnail: the explicit tour cover first, otherwise the
-  // first hero/image/panorama section that has a backing file.
+  // Does the deck have any usable cover image? (The OG card endpoint
+  // makes the same decision; we just need to know whether to advertise
+  // an image at all.) Password-protected decks get no card image — the
+  // cover sits behind the gate — so the preview is title + text only.
   const heroFileId =
     presentation.tourHeroFileId ||
     presentation.sections.find(
@@ -66,10 +68,14 @@ export async function generateMetadata({
     )?.fileId ||
     null;
 
+  // A dedicated 1200×630 card image (cover-cropped, re-encoded small) so
+  // the link unfurls as a crisp, correctly-shaped thumbnail — not the
+  // raw 6K source, which is the wrong aspect ratio and often too big for
+  // unfurlers to fetch.
   const images = heroFileId
     ? [
         {
-          url: `${BASE_URL}/api/present/${params.token}/asset/${heroFileId}`,
+          url: `${BASE_URL}/api/og/presentation/${params.token}`,
           width: 1200,
           height: 630,
           alt: title,
