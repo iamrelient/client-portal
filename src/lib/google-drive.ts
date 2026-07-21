@@ -240,25 +240,50 @@ export async function createResumableUploadSession(
 }
 
 export async function downloadFile(
-  driveFileId: string
-): Promise<{ stream: ReadableStream; mimeType: string; size: number }> {
+  driveFileId: string,
+  /** Optional HTTP Range header value (e.g. "bytes=0-1048575"). Drive
+   *  honors it on media downloads and replies 206 + Content-Range —
+   *  required for <video> playback, which requests byte ranges and
+   *  shows a black, non-playing frame if the server can't serve them. */
+  range?: string | null
+): Promise<{
+  stream: ReadableStream;
+  mimeType: string;
+  size: number;
+  /** Upstream status: 200 (full) or 206 (partial, when a range was
+   *  requested and satisfied). */
+  status: number;
+  /** Content-Range header from a 206 response, else null. */
+  contentRange: string | null;
+  /** Content-Length of THIS response body (the range length for 206). */
+  contentLength: number | null;
+}> {
   const accessToken = await getValidAccessToken();
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (range) headers.Range = range;
 
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media&supportsAllDrives=true`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    { headers }
   );
 
-  if (!res.ok) {
+  // 206 is success for a satisfied range request.
+  if (!res.ok && res.status !== 206) {
     throw new Error(`Failed to download file: ${res.status}`);
   }
+
+  const contentLengthHeader = res.headers.get("Content-Length");
 
   return {
     stream: res.body!,
     mimeType: res.headers.get("Content-Type") || "application/octet-stream",
-    size: Number(res.headers.get("Content-Length") || 0),
+    size: Number(contentLengthHeader || 0),
+    status: res.status,
+    contentRange: res.headers.get("Content-Range"),
+    contentLength: contentLengthHeader ? Number(contentLengthHeader) : null,
   };
 }
 

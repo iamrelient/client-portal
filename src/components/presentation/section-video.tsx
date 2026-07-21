@@ -14,11 +14,14 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [visible, setVisible] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [showPlayHint, setShowPlayHint] = useState(false);
   const [reduced, setReduced] = useState(false);
+  /** Whether the viewer has started playback. Until then we show a big
+   *  poster + play button so it's obvious this is a video to click,
+   *  instead of a silent full-bleed autoplay that reads as a still. */
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
     setReduced(
@@ -26,7 +29,9 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
     );
   }, []);
 
-  // Intersection Observer — autoplay muted when 70% visible, pause when <30%
+  // Intersection Observer — fade in when in view, and pause (don't
+  // stop) if the viewer scrolls away mid-playback. No autoplay: the
+  // client presses the play button to start.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -35,17 +40,6 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
       ([entry]) => {
         if (entry.intersectionRatio >= 0.7) {
           setVisible(true);
-          const video = videoRef.current;
-          if (video && video.paused) {
-            video.muted = true;
-            setMuted(true);
-            video.play().then(() => {
-              setPlaying(true);
-              // Show play hint briefly on autoplay
-              setShowPlayHint(true);
-              setTimeout(() => setShowPlayHint(false), 1500);
-            }).catch(() => {});
-          }
         } else if (entry.intersectionRatio < 0.3) {
           const video = videoRef.current;
           if (video && !video.paused) {
@@ -59,6 +53,52 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
 
     observer.observe(el);
     return () => observer.disconnect();
+  }, []);
+
+  // Show the first frame as a poster: once metadata loads, nudge the
+  // playhead a hair so the browser paints frame 1 instead of black
+  // (needs the Range support the asset route now provides). Guarded so
+  // it only runs before the viewer has started playing.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onMeta = () => {
+      if (!started && video.currentTime === 0) {
+        try {
+          video.currentTime = 0.1;
+        } catch {
+          /* seek not ready yet — harmless */
+        }
+      }
+    };
+    video.addEventListener("loadedmetadata", onMeta);
+    return () => video.removeEventListener("loadedmetadata", onMeta);
+  }, [started]);
+
+  /** Start playback from the poster state — with sound, since it's an
+   *  explicit user gesture. */
+  const handleStart = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    setMuted(false);
+    const onStarted = () => {
+      setStarted(true);
+      setPlaying(true);
+      setShowControls(true);
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+    };
+    video
+      .play()
+      .then(onStarted)
+      .catch(() => {
+        // Autoplay-with-sound can be blocked in rare cases — retry muted
+        // so at least the video runs; the client can unmute via controls.
+        video.muted = true;
+        setMuted(true);
+        video.play().then(onStarted).catch(() => {});
+      });
   }, []);
 
   // Track video progress
@@ -86,10 +126,15 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
     const video = videoRef.current;
     if (!video) return;
 
+    // Before playback has started, a click on the stage starts it (the
+    // big play button also calls handleStart directly).
+    if (!started) {
+      handleStart();
+      return;
+    }
+
     if (!showControls) {
-      // First tap: unmute + show controls
-      video.muted = !video.muted;
-      setMuted(video.muted);
+      // Reveal controls.
       setShowControls(true);
       hideControlsAfterDelay();
     } else {
@@ -102,7 +147,7 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
       }
       hideControlsAfterDelay();
     }
-  }, [showControls, hideControlsAfterDelay]);
+  }, [started, handleStart, showControls, hideControlsAfterDelay]);
 
   const handleMuteToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -187,53 +232,86 @@ export function SectionVideo({ section, data }: SectionVideoProps) {
           <video
             ref={videoRef}
             src={assetUrl}
-            muted
             playsInline
-            preload="none"
+            preload="metadata"
+            onEnded={() => {
+              setPlaying(false);
+              setShowControls(true);
+            }}
             style={{
               position: "absolute",
               inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
+              // Contain (not cover) so the whole frame is visible and it
+              // reads as a video in a stage, not a cropped background.
+              objectFit: "contain",
               opacity: visible ? 1 : 0,
               transition: reduced ? "none" : "opacity 0.8s ease",
             }}
           />
 
-          {/* Play hint on autoplay */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
-              zIndex: 2,
-              opacity: showPlayHint ? 1 : 0,
-              transition: "opacity 0.5s ease",
-            }}
-          >
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 48 48"
-              fill="none"
+          {/* Poster / play affordance — shown until the viewer starts the
+              video. A scrim + large play button + label make it
+              unmistakably a video to click. */}
+          {!started && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStart();
+              }}
+              data-cursor-label="Play video"
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "1rem",
+                zIndex: 2,
+                cursor: "pointer",
+                background:
+                  "linear-gradient(to bottom, rgba(6,6,8,0.25) 0%, rgba(6,6,8,0.5) 100%)",
+              }}
             >
-              <circle
-                cx="24"
-                cy="24"
-                r="23"
-                stroke="rgba(255,255,255,0.5)"
-                strokeWidth="1"
-              />
-              <path
-                d="M19 15 L35 24 L19 33 Z"
-                fill="rgba(255,255,255,0.5)"
-              />
-            </svg>
-          </div>
+              <div
+                className="video-play-button"
+                style={{
+                  position: "relative",
+                  width: "clamp(72px, 14vw, 112px)",
+                  height: "clamp(72px, 14vw, 112px)",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.14)",
+                  backdropFilter: "blur(6px)",
+                  border: "2px solid rgba(255,255,255,0.6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg width="36%" height="36%" viewBox="0 0 32 32" fill="none" style={{ marginLeft: "6%" }}>
+                  <path d="M8 6 L26 16 L8 26 Z" fill="rgba(255,255,255,0.95)" />
+                </svg>
+              </div>
+              <span
+                style={{
+                  fontSize: "clamp(0.7rem, 1.5vw, 0.9rem)",
+                  fontWeight: 500,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.95)",
+                  textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+                }}
+              >
+                Play video
+              </span>
+              <style>{`
+                .video-play-button { transition: transform 200ms ease; }
+                [data-cursor-label]:hover .video-play-button { transform: scale(1.07); }
+              `}</style>
+            </div>
+          )}
 
           {/* Transport controls */}
           <div

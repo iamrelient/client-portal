@@ -79,14 +79,35 @@ export const ChapterStrip = memo(function ChapterStrip({
   const activeSection = sections[activeIndex]?.section;
   const isActiveImage = activeSection?.type === "image";
 
-  // Image entries with their global index for thumbnail track
-  const imageEntries = useMemo(
+  // A chapter is a "media carousel" when every section is an image or a
+  // video (with a file). Then it renders the framed hero + thumbnail
+  // track — so videos can be grouped and browsed exactly like images.
+  // Panorama/text chapters fall through to the full-bleed branch.
+  const allMedia = useMemo(
+    () =>
+      sections.length > 0 &&
+      sections.every(
+        (s) =>
+          (s.section.type === "image" || s.section.type === "video") &&
+          !!s.section.file
+      ),
+    [sections]
+  );
+
+  // Media entries (image OR video) with their global index for the
+  // thumbnail track.
+  const mediaEntries = useMemo(
     () =>
       sections
         .map((s, idx) => ({ ...s, globalIdx: idx }))
-        .filter((s) => s.section.type === "image"),
+        .filter(
+          (s) =>
+            (s.section.type === "image" || s.section.type === "video") &&
+            !!s.section.file
+        ),
     [sections]
   );
+
 
   // Chapter title: use divider title, or fall back to the chapter field on sections
   const chapterTitle =
@@ -154,7 +175,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                                so the image size doesn't jump around.
             paddingBottom clears the page's FIXED timeline nav at the
             bottom of the viewport, so thumbnails never hide under it. */}
-        {isActiveImage && (
+        {allMedia && (
           <div
             className="cs-carousel-col"
             style={{
@@ -258,7 +279,9 @@ export const ChapterStrip = memo(function ChapterStrip({
                   cursor: "pointer",
                 }}
                 onClick={() =>
-                  activeSection?.id && setLightboxImageId(activeSection.id)
+                  isActiveImage &&
+                  activeSection?.id &&
+                  setLightboxImageId(activeSection.id)
                 }
               >
                 {sections.map(({ section }, idx) => {
@@ -292,6 +315,20 @@ export const ChapterStrip = memo(function ChapterStrip({
                     />
                   );
                 })}
+
+                {/* Active video — framed like an image slide, with its
+                    own poster + click-to-play. Keyed by section id so
+                    switching thumbnails remounts a fresh player (resets
+                    to the poster state). */}
+                {activeSection?.type === "video" && (
+                  <div
+                    key={activeSection.id}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ position: "absolute", inset: 0, borderRadius: "2px", overflow: "hidden" }}
+                  >
+                    <SectionVideo section={activeSection} data={data} />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -334,8 +371,10 @@ export const ChapterStrip = memo(function ChapterStrip({
               </p>
             )}
 
-            {/* Thumbnail track */}
-            {imageEntries.length > 1 && (
+            {/* Thumbnail track — images AND videos. Video thumbnails
+                show the first frame with a small play badge so they're
+                distinguishable at a glance. */}
+            {mediaEntries.length > 1 && (
               <div
                 className="scrollbar-hide"
                 style={{
@@ -347,29 +386,27 @@ export const ChapterStrip = memo(function ChapterStrip({
                   padding: "2px 0",
                 }}
               >
-                {imageEntries.map(({ section, globalIdx }) => {
+                {mediaEntries.map(({ section, globalIdx }) => {
                   if (!section.file) return null;
                   const url = `/api/present/${data.accessToken}/asset/${section.file.id}`;
                   const isThumbActive = globalIdx === activeIndex;
+                  const isVideo = section.type === "video";
 
                   return (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <div
                       key={section.id}
-                      src={url}
-                      alt={section.title || ""}
-                      draggable={false}
                       data-clickable
                       onClick={(e) => {
                         e.stopPropagation();
                         navigateToItem(globalIdx);
                       }}
                       style={{
+                        position: "relative",
                         width: "80px",
                         height: "50px",
-                        objectFit: "cover",
-                        borderRadius: "3px",
                         flexShrink: 0,
+                        borderRadius: "3px",
+                        overflow: "hidden",
                         cursor: "pointer",
                         opacity: isThumbActive ? 1 : 0.4,
                         outline: isThumbActive
@@ -378,6 +415,7 @@ export const ChapterStrip = memo(function ChapterStrip({
                         outlineOffset: "2px",
                         transition:
                           "opacity 0.3s ease, outline-color 0.3s ease",
+                        background: "#000",
                       }}
                       onMouseEnter={(e) => {
                         if (!isThumbActive)
@@ -387,7 +425,50 @@ export const ChapterStrip = memo(function ChapterStrip({
                         if (!isThumbActive)
                           e.currentTarget.style.opacity = "0.4";
                       }}
-                    />
+                    >
+                      {isVideo ? (
+                        <video
+                          src={`${url}#t=0.1`}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={url}
+                          alt={section.title || ""}
+                          draggable={false}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      )}
+                      {isVideo && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            pointerEvents: "none",
+                          }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="11" fill="rgba(0,0,0,0.45)" stroke="rgba(255,255,255,0.85)" strokeWidth="1.2" />
+                            <path d="M9.5 7.5 L17 12 L9.5 16.5 Z" fill="rgba(255,255,255,0.95)" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -396,8 +477,9 @@ export const ChapterStrip = memo(function ChapterStrip({
           </div>
         )}
 
-        {/* Non-image section — full viewport */}
-        {!isActiveImage && activeSection && (
+        {/* Non-media section (panorama tour / text) — full viewport.
+            Image/video chapters use the framed carousel above. */}
+        {!allMedia && activeSection && (
           <div style={{ width: "100%", height: "100%", position: "relative" }}>
             {/* Panoramas (the 360° tour) are a self-contained immersive
                 experience with their own cover + chrome — a floating

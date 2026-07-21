@@ -11,7 +11,7 @@ import { buildViewerDerivative } from "@/lib/image-derivatives";
 export const maxDuration = 120;
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { token: string; fileId: string } }
 ) {
   try {
@@ -121,6 +121,34 @@ export async function GET(
     const cacheControl = presentation.password
       ? "private, max-age=3600, immutable"
       : "public, s-maxage=86400, max-age=3600, immutable";
+
+    // ── Video: honor Range requests (206) ──
+    // <video> fetches byte ranges as it buffers/seeks. A plain 200
+    // full-stream (what we used to return) leaves the player black and
+    // unplayable, especially in Safari. Forward the browser's Range to
+    // Drive and mirror the 206 + Content-Range/Accept-Ranges back.
+    if (file.mimeType.startsWith("video/")) {
+      const range = req.headers.get("range");
+      const dl = await downloadFile(file.path, range);
+      const headers: Record<string, string> = {
+        "Content-Type": file.mimeType,
+        "Content-Disposition": `inline; filename="${file.originalName}"`,
+        "Accept-Ranges": "bytes",
+        "Cache-Control": cacheControl,
+        "X-Content-Type-Options": "nosniff",
+        "X-Asset-Path": "video",
+      };
+      if (dl.contentLength != null) {
+        headers["Content-Length"] = String(dl.contentLength);
+      }
+      if (dl.status === 206 && dl.contentRange) {
+        headers["Content-Range"] = dl.contentRange;
+      }
+      return new NextResponse(dl.stream, {
+        status: dl.status === 206 ? 206 : 200,
+        headers,
+      });
+    }
 
     // ── Fast path: serve the pre-baked viewer derivative ──
     // Built at upload time (see lib/image-derivatives.ts): downscaled
