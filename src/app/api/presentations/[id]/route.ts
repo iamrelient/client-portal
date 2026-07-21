@@ -90,6 +90,7 @@ export async function PATCH(
       panoramaFloorWatermark,
       tourRooms,
       tourHeroFileId,
+      heroVideoFileId,
       theme,
       tourStartOnMap,
     } = body;
@@ -112,6 +113,8 @@ export async function PATCH(
     if (tourRooms !== undefined) data.tourRooms = tourRooms;
     if (tourHeroFileId !== undefined)
       data.tourHeroFileId = tourHeroFileId || null;
+    if (heroVideoFileId !== undefined)
+      data.heroVideoFileId = heroVideoFileId || null;
     if (theme !== undefined) data.theme = theme || null;
     if (tourStartOnMap !== undefined)
       data.tourStartOnMap = !!tourStartOnMap;

@@ -256,6 +256,12 @@ model Presentation {
   /// the cropped equirectangular preview. File id refers to a
   /// project file (image of any aspect ratio).
   tourHeroFileId    String?
+  /// Optional video that plays muted + looping behind the opening hero
+  /// slide (with the title/logo over a scrim). File id refers to a
+  /// project video file. Falls back to the hero background image when
+  /// unset. The image (or first frame) shows as the poster while it
+  /// buffers so the hero is never black.
+  heroVideoFileId   String?
   /// Visual theme for the deck background + dividers. "space"
   /// turns on the animated starfield + planet drift; null/"light"
   /// keeps the neutral-50 baseline. Per-presentation so the

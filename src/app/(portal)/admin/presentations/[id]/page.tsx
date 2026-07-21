@@ -75,6 +75,7 @@ interface PresentationDetail {
   panoramaFloorWatermark: boolean;
   tourRooms: unknown;
   tourHeroFileId: string | null;
+  heroVideoFileId: string | null;
   theme: string | null;
   tourStartOnMap: boolean;
   project: { id: string; name: string };
@@ -127,6 +128,7 @@ export default function EditPresentationPage() {
   const [watermarkEnabled, setWatermarkEnabled] = useState(true);
   const [panoramaFloorWatermark, setPanoramaFloorWatermark] = useState(true);
   const [tourHeroFileId, setTourHeroFileId] = useState<string>("");
+  const [heroVideoFileId, setHeroVideoFileId] = useState<string>("");
   const [theme, setTheme] = useState<string>("");
   const [tourStartOnMap, setTourStartOnMap] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -213,6 +215,7 @@ export default function EditPresentationPage() {
         setWatermarkEnabled(data.watermarkEnabled);
         setPanoramaFloorWatermark(data.panoramaFloorWatermark ?? true);
         setTourHeroFileId(data.tourHeroFileId ?? "");
+        setHeroVideoFileId(data.heroVideoFileId ?? "");
         setTheme(data.theme ?? "");
         setTourStartOnMap(!!data.tourStartOnMap);
         // Hydrate from stored tourRooms. Auto-migration of legacy
@@ -544,6 +547,7 @@ export default function EditPresentationPage() {
         watermarkEnabled,
         panoramaFloorWatermark,
         tourHeroFileId: tourHeroFileId || null,
+        heroVideoFileId: heroVideoFileId || null,
         theme: theme || null,
         tourStartOnMap,
       };
@@ -2240,6 +2244,64 @@ export default function EditPresentationPage() {
                   Shown as a darkened cover with a play button on the
                   tour slide. Falls back to a cropped 360° preview
                   when no cover is set.
+                </p>
+              </div>
+
+              {/* Hero background video — muted looping video behind the
+                  opening title slide. */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Hero Background Video
+                </label>
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      triggerPicker(
+                        "video/*",
+                        "Pick a hero background video",
+                        (ids) => setHeroVideoFileId(ids[0] ?? "")
+                      )
+                    }
+                    title="Choose a hero background video"
+                    className="group relative h-24 w-40 shrink-0 overflow-hidden rounded-lg border border-white/[0.12] bg-black hover:border-brand-500/50 transition-colors"
+                  >
+                    {heroVideoFileId ? (
+                      <>
+                        <video
+                          src={`/api/files/${heroVideoFileId}/download?inline=true#t=0.1`}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-cover"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 transition-all">
+                          Change
+                        </span>
+                      </>
+                    ) : (
+                      <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
+                        <Eye className="h-5 w-5" />
+                        <span className="text-[10px]">Choose video</span>
+                      </span>
+                    )}
+                  </button>
+                  {heroVideoFileId && (
+                    <button
+                      type="button"
+                      onClick={() => setHeroVideoFileId("")}
+                      className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-red-400 transition-colors"
+                      title="Remove hero video"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Plays muted + looping behind the opening title. Use a
+                  short, high-quality clip (compressed) for the best
+                  first impression; the hero image shows as the poster
+                  while it loads. Leave empty for a still image hero.
                 </p>
               </div>
 

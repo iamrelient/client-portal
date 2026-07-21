@@ -89,6 +89,13 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
     ? `/api/present/${data.accessToken}/asset/${bgFile.id}`
     : null;
 
+  // Optional hero background VIDEO — muted, looping, autoplay. The
+  // background image (if any) sits behind it as the poster so the hero
+  // is never black while the video buffers.
+  const heroVideoUrl = data.heroVideoFileId
+    ? `/api/present/${data.accessToken}/asset/${data.heroVideoFileId}`
+    : null;
+
   return (
     <div
       ref={heroRef}
@@ -128,6 +135,48 @@ export function SectionHero({ data, fontsLoaded }: SectionHeroProps) {
             }}
           />
           {/* Dark gradient overlay for text legibility */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.7) 100%)",
+              pointerEvents: "none",
+            }}
+          />
+        </>
+      )}
+
+      {/* Hero background video — muted + looping autoplay over the image
+          poster. Sits above the image but below the scrim + content
+          (which are re-declared here so text stays legible over motion).
+          Autoplay requires muted; playsInline keeps it inline on iOS. */}
+      {heroVideoUrl && (
+        <>
+          <video
+            src={heroVideoUrl}
+            poster={bgUrl ?? undefined}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: "-15% 0",
+              width: "100%",
+              height: "130%",
+              objectFit: "cover",
+              opacity: beat >= 1 ? 1 : 0,
+              transform: reduced
+                ? "none"
+                : `translateY(${parallaxY}px) scale(1.05)`,
+              transition: reduced ? "none" : "opacity 1.5s ease",
+              pointerEvents: "none",
+              willChange: "transform",
+            }}
+          />
           <div
             style={{
               position: "absolute",

@@ -58,8 +58,9 @@ export async function GET(
     // having to keep the allowlist in lockstep with every UI change.
     const isClientLogo = presentation.clientLogo === params.fileId;
     const isTourHero = presentation.tourHeroFileId === params.fileId;
+    const isHeroVideo = presentation.heroVideoFileId === params.fileId;
 
-    if (!isClientLogo && !isTourHero) {
+    if (!isClientLogo && !isTourHero && !isHeroVideo) {
       const section = await prisma.presentationSection.findFirst({
         where: {
           presentationId: presentation.id,

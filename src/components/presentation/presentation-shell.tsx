@@ -44,6 +44,7 @@ export interface PresentationData {
    *  hero with a play-button overlay instead of the cropped
    *  equirectangular preview — same role as a movie poster. */
   tourHeroFileId?: string | null;
+  heroVideoFileId?: string | null;
   /** "space" enables the animated starfield + planet background
    *  for the deck. Null/undefined/anything else = the light
    *  baseline theme. */
