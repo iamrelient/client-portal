@@ -161,6 +161,14 @@ export const TimelineNavigator = memo(function TimelineNavigator({
 
   if (dots.length === 0) return null;
 
+  // Cap each label to its share of the row so long names can never
+  // collide with their neighbours — they wrap to a second line (see the
+  // clamp below) instead. Width scales with the container, which itself
+  // scales with the viewport, so a 27" monitor gets a roomy timeline and
+  // a laptop a tighter one, both without overlap. 6rem accounts for the
+  // container's horizontal padding; the 10px keeps a gutter between labels.
+  const labelMaxWidth = `calc((min(92vw, 1500px) - 6rem) / ${dots.length} - 10px)`;
+
   return (
     <nav
       className="fixed bottom-0 inset-x-0 z-40"
@@ -182,7 +190,7 @@ export const TimelineNavigator = memo(function TimelineNavigator({
           .timeline-active-label { display: none !important; }
         }
       `}</style>
-      <div className="relative mx-auto max-w-4xl px-4 sm:px-12 pt-4 sm:pt-5 pb-5 sm:pb-6">
+      <div className="relative mx-auto w-[92vw] max-w-[1500px] px-4 sm:px-12 pt-4 sm:pt-5 pb-5 sm:pb-6">
         {/* Mobile-only active section label */}
         <div
           className="timeline-active-label"
@@ -299,7 +307,16 @@ export const TimelineNavigator = memo(function TimelineNavigator({
                       textTransform: "uppercase",
                       color: labelColor,
                       marginTop: "5px",
-                      whiteSpace: "nowrap",
+                      // Wrap to at most two centered lines within the
+                      // per-slot cap — never a single overflowing line
+                      // that crosses into the neighbouring label.
+                      maxWidth: labelMaxWidth,
+                      textAlign: "center",
+                      lineHeight: 1.25,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
                     }}
                   >
                     {dot.label}
