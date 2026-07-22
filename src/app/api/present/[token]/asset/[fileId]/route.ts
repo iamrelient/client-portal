@@ -159,7 +159,13 @@ export async function GET(
     // watermark kill switches by falling back to the original (slow
     // path) when the admin wants the clean version of a file whose
     // derivative carries a baked-in watermark.
+    // The client's OWN logo must never carry OUR watermark — force the
+    // clean version regardless of the deck's watermark switches. When a
+    // watermarked derivative exists it won't match this intent, so we
+    // fall through to streaming the untouched original (which also keeps
+    // the logo's transparency, unlike the baked JPEG derivative).
     const wantsWatermark =
+      !isClientLogo &&
       presentation.project.watermarkEnabled &&
       presentation.watermarkEnabled &&
       (file.isPanorama ? presentation.panoramaFloorWatermark : true);
