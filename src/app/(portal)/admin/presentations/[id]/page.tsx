@@ -150,7 +150,7 @@ export default function EditPresentationPage() {
     onCancel?: () => void;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void } | null>(null);
+  const uploadContextRef = useRef<{ onUploaded: (fileId: string) => void; skipWatermark?: boolean } | null>(null);
 
   // Panorama editor
   const [expandedPanoramaId, setExpandedPanoramaId] = useState<string | null>(null);
@@ -377,9 +377,13 @@ export default function EditPresentationPage() {
     return () => window.clearTimeout(timeoutId);
   }, [pres]);
 
-  function triggerUpload(accept: string, onUploaded: (fileId: string) => void) {
+  function triggerUpload(
+    accept: string,
+    onUploaded: (fileId: string) => void,
+    opts?: { skipWatermark?: boolean }
+  ) {
     if (!fileInputRef.current || !pres) return;
-    uploadContextRef.current = { onUploaded };
+    uploadContextRef.current = { onUploaded, skipWatermark: opts?.skipWatermark };
     fileInputRef.current.accept = accept;
     fileInputRef.current.value = "";
     fileInputRef.current.click();
@@ -458,6 +462,10 @@ export default function EditPresentationPage() {
     if (!pres) return;
     setUploading(true);
 
+    // Captured up front — the logo upload path asks us to store the
+    // file clean (no watermark) since a client's logo isn't a deliverable.
+    const skipWatermark = uploadContextRef.current?.skipWatermark ?? false;
+
     try {
       // Route through the chunked pipeline — a single-shot FormData POST
       // dies on Vercel's 4.5 MB body limit, so big 360° panos (16 MB+)
@@ -484,6 +492,8 @@ export default function EditPresentationPage() {
             // Flag so the project's file tree / carousel stays clean —
             // this upload is for the presentation only.
             isPresentationAsset: true,
+            // Logos upload clean; everything else still gets watermarked.
+            skipWatermark,
           }),
         }
       );
@@ -495,8 +505,10 @@ export default function EditPresentationPage() {
         // Kick off viewer-derivative generation in the background
         // (heavy Sharp downscale). Fire-and-forget — failure can't
         // affect the upload, and the asset route falls back to
-        // serve-time handling.
-        if (fileId) {
+        // serve-time handling. Skipped for clean logo uploads: the
+        // derivative bakes in a watermark, which is exactly what we're
+        // avoiding for a logo.
+        if (fileId && !skipWatermark) {
           fetch(`/api/files/${fileId}/generate-viewer`, {
             method: "POST",
           }).catch(() => {});
@@ -2052,12 +2064,14 @@ export default function EditPresentationPage() {
                     type="button"
                     disabled={uploading}
                     onClick={() =>
-                      triggerUpload("image/*", (fileId) =>
-                        setClientLogo(fileId)
+                      triggerUpload(
+                        "image/*",
+                        (fileId) => setClientLogo(fileId),
+                        { skipWatermark: true }
                       )
                     }
                     className="shrink-0 rounded-lg border border-white/[0.1] bg-white/[0.05] px-2.5 py-2 text-slate-400 hover:text-white hover:bg-white/[0.1] transition-colors"
-                    title="Upload from computer"
+                    title="Upload logo (no watermark)"
                   >
                     {uploading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

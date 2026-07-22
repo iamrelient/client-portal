@@ -106,7 +106,7 @@ export async function POST(
     }
 
     // ── Standard file upload (client already uploaded to Drive) ──
-    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType, isPanorama: bodyIsPanorama, isPresentationAsset: bodyIsPresentationAsset } = body;
+    const { driveFileId: providedDriveFileId, fileName, mimeType, size, category, customCategory, displayName, targetFileGroupId, notes, boardType: bodyBoardType, isPanorama: bodyIsPanorama, isPresentationAsset: bodyIsPresentationAsset, skipWatermark: bodySkipWatermark } = body;
 
     if (!fileName) {
       return NextResponse.json(
@@ -155,7 +155,10 @@ export async function POST(
     if (
       project.watermarkEnabled &&
       isWatermarkable(resolvedMimeType) &&
-      !bodyIsPanorama
+      !bodyIsPanorama &&
+      // A client's own logo (or any explicitly clean upload) must never
+      // be stamped with our watermark — it's branding, not a deliverable.
+      !bodySkipWatermark
     ) {
       try {
         const { stream } = await downloadFile(driveFileId);
