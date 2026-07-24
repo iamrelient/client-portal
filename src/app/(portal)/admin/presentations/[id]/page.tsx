@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import { FilePickerModal } from "@/components/file-picker-modal";
 import { chunkedUpload } from "@/lib/chunked-upload";
+import {
+  copyPresentationCard,
+  presentationCardImageUrl,
+} from "@/lib/presentation-share";
 import { detectPanoramaFromFile } from "@/lib/pano-utils";
 import { PanoramaEditor } from "@/components/admin/panorama-editor";
 import type { PanoramaMetadata } from "@/types/panorama";
@@ -924,12 +928,40 @@ export default function EditPresentationPage() {
     }
   }
 
-  function copyLink() {
+  async function copyLink() {
     if (!pres) return;
-    const url = `${window.location.origin}/present/${pres.accessToken}`;
-    navigator.clipboard.writeText(url).then(() => {
-      toast.success("Link copied to clipboard");
+    const origin = window.location.origin;
+    const url = `${origin}/present/${pres.accessToken}`;
+
+    // Mirror the OG card endpoint's rules — it 404s for password-gated
+    // decks and decks with no usable cover, and a broken <img> in an
+    // email reads worse than a clean text-only card.
+    const hasCover =
+      !pres.password &&
+      Boolean(
+        pres.tourHeroFileId ||
+          pres.sections.find(
+            (s) =>
+              (s.type === "hero" ||
+                s.type === "image" ||
+                s.type === "panorama") &&
+              s.file
+          )
+      );
+
+    const rich = await copyPresentationCard({
+      url,
+      thumbUrl: hasCover
+        ? presentationCardImageUrl(origin, pres.accessToken)
+        : null,
+      title: pres.title?.trim() || pres.project.name,
+      subtitle:
+        pres.subtitle?.trim() || "View the 360° tour on Ray Renders Portal",
     });
+
+    toast.success(
+      rich ? "Link copied — paste into an email for a preview card" : "Link copied to clipboard"
+    );
   }
 
   if (loading) {

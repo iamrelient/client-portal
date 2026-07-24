@@ -8,6 +8,10 @@ import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/components/toast";
 import { formatRelativeDate } from "@/lib/format-date";
 import {
+  copyPresentationCard,
+  presentationCardImageUrl,
+} from "@/lib/presentation-share";
+import {
   Loader2,
   Trash2,
   Copy,
@@ -157,11 +161,25 @@ export default function AdminPresentationsPage() {
     setRevokingId(null);
   }
 
-  function copyLink(token: string) {
-    const url = `${window.location.origin}/present/${token}`;
-    navigator.clipboard.writeText(url).then(() => {
-      toast.success("Link copied to clipboard");
+  async function copyLink(row: PresentationRow) {
+    const origin = window.location.origin;
+    const url = `${origin}/present/${row.accessToken}`;
+
+    // The OG card endpoint 404s for password-gated decks; an empty deck
+    // has no cover to crop either. Skip the thumbnail in both cases so
+    // the pasted card never shows a broken image.
+    const hasCover = !row.password && row._count.sections > 0;
+
+    const rich = await copyPresentationCard({
+      url,
+      thumbUrl: hasCover ? presentationCardImageUrl(origin, row.accessToken) : null,
+      title: row.title?.trim() || row.project.name,
+      subtitle: "View the 360° tour on Ray Renders Portal",
     });
+
+    toast.success(
+      rich ? "Link copied — paste into an email for a preview card" : "Link copied to clipboard"
+    );
   }
 
   function getStatus(p: PresentationRow): { label: string; cls: string } {
@@ -348,7 +366,7 @@ export default function AdminPresentationsPage() {
                         {/* Copy link */}
                         {p.isActive && (
                           <button
-                            onClick={() => copyLink(p.accessToken)}
+                            onClick={() => copyLink(p)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
                             title="Copy link"
                           >
