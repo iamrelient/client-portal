@@ -6,6 +6,7 @@ import { SectionVideo } from "./section-video";
 import { SectionText } from "./section-text";
 import { SectionPanorama } from "./section-panorama";
 import { ImageLightbox } from "./image-lightbox";
+import { sectionGroupName } from "./section-group";
 
 /* ------------------------------------------------------------------ */
 /*  ChapterStrip — Hero & Track Gallery                                */
@@ -109,9 +110,11 @@ export const ChapterStrip = memo(function ChapterStrip({
   );
 
 
-  // Chapter title: use divider title, or fall back to the chapter field on sections
+  // Chapter title: use divider title, or fall back to the section's
+  // group name (chapter, else title — see section-group.ts)
   const chapterTitle =
-    divider?.title || sections[0]?.section.chapter || null;
+    divider?.title ||
+    (sections[0] ? sectionGroupName(sections[0].section) : null);
 
   // Spacer height — exactly one viewport. The carousel scrolls past
   // like any normal section (no snap/catch — that felt awkward).
@@ -349,8 +352,11 @@ export const ChapterStrip = memo(function ChapterStrip({
                 gap: "0.4rem",
               }}
             >
-            {/* Image caption — aligned with image left edge */}
-            {activeSection?.title && (
+            {/* Image caption — aligned with image left edge. Skipped when
+                it just repeats the strip heading (a title-only section
+                uses its title as the heading). */}
+            {activeSection?.title &&
+              activeSection.title.trim() !== chapterTitle?.trim() && (
               <p
                 style={{
                   alignSelf: "flex-start",

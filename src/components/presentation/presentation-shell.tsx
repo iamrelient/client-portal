@@ -20,6 +20,7 @@ import {
   buildSegments,
   useScrollProgress,
 } from "./use-scroll-progress";
+import { sectionGroupName } from "./section-group";
 
 /* ------------------------------------------------------------------ */
 /*  Data interfaces — unchanged                                        */
@@ -355,7 +356,7 @@ export function PresentationShell({
       if (fadeCutActive) return;
 
       const targetIndex = expandedSections.findIndex(
-        (s) => s.chapter === targetChapter
+        (s) => sectionGroupName(s) === targetChapter
       );
       if (targetIndex === -1) return;
 

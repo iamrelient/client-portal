@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, type RefObject } from "react";
 import type { SectionData } from "./presentation-shell";
+import { sectionGroupName } from "./section-group";
 
 /* ------------------------------------------------------------------ */
 /*  Segment types                                                      */
@@ -63,7 +64,7 @@ export function buildSegments(sections: SectionData[]): Segment[] {
       default: {
         // image, video, text, panorama — accumulate into chapter
         // If chapter name changes, flush and start new group
-        const chapterName = section.chapter ?? null;
+        const chapterName = sectionGroupName(section);
         if (currentChapterName !== undefined && chapterName !== currentChapterName) {
           flushChapter();
         }

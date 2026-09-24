@@ -2,6 +2,7 @@
 
 import { memo, useMemo } from "react";
 import type { SectionData } from "./presentation-shell";
+import { sectionGroupName } from "./section-group";
 
 /* ------------------------------------------------------------------ */
 /*  Wayfinding Timeline Navigator                                       */
@@ -104,8 +105,8 @@ export const TimelineNavigator = memo(function TimelineNavigator({
         continue;
       }
 
-      // Content section — group by chapter name
-      const chapterName = s.chapter ?? null;
+      // Content section — group by chapter (or title) name
+      const chapterName = sectionGroupName(s);
 
       if (currentDot && chapterName === currentChapterName) {
         // Same chapter — add to current dot
