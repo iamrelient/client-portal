@@ -47,11 +47,11 @@ export async function generateMetadata({
   const title =
     presentation.title?.trim() ||
     presentation.project?.name ||
-    "Virtual Tour";
+    "Presentation";
 
   const description =
     presentation.subtitle?.trim() ||
-    [presentation.project?.company, "An interactive 360° tour by Ray Renders"]
+    [presentation.project?.company, "An interactive presentation by Ray Renders"]
       .filter(Boolean)
       .join(" · ");
 

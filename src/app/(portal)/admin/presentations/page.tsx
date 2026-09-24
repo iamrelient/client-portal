@@ -174,7 +174,7 @@ export default function AdminPresentationsPage() {
       url,
       thumbUrl: hasCover ? presentationCardImageUrl(origin, row.accessToken) : null,
       title: row.title?.trim() || row.project.name,
-      subtitle: "View the 360° tour on Ray Renders Portal",
+      subtitle: "View the presentation on Ray Renders Portal",
     });
 
     toast.success(

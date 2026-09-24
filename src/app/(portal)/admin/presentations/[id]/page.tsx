@@ -956,7 +956,7 @@ export default function EditPresentationPage() {
         : null,
       title: pres.title?.trim() || pres.project.name,
       subtitle:
-        pres.subtitle?.trim() || "View the 360° tour on Ray Renders Portal",
+        pres.subtitle?.trim() || "View the presentation on Ray Renders Portal",
     });
 
     toast.success(

@@ -278,21 +278,22 @@ export default function PresentClient() {
    *  fullscreen disabled in policy) the presentation still opens
    *  windowed — the existing fullscreen toggle in the corner is
    *  always available as a manual fallback. */
-  const handleBegin = useCallback(async () => {
-    try {
-      // requestFullscreen returns a promise in modern browsers; we
-      // await it so any error throws into our catch rather than
-      // leaving an unhandled rejection in the console.
-      const el = document.documentElement;
-      if (el.requestFullscreen) {
-        await el.requestFullscreen();
-      }
-    } catch {
-      // Silent — the fallback (windowed) is fine. We don't want to
-      // bug the viewer with a toast for a permission they probably
-      // can't change.
-    }
+  const handleBegin = useCallback(() => {
+    // Dismiss FIRST, unconditionally. We used to await requestFullscreen
+    // and only then hide the splash — but that promise can stay pending
+    // forever (embedded browsers, some Chrome/OS combos, policy prompts),
+    // which left the opaque splash covering a fully loaded deck: a black
+    // screen with nothing "loading". Fullscreen is a nice-to-have; the
+    // deck must never depend on it.
     setSplashVisible(false);
+
+    // Still called synchronously inside the gesture handler, so the
+    // browser treats it as user-initiated. Not awaited; a rejection just
+    // means the deck stays windowed (corner toggle remains available).
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    }
   }, []);
 
   if (state.status === "password_required") {
